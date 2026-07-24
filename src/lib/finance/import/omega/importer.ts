@@ -406,5 +406,8 @@ export async function commitOmegaImport(input: CommitOmegaImportInput): Promise<
       paymentCount,
       nextIssuedNumber: input.parsed.summary.nextIssuedNumber,
     };
+  }, {
+    maxWait: 10_000,
+    timeout: 30_000,
   });
 }
