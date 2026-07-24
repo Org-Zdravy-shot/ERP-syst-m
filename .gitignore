@@ -50,3 +50,6 @@ prisma/dev.db-journal
 
 # .env.example commitujeme
 !.env.example
+
+# Lokálne úložisko dokumentov (dev fallback bez Railway Bucketu)
+.local-bucket/
