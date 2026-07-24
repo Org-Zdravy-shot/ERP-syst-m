@@ -26,6 +26,9 @@ let storageSingleton: DocumentObjectStorage | undefined;
  */
 export function getWorkerStorage(): DocumentObjectStorage {
   if (!storageSingleton) {
+    if (process.env.NODE_ENV === "production" && !bucketConfigured()) {
+      throw new Error("Produkčné úložisko finančných dokumentov nie je nakonfigurované.");
+    }
     storageSingleton = bucketConfigured()
       ? new S3DocumentStorage(readS3DocumentStorageConfig())
       : new LocalFsDocumentStorage(join(process.cwd(), ".local-bucket"));
@@ -71,7 +74,13 @@ let mailProviderSingleton: MailProvider | undefined;
 export function getMailProvider(): MailProvider {
   if (!mailProviderSingleton) {
     const loader = new StorageAttachmentLoader(getWorkerStorage());
-    mailProviderSingleton = smtpConfigured() ? new SmtpMailProvider(loader) : new LogMailProvider();
+    if (smtpConfigured()) {
+      mailProviderSingleton = new SmtpMailProvider(loader);
+    } else if (process.env.NODE_ENV !== "production") {
+      mailProviderSingleton = new LogMailProvider();
+    } else {
+      throw new Error("Produkčný SMTP provider nie je nakonfigurovaný.");
+    }
   }
   return mailProviderSingleton;
 }

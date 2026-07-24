@@ -134,9 +134,13 @@ function productionInfrastructureBlockers(env: NodeJS.ProcessEnv): string[] {
   if (env.FINANCE_PRODUCTION_ISSUING_ENABLED !== "true") {
     blockers.push("Produkčné vystavenie faktúr nie je explicitne povolené.");
   }
-  if (!env.FINANCE_BUCKET_NAME) blockers.push("Nie je nastavený privátny bucket pre finančné dokumenty.");
-  if (!env.FINANCE_MAIL_PROVIDER) blockers.push("Nie je nastavený transakčný e-mailový provider.");
-  if (env.FINANCE_MAIL_FROM?.toLowerCase() !== "info@zdravyshot.sk") {
+  if (!env.FINANCE_BUCKET_NAME && !env.DOCUMENT_BUCKET_NAME && !env.BUCKET) {
+    blockers.push("Nie je nastavený privátny bucket pre finančné dokumenty.");
+  }
+  if (!env.FINANCE_MAIL_PROVIDER && !env.SMTP_HOST) {
+    blockers.push("Nie je nastavený transakčný e-mailový provider.");
+  }
+  if ((env.FINANCE_MAIL_FROM || env.MAIL_FROM)?.toLowerCase() !== "info@zdravyshot.sk") {
     blockers.push("Odosielateľ faktúr musí byť info@zdravyshot.sk.");
   }
   return blockers;

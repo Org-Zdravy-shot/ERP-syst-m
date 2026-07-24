@@ -18,7 +18,7 @@ export interface SmtpConfig {
 }
 
 export function smtpConfigured(): boolean {
-  return !!process.env.SMTP_HOST && !!process.env.SMTP_PORT;
+  return !!process.env.SMTP_HOST?.trim() && !!process.env.SMTP_PORT?.trim();
 }
 
 export function readSmtpConfig(): SmtpConfig {
@@ -28,12 +28,23 @@ export function readSmtpConfig(): SmtpConfig {
     throw new Error("SMTP nie je nakonfigurované — nastav SMTP_HOST a SMTP_PORT.");
   }
   const port = Number.parseInt(portRaw, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("SMTP_PORT musí byť celé číslo od 1 do 65535.");
+  }
+  const user = process.env.SMTP_USER?.trim() || undefined;
+  const pass = process.env.SMTP_PASS?.trim() || undefined;
+  if (!!user !== !!pass) {
+    throw new Error("SMTP_USER a SMTP_PASS musia byť nastavené spolu.");
+  }
+  if (process.env.NODE_ENV === "production" && MAIL_FROM.toLowerCase() !== "info@zdravyshot.sk") {
+    throw new Error("Produkčný odosielateľ musí byť info@zdravyshot.sk.");
+  }
   return {
     host,
     port,
     secure: process.env.SMTP_SECURE === "1" || port === 465,
-    user: process.env.SMTP_USER?.trim() || undefined,
-    pass: process.env.SMTP_PASS?.trim() || undefined,
+    user,
+    pass,
   };
 }
 

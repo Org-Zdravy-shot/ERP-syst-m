@@ -35,7 +35,8 @@ sa rešpektuje) — max jedna za týždeň na faktúru.
 ## Provider
 
 Vendor-neutrálne cez SMTP (`SmtpMailProvider`, nodemailer). Bez nakonfigurovaného
-SMTP beží `LogMailProvider` (dev/E2E — zaznamená, neodošle). Delivery/bounce cez
+SMTP beží `LogMailProvider` iba v dev/E2E (zaznamená, neodošle). Produkcia bez
+SMTP zlyhá bezpečne a správu nikdy neoznačí ako odoslanú. Delivery/bounce cez
 webhook je vec 2. etapy; SMTP dáva SENT/FAILED.
 
 Odosielateľ: `info@zdravyshot.sk` (`MAIL_FROM`). Tajomstvá len v Railway variables.
@@ -54,8 +55,8 @@ REMINDER_GRACE_DAYS=3
 CRON_SECRET=<openssl rand -hex 32>
 ```
 
-Bez `DOCUMENT_BUCKET_*` beží lokálne úložisko `.local-bucket/` (dev fallback);
-produkcia používa privátny Railway Bucket cez Dev B `S3DocumentStorage`.
+Bez `DOCUMENT_BUCKET_*` beží lokálne úložisko `.local-bucket/` iba ako dev
+fallback. Produkcia bez privátneho Railway Bucketu zlyhá bezpečne.
 
 ## Testy
 

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { enqueueDueReminders } from "@/lib/finance/outbox/reminders";
 import { processPendingOutbox } from "@/lib/finance/outbox/worker";
@@ -12,7 +13,10 @@ export async function POST(request: NextRequest) {
   if (!secret || secret.length < 32) {
     return NextResponse.json({ error: "CRON_SECRET nie je nakonfigurovaný" }, { status: 503 });
   }
-  if (request.headers.get("x-cron-secret") !== secret) {
+  const suppliedSecret = request.headers.get("x-cron-secret") ?? "";
+  const expected = Buffer.from(secret);
+  const supplied = Buffer.from(suppliedSecret);
+  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
     return NextResponse.json({ error: "Neplatný cron secret" }, { status: 401 });
   }
 

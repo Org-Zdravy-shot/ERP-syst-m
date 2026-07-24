@@ -43,5 +43,6 @@ describe("buildReminderEmail", () => {
     expect(email.subject).toContain("Upomienka");
     expect(email.text).toContain("12 dní");
     expect(email.text).toContain("178,20 €");
+    expect(email.html).toContain("SK9611000000002918599669");
   });
 });

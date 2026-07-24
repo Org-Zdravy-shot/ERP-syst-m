@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import type {
   DocumentObjectStorage,
   PutImmutableObjectInput,
@@ -22,21 +22,23 @@ export class LocalFsDocumentStorage implements DocumentObjectStorage {
   }
 
   private pathFor(objectKey: string): string {
-    // objectKey je bezpečný (finance/invoices/<id>/<sha256>.pdf) — bez ../
-    return join(this.rootDir, objectKey);
+    const root = resolve(this.rootDir);
+    const target = resolve(root, objectKey);
+    if (!target.startsWith(`${root}${sep}`)) {
+      throw new Error("Neplatný objectKey lokálneho úložiska.");
+    }
+    return target;
   }
 
   async putImmutable(input: PutImmutableObjectInput): Promise<void> {
     const path = this.pathFor(input.objectKey);
     await mkdir(dirname(path), { recursive: true });
-    // Nemennosť: ak už existuje, neprepisuj (obsahovo adresované → rovnaký obsah).
     try {
-      await readFile(path);
-      return;
-    } catch {
-      // neexistuje — zapíš
+      await writeFile(path, input.bytes, { flag: "wx" });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") return;
+      throw error;
     }
-    await writeFile(path, input.bytes);
   }
 
   async getObject(objectKey: string): Promise<StoredObject> {

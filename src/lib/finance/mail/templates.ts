@@ -111,6 +111,7 @@ export function buildReminderEmail(data: InvoiceEmailData & { daysOverdue: numbe
 <p>Dobrý deň,</p>
 <p>evidujeme <strong>neuhradenú faktúru ${escapeHtml(data.invoiceNumber)}</strong> po splatnosti (${dateSk(data.dueDate)}, ${data.daysOverdue} dní).</p>
 <p>Suma na úhradu: <strong>${eur(data.totalGrossCents)}</strong>${data.variableSymbol ? ` · VS ${escapeHtml(data.variableSymbol)}` : ""}</p>
+${data.iban ? `<p>IBAN: <strong>${escapeHtml(data.iban)}</strong></p>` : ""}
 <p style="font-size:13px;color:#78716c">Ak ste faktúru medzičasom uhradili, považujte túto správu za bezpredmetnú.</p>
 <p>Ďakujeme,<br>${escapeHtml(data.issuerName)}</p>
 </div>`;

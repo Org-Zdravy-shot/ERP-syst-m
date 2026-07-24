@@ -8,6 +8,7 @@ import { NonRetryableError } from "./errors";
 import { decideRetry } from "./retry-policy";
 
 export const OUTBOX_MAX_ATTEMPTS = MAIL_MAX_ATTEMPTS;
+export const OUTBOX_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 
 export interface OutboxDeps {
   documentService: DocumentService;
@@ -25,6 +26,25 @@ function defaultDeps(): OutboxDeps {
 
 interface PdfPayload {
   invoiceId: string;
+  emailIdempotencyKey?: string;
+}
+
+async function recoverStaleLocks(now: Date): Promise<void> {
+  await prisma.outboxEvent.updateMany({
+    where: {
+      status: "PROCESSING",
+      OR: [
+        { lockedAt: null },
+        { lockedAt: { lt: new Date(now.getTime() - OUTBOX_LOCK_TIMEOUT_MS) } },
+      ],
+    },
+    data: {
+      status: "PENDING",
+      lockedAt: null,
+      availableAt: now,
+      lastError: "Predchádzajúci worker nedokončil spracovanie; udalosť bola bezpečne obnovená.",
+    },
+  });
 }
 
 /**
@@ -116,7 +136,8 @@ async function dispatch(
           type: "INVOICE_EMAIL",
           aggregateType: "Invoice",
           aggregateId: payload.invoiceId,
-          idempotencyKey: `invoice:${payload.invoiceId}:auto-email`,
+          idempotencyKey:
+            payload.emailIdempotencyKey ?? `invoice:${payload.invoiceId}:auto-email`,
           payload: { invoiceId: payload.invoiceId },
         });
       }
@@ -164,6 +185,7 @@ export async function processPendingOutbox(
 ): Promise<OutboxRunSummary> {
   const deps = { ...defaultDeps(), ...depsOverride };
   const summary: OutboxRunSummary = { processed: 0, done: 0, retried: 0, failed: 0 };
+  await recoverStaleLocks(deps.now());
 
   for (let i = 0; i < limit; i++) {
     const now = deps.now();

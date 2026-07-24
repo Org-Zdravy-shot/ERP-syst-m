@@ -33,7 +33,13 @@ interface IssuerSnapshotShape {
 export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<SendInvoiceEmailResult> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: input.invoiceId },
-    include: { client: true },
+    include: {
+      client: true,
+      paymentAllocations: {
+        where: { reversedAt: null },
+        select: { amountCents: true },
+      },
+    },
   });
   if (!invoice) throw new NonRetryableError("Faktúra neexistuje.");
   if (invoice.direction !== "VYDANA") throw new NonRetryableError("E-mailom sa posielajú len vydané doklady.");
@@ -48,7 +54,7 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
 
   // Existujúca evidencia pre túto outbox udalosť → idempotencia
   const existing = await prisma.emailDelivery.findUnique({ where: { outboxEventId: input.outboxEventId } });
-  if (existing?.status === "SENT") {
+  if (existing?.status === "SENT" || existing?.status === "DELIVERED") {
     return { status: "ALREADY_SENT", emailDeliveryId: existing.id, toAddress: existing.toAddress };
   }
 
@@ -69,12 +75,20 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
     throw new Error("PDF dokladu ešte nie je vygenerované.");
   }
 
+  const allocatedCents = invoice.paymentAllocations.reduce(
+    (sum, allocation) => sum + allocation.amountCents,
+    0,
+  );
+  const outstandingCents = Math.max(0, invoice.totalGrossCents - allocatedCents);
+  if (input.kind === "REMINDER" && outstandingCents === 0) {
+    throw new NonRetryableError("Faktúra je už uhradená; upomienka sa neposiela.");
+  }
   const issuer = (invoice.issuerSnapshot ?? {}) as IssuerSnapshotShape;
   const emailData: InvoiceEmailData = {
     invoiceNumber: invoice.invoiceNumber,
     documentType: invoice.documentType === "CREDIT_NOTE" ? "CREDIT_NOTE" : "INVOICE",
     clientName: invoice.client?.name ?? "",
-    totalGrossCents: invoice.totalGrossCents,
+    totalGrossCents: input.kind === "REMINDER" ? outstandingCents : invoice.totalGrossCents,
     variableSymbol: invoice.variableSymbol,
     iban: issuer.iban ?? null,
     dueDate: invoice.dueDate,
