@@ -62,7 +62,7 @@ export default async function FakturyPage({
 
   return (
     <>
-      <PageHeader title="Faktúry" subtitle="Jednotná evidencia — interné, web aj SuperFaktúra">
+      <PageHeader title="Faktúry" subtitle="Jednotná evidencia ERP, webu a historických dokladov">
         <a href={exportHref()} className={btnSecondary} download>
           ⬇ Export CSV
         </a>

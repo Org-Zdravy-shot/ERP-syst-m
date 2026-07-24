@@ -176,7 +176,7 @@ export default async function FinanciePage() {
             { href: "/financie/faktury", title: "Faktúry", desc: "Koncepty, finalizácia, úhrady a nemenné doklady." },
             { href: "/financie/banka", title: "Banka", desc: "Tatra Premium API / import výpisov, transakcie a automatické párovanie platieb." },
             { href: "/financie/cashflow", title: "Cash-flow", desc: "Mesačné toky z platieb, aging neuhradených faktúr a očakávané výdavky." },
-            { href: "/financie/import", title: "Import zo SuperFaktúry", desc: "CSV upload s náhľadom, idempotentný — bez duplikátov." },
+            { href: "/financie/import", title: "Historická migrácia", desc: "Kontrolovaný Omega import; nové doklady vznikajú iba v ERP." },
             { href: "/financie/ekasa", title: "eKasa", desc: "Import hotovostných predajov z pokladne, deduplikácia dokladov." },
             ...(hasFinancePermission(session.role, "CONFIGURE")
               ? [{
