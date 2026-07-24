@@ -30,6 +30,6 @@ potvrdil ako uhradené. Import preto vytvorí auditovanú manuálnu platbu k dá
 splatnosti a túto skutočnosť uloží do poznámky platby aj auditu.
 
 Celý commit prebieha v jednej databázovej transakcii. Pred zápisom sa kontrolujú
-kolízie čísel aj externých ID, platný firemný a daňový profil a existujúci
-číselný rad. Rovnaký súbor je idempotentný cez `ImportBatch(source, sha256,
-mode)`.
+kolízie čísel aj externých ID, platný firemný a daňový profil a existujúce
+číselné rady vydaných aj prijatých faktúr. Rovnaký súbor je idempotentný cez
+`ImportBatch(source, sha256, mode)`.
