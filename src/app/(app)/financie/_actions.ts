@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { importExternalInvoice } from "@/lib/invoicing";
 import { invoiceDirectionSchema, vatStatusSchema } from "@/lib/zod-schemas";
 import { invoiceService } from "@/lib/finance/invoice-service";
 import { requireFinancePermission } from "@/lib/finance/permissions";
@@ -228,90 +227,6 @@ export async function createCreditNoteFromInvoice(
   revalidatePath("/financie/faktury");
   revalidatePath(`/financie/faktury/${invoiceId}`);
   redirect(`/financie/faktury/${creditNoteId}`);
-}
-
-// ---------- SuperFaktúra import ----------
-// Klient parsuje CSV v prehliadači (preview) a posiela už namapované riadky.
-
-const superfakturaRowSchema = z.object({
-  externalId: z.string().min(1),
-  externalNumber: z.string().optional(),
-  direction: invoiceDirectionSchema,
-  clientName: z.string().min(1),
-  clientIco: z.string().optional(),
-  clientEmail: z.string().optional(),
-  issueDate: z.string().min(1),
-  dueDate: z.string().min(1),
-  variableSymbol: z.string().optional(),
-  netCents: z.number().int(),
-  vatRate: z.number().int().nonnegative(),
-  paid: z.boolean().optional(),
-});
-
-export async function importSuperfakturaRows(
-  _prev: InvoiceFormState,
-  formData: FormData,
-): Promise<InvoiceFormState> {
-  await requireFinancePermission("CONFIGURE");
-
-  let rowsRaw: unknown;
-  try {
-    rowsRaw = JSON.parse(String(formData.get("rows") ?? "[]"));
-  } catch {
-    return { error: "Neplatné dáta importu." };
-  }
-  const rows = z.array(superfakturaRowSchema).max(500, "Naraz možno importovať max 500 faktúr.").safeParse(rowsRaw);
-  if (!rows.success) return { error: rows.error.issues[0]?.message ?? "Neplatné riadky importu." };
-  if (rows.data.length === 0) return { error: "Súbor neobsahuje žiadne faktúry." };
-
-  let created = 0;
-  let skipped = 0;
-  const failed: string[] = [];
-
-  for (const row of rows.data) {
-    try {
-      const issueDate = new Date(row.issueDate);
-      const dueDate = new Date(row.dueDate);
-      if (Number.isNaN(issueDate.getTime()) || Number.isNaN(dueDate.getTime())) {
-        throw new Error("neplatný dátum");
-      }
-      const result = await importExternalInvoice({
-        source: "SUPERFAKTURA",
-        externalId: row.externalId,
-        externalNumber: row.externalNumber,
-        direction: row.direction,
-        clientName: row.clientName,
-        clientIco: row.clientIco,
-        clientEmail: row.clientEmail,
-        issueDate,
-        dueDate,
-        variableSymbol: row.variableSymbol,
-        status: row.paid ? "UHRADENA" : "VYSTAVENA",
-        items: [
-          {
-            description: `Faktúra ${row.externalNumber ?? row.externalId} (SuperFaktúra)`,
-            quantity: 1,
-            unit: "ks",
-            unitPriceCents: row.netCents,
-            vatRate: row.vatRate,
-          },
-        ],
-      });
-      if (result.created) created += 1;
-      else skipped += 1;
-    } catch {
-      failed.push(row.externalNumber ?? row.externalId);
-    }
-  }
-
-  revalidatePath("/financie");
-  revalidatePath("/financie/faktury");
-
-  const parts = [`Importované: ${created}`, `preskočené (už existujú): ${skipped}`];
-  if (failed.length > 0) parts.push(`chybné: ${failed.join(", ")}`);
-  return failed.length > 0 && created === 0 && skipped === 0
-    ? { error: parts.join(" · ") }
-    : { success: parts.join(" · ") };
 }
 
 // ---------- eKasa import ----------
