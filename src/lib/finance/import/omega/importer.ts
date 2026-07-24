@@ -337,21 +337,32 @@ export async function commitOmegaImport(input: CommitOmegaImportInput): Promise<
       });
     }
 
-    const highest = input.parsed.summary.highestIssuedNumber;
-    if (highest && /^\d{7}$/.test(highest)) {
-      const year = Number(highest.slice(0, 4));
-      const lastNumber = Number(highest.slice(4));
-      const counterId = `VYDANA-${year}`;
+    const counterTargets = new Map<string, { lastNumber: number; documentNumber: string }>();
+    for (const invoice of input.parsed.invoices) {
+      if (!/^\d{7}$/.test(invoice.omegaNumber)) {
+        throw new Error(`Doklad ${invoice.invoiceNumber} nemá podporované sedemmiestne Omega číslo.`);
+      }
+      const year = Number(invoice.omegaNumber.slice(0, 4));
+      const lastNumber = Number(invoice.omegaNumber.slice(4));
+      const kind = invoice.direction === "VYDANA" ? "VYDANA" : "PRIJATA";
+      const counterId = `${kind}-${year}`;
+      const current = counterTargets.get(counterId);
+      if (!current || lastNumber > current.lastNumber) {
+        counterTargets.set(counterId, { lastNumber, documentNumber: invoice.invoiceNumber });
+      }
+    }
+
+    for (const [counterId, target] of counterTargets) {
       const counter = await tx.docCounter.findUnique({ where: { id: counterId } });
-      if (counter && counter.lastNumber > lastNumber) {
+      if (counter && counter.lastNumber > target.lastNumber) {
         throw new Error(
-          `Číselný rad ${counterId} je už na ${counter.lastNumber}; import končiaci číslom ${highest} nie je bezpečný.`,
+          `Číselný rad ${counterId} je už na ${counter.lastNumber}; import končiaci dokladom ${target.documentNumber} nie je bezpečný.`,
         );
       }
       await tx.docCounter.upsert({
         where: { id: counterId },
-        create: { id: counterId, lastNumber },
-        update: { lastNumber },
+        create: { id: counterId, lastNumber: target.lastNumber },
+        update: { lastNumber: target.lastNumber },
       });
     }
 
