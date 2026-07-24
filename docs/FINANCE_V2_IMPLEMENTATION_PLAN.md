@@ -10,7 +10,10 @@
 - [x] A0 spoločná schéma, migrácia a kontrakty — [PR #9](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/9)
 - [x] A1 doménový workflow, go-live gate a testy — [PR #10](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/10)
 - [x] A2 finančné obrazovky, dobropisy a účtovnícky cutover
-- [ ] B dokumenty, e-mail a Omega migrácia
+- [ ] B dokumenty, e-mail a Omega migrácia — dokumenty v
+  [PR #17](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/17), e-mail/outbox
+  v [PR #16](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/16), Omega
+  import implementovaný na vetve `feat/finance-omega-import`
 - [ ] C Tatra banka, párovanie a reporty — C1 v [PR #13](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/13):
   import výpisu, platby, párovanie, cash-flow a cron; produkčný Tatra provider
   zostáva vypnutý do aktivácie, doplnenia consent flow a overenia kontraktu v
