@@ -96,6 +96,15 @@ test("produkčná infraštruktúra je fail-closed", () => {
     FINANCE_MAIL_FROM: "info@zdravyshot.sk",
   });
   expect(ready).toEqual({ ready: true, blockers: [] });
+
+  const readyWithRuntimeVariables = evaluateProductionIssuingInfrastructure({
+    NODE_ENV: "production",
+    FINANCE_PRODUCTION_ISSUING_ENABLED: "true",
+    DOCUMENT_BUCKET_NAME: "finance-private",
+    SMTP_HOST: "smtp.example.sk",
+    MAIL_FROM: "info@zdravyshot.sk",
+  });
+  expect(readyWithRuntimeVariables).toEqual({ ready: true, blockers: [] });
 });
 
 test("dobropisy nemôžu prekročiť sumu pôvodnej faktúry", () => {

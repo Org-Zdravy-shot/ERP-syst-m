@@ -15,8 +15,11 @@ import {
   invoicePaymentStatusLabels,
 } from "@/lib/zod-schemas";
 import { calculatePaymentStatus } from "@/lib/finance/domain";
+import { getSession } from "@/lib/auth";
+import { hasFinancePermission } from "@/lib/finance/permissions";
 import { cancelInvoice, createCreditNoteFromInvoice, finalizeInvoice } from "../../_actions";
 import { InvoiceDocuments } from "./InvoiceDocuments";
+import { InvoiceEmails } from "./InvoiceEmails";
 import { InvoiceWorkflowActions } from "./InvoiceStatusActions";
 
 export default async function FakturaDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -46,9 +49,28 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           createdAt: true,
         },
       },
+      emailDeliveries: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          toAddress: true,
+          subject: true,
+          status: true,
+          attemptCount: true,
+          sentAt: true,
+          errorMessage: true,
+          createdAt: true,
+        },
+      },
     },
   });
   if (!invoice) notFound();
+
+  const session = await getSession();
+  const canSendEmail =
+    hasFinancePermission(session.role, "CREATE_DRAFT") &&
+    invoice.direction === "VYDANA" &&
+    invoice.documentStatus === "ISSUED";
 
   const isIssued = invoice.direction === "VYDANA";
   const isCreditNote = invoice.documentType === "CREDIT_NOTE";
@@ -189,6 +211,18 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
               createdAt: document.createdAt.toISOString(),
             }))}
           />
+
+          {invoice.direction === "VYDANA" && (
+            <InvoiceEmails
+              invoiceId={invoice.id}
+              canSend={canSendEmail}
+              deliveries={invoice.emailDeliveries.map((delivery) => ({
+                ...delivery,
+                sentAt: delivery.sentAt ? delivery.sentAt.toISOString() : null,
+                createdAt: delivery.createdAt.toISOString(),
+              }))}
+            />
+          )}
 
           {invoice.documentStatus !== "CANCELLED" && (
             <section className="rounded-[14px] border border-stone-200 bg-white p-5 print:hidden">
