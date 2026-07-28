@@ -1,23 +1,73 @@
-# Financie v2 — implementačný plán pre 3 developerov
+# Financie v2 — implementačný a cutover plán
 
-> Stav dokumentu: záväzný pracovný kontrakt pre etapu nahradenia SuperFaktúry a
-> Omegy. Ak sa zmení spoločná schéma alebo kontrakt, najprv sa upraví tento
-> dokument a samostatný bootstrap PR developera A.
+> Stav dokumentu: aktuálny k 28. júlu 2026. Aktuálny remaining split nižšie
+> nahrádza pôvodné pridelenie A/B/C v historických častiach dokumentu.
 
 ## Stav implementácie
 
 - [x] Koordinačný plán — [PR #8](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/8)
 - [x] A0 spoločná schéma, migrácia a kontrakty — [PR #9](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/9)
 - [x] A1 doménový workflow, go-live gate a testy — [PR #10](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/10)
-- [x] A2 finančné obrazovky, dobropisy a účtovnícky cutover
-- [ ] B dokumenty, e-mail a Omega migrácia — dokumenty v
-  [PR #17](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/17), e-mail/outbox
-  v [PR #16](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/16), Omega
-  import implementovaný na vetve `feat/finance-omega-import`
-- [ ] C Tatra banka, párovanie a reporty — C1 v [PR #13](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/13):
-  import výpisu, platby, párovanie, cash-flow a cron; produkčný Tatra provider
-  zostáva vypnutý do aktivácie, doplnenia consent flow a overenia kontraktu v
-  oficiálnom sandboxe
+- [x] A2 finančné obrazovky, dobropisy, roly a účtovnícky export — PR
+  [#11](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/11),
+  [#12](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/12),
+  [#14](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/14) a
+  [#15](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/15)
+- [x] B nemenné PDF, PAY by square a privátny bucket —
+  [PR #17](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/17)
+- [x] C1 bankové výpisy, platby, párovanie, cash-flow a cron —
+  [PR #13](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/13)
+- [x] D Omega import a vyradenie SuperFaktúry —
+  [PR #18](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/18),
+  [#19](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/19),
+  [#20](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/20) a
+  [#21](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/21)
+- [x] E e-mail, outbox, retry a upomienky —
+  [PR #16](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/16) a produkčný
+  hardening v [PR #22](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/22)
+- [x] Doplnkový VRP2 XLSX import —
+  [commit `9052bf9`](https://github.com/Org-Zdravy-shot/ERP-syst-m/commit/9052bf9793be2e858c200cc2d5f1afab851a9719)
+- [ ] Produkčný cutover a externé integrácie podľa remaining splitu nižšie
+
+## Aktuálny remaining split
+
+### Developer A — go-live integrácia
+
+- získať písomné potvrdenie účtovníka pre dátum registrácie DPH, historický
+  hraničný dátum a sadzbu každého fakturovateľného produktu;
+- nakonfigurovať Railway Bucket, transakčný SMTP, `info@zdravyshot.sk`, DKIM a
+  cron; SPF ani DMARC nemeniť bez kontroly existujúcich DNS záznamov;
+- vykonať obnovovací test produkčnej zálohy, bezpečnostnú kontrolu a spoločný
+  E2E scenár od objednávky po účtovnícky export;
+- zapnúť `FINANCE_PRODUCTION_ISSUING_ENABLED` až po splnení všetkých go-live
+  kontrol.
+
+### Developer D — produkčný import a cutover
+
+- dry-run reálneho `export.zip` bol 28. júla 2026 úspešný bez chýb:
+  5 partnerov, 8 vydaných a 2 prijaté faktúry, 27 položiek, vydané
+  `498,70 €`, prijaté `47,89 €`, ďalšie číslo `2026009`;
+- pred commitom vytvoriť a overiť produkčnú zálohu, zopakovať dry-run rovnakého
+  súboru a potvrdiť jeho SHA-256; reálny export zostáva mimo Gitu;
+- commit spustiť s auditovaným adminom a vedomou stratégiou
+  `--mark-issued-paid --issued-paid-date=due-date`, potom overiť 8 alokovaných
+  úhrad, oba číselné rady, `ImportBatch`, audity a súhrnné sumy;
+- po akceptácii presunúť posledné exporty Omegy a SuperFaktúry do zabezpečeného
+  archívu a nepoužívať ich na nové doklady.
+
+### Developer C — externá Tatra banka
+
+- dokončiť aktiváciu Premium API, consent/reconnect flow, šifrované obnovovanie
+  tokenu a kontraktné testy v oficiálnom sandboxe;
+- `TATRA_PREMIUM_ENABLED` ponechať vypnuté, kým aktivácia a sandbox neprejdú;
+  dovtedy je podporovaný kontrolovaný import bankového výpisu.
+
+### Zostávajúce funkčné rozšírenia
+
+- doplniť nahrávanie všeobecných príloh prijatých faktúr do privátneho bucketu;
+- podľa zvoleného mail providera doplniť webhook pre `DELIVERED` a `BOUNCED`;
+- druhá etapa: vybrať certifikovaného eFaktúra providera do septembra 2026,
+  zapojiť sandbox do októbra a produkciu najneskôr v decembri 2026.
 
 ## 1. Cieľ a hranice prvej etapy
 
