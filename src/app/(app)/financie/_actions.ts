@@ -1,9 +1,11 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { parseBratislavaDateTime } from "@/lib/datetime";
 import { invoiceDirectionSchema, vatStatusSchema } from "@/lib/zod-schemas";
 import { invoiceService } from "@/lib/finance/invoice-service";
 import { requireFinancePermission } from "@/lib/finance/permissions";
@@ -235,17 +237,136 @@ const ekasaRowSchema = z.object({
   saleDate: z.string().min(1),
   receiptNumber: z.string().optional(),
   description: z.string().optional(),
-  quantity: z.number().positive().default(1),
+  productCode: z.string().optional(),
+  ean: z.string().optional(),
+  itemType: z.string().optional(),
+  source: z.enum(["VRP2_XLSX", "CSV", "MANUAL"]).default("CSV"),
+  quantity: z.number().finite().refine((value) => value !== 0, "Množstvo nesmie byť nula").default(1),
   totalGrossCents: z.number().int(),
-  vatRate: z.number().int().nonnegative().default(20),
+  vatRate: z.number().int().min(0).max(100).nullable().optional(),
 });
+
+type EkasaRow = z.infer<typeof ekasaRowSchema>;
+
+function normalizedKeyPart(value: string | undefined): string {
+  return (value ?? "").trim().toLocaleLowerCase("sk");
+}
+
+function ekasaSourceKey(row: EkasaRow, saleDate: Date, occurrence: number): string {
+  const signature = [
+    normalizedKeyPart(row.receiptNumber),
+    saleDate.toISOString(),
+    normalizedKeyPart(row.productCode),
+    normalizedKeyPart(row.ean),
+    normalizedKeyPart(row.description),
+    normalizedKeyPart(row.itemType),
+    row.quantity.toFixed(6),
+    String(row.totalGrossCents),
+    row.vatRate === null || row.vatRate === undefined ? "" : String(row.vatRate),
+    String(occurrence),
+  ].join("|");
+  return createHash("sha256").update(signature).digest("hex");
+}
+
+async function saveEkasaRows(
+  rows: EkasaRow[],
+  importBatch: string,
+  user: { userId: string; email: string },
+): Promise<InvoiceFormState> {
+  const products = await prisma.product.findMany({ select: { id: true, name: true, sku: true } });
+  const productByName = new Map(products.map((product) => [normalizedKeyPart(product.name), product.id]));
+  const productBySku = new Map(products.map((product) => [normalizedKeyPart(product.sku), product.id]));
+  const occurrences = new Map<string, number>();
+  let invalid = 0;
+
+  const prepared = rows.flatMap((row) => {
+    const saleDate = new Date(row.saleDate);
+    if (Number.isNaN(saleDate.getTime())) {
+      invalid += 1;
+      return [];
+    }
+
+    const occurrenceSignature = [
+      normalizedKeyPart(row.receiptNumber),
+      saleDate.toISOString(),
+      normalizedKeyPart(row.productCode),
+      normalizedKeyPart(row.ean),
+      normalizedKeyPart(row.description),
+      normalizedKeyPart(row.itemType),
+      row.quantity.toFixed(6),
+      String(row.totalGrossCents),
+      row.vatRate === null || row.vatRate === undefined ? "" : String(row.vatRate),
+    ].join("|");
+    const occurrence = occurrences.get(occurrenceSignature) ?? 0;
+    occurrences.set(occurrenceSignature, occurrence + 1);
+
+    return [{
+      saleDate,
+      receiptNumber: row.receiptNumber?.trim() || null,
+      description: row.description?.trim() || null,
+      productId:
+        (row.productCode ? productBySku.get(normalizedKeyPart(row.productCode)) : undefined) ??
+        (row.description ? productByName.get(normalizedKeyPart(row.description)) : undefined) ??
+        null,
+      productCode: row.productCode?.trim() || null,
+      ean: row.ean?.trim() || null,
+      itemType: row.itemType?.trim() || null,
+      source: row.source,
+      sourceKey: ekasaSourceKey(row, saleDate, occurrence),
+      quantity: row.quantity,
+      totalGrossCents: row.totalGrossCents,
+      vatRate: row.vatRate ?? null,
+      importBatch,
+    }];
+  });
+
+  if (prepared.length === 0) return { error: "Import neobsahuje žiadne platné predaje." };
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const created = await tx.ekasaSale.createMany({ data: prepared, skipDuplicates: true });
+      await tx.auditLog.create({
+        data: {
+          actorId: user.userId,
+          actorEmail: user.email,
+          action: rows[0]?.source === "MANUAL" ? "EKASA_SALE_CREATED" : "EKASA_IMPORT_COMMITTED",
+          entityType: "EkasaSale",
+          entityId: importBatch,
+          metadata: {
+            source: rows[0]?.source ?? "CSV",
+            inputRows: rows.length,
+            createdRows: created.count,
+            skippedRows: prepared.length - created.count,
+            invalidRows: invalid,
+          },
+        },
+      });
+      return created;
+    });
+
+    revalidatePath("/financie");
+    revalidatePath("/financie/ekasa");
+    revalidatePath("/plan");
+    revalidatePath("/");
+
+    const skipped = prepared.length - result.count;
+    const parts = [`Importované: ${result.count}`, `duplikáty: ${skipped}`];
+    if (invalid > 0) parts.push(`chybné riadky: ${invalid}`);
+    return result.count === 0 && skipped === 0
+      ? { error: parts.join(" · ") }
+      : { success: parts.join(" · ") };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Predaje sa nepodarilo uložiť.",
+    };
+  }
+}
 
 export async function importEkasaRows(
   _prev: InvoiceFormState,
   formData: FormData,
 ): Promise<InvoiceFormState> {
-  await requireFinancePermission("CREATE_DRAFT");
-
+  const user = await requireFinancePermission("CREATE_DRAFT");
   const importBatch = String(formData.get("importBatch") ?? "import").slice(0, 200);
   let rowsRaw: unknown;
   try {
@@ -253,52 +374,53 @@ export async function importEkasaRows(
   } catch {
     return { error: "Neplatné dáta importu." };
   }
+
   const rows = z.array(ekasaRowSchema).max(2000, "Naraz možno importovať max 2000 riadkov.").safeParse(rowsRaw);
   if (!rows.success) return { error: rows.error.issues[0]?.message ?? "Neplatné riadky importu." };
   if (rows.data.length === 0) return { error: "Súbor neobsahuje žiadne predaje." };
+  return saveEkasaRows(rows.data, importBatch, user);
+}
 
-  const products = await prisma.product.findMany({ select: { id: true, name: true } });
-  const productByName = new Map(products.map((p) => [p.name.toLowerCase(), p.id]));
+export async function createManualEkasaSale(
+  _prev: InvoiceFormState,
+  formData: FormData,
+): Promise<InvoiceFormState> {
+  const user = await requireFinancePermission("CREATE_DRAFT");
+  const saleDate = parseBratislavaDateTime(String(formData.get("saleDate") ?? ""));
+  if (!saleDate) return { error: "Zadajte platný dátum a čas predaja." };
 
-  let created = 0;
-  let skipped = 0;
-  let invalid = 0;
+  const grossValue = String(formData.get("totalGross") ?? "")
+    .trim()
+    .replace(/\s/g, "")
+    .replace(",", ".");
+  const totalGross = Number(grossValue);
+  const quantity = Number(String(formData.get("quantity") ?? "").replace(",", "."));
+  const vatRaw = String(formData.get("vatRate") ?? "").trim();
 
-  for (const row of rows.data) {
-    const saleDate = new Date(row.saleDate);
-    if (Number.isNaN(saleDate.getTime())) {
-      invalid += 1;
-      continue;
-    }
-    try {
-      await prisma.ekasaSale.create({
-        data: {
-          saleDate,
-          receiptNumber: row.receiptNumber ?? null,
-          description: row.description ?? null,
-          productId: row.description ? (productByName.get(row.description.toLowerCase()) ?? null) : null,
-          quantity: row.quantity,
-          totalGrossCents: row.totalGrossCents,
-          vatRate: row.vatRate,
-          importBatch,
-        },
-      });
-      created += 1;
-    } catch (e) {
-      // duplicitný doklad (unique receiptNumber+saleDate) — preskočiť
-      if (e instanceof Error && "code" in e && (e as { code?: string }).code === "P2002") skipped += 1;
-      else invalid += 1;
-    }
+  const parsed = ekasaRowSchema.safeParse({
+    saleDate: saleDate.toISOString(),
+    receiptNumber: String(formData.get("receiptNumber") ?? "").trim(),
+    description: String(formData.get("description") ?? "").trim(),
+    productCode: String(formData.get("productCode") ?? "").trim() || undefined,
+    itemType: String(formData.get("itemType") ?? "kladná").trim(),
+    source: "MANUAL",
+    quantity,
+    totalGrossCents: Number.isFinite(totalGross) ? Math.round(totalGross * 100) : Number.NaN,
+    vatRate: vatRaw ? Number(vatRaw) : null,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Skontrolujte údaje predaja." };
   }
 
-  revalidatePath("/financie");
-  revalidatePath("/financie/ekasa");
-  revalidatePath("/plan");
-  revalidatePath("/");
+  if (!parsed.data.receiptNumber) return { error: "Identifikátor dokladu je povinný." };
+  if (!parsed.data.description) return { error: "Popis položky je povinný." };
+  if (parsed.data.totalGrossCents === 0) return { error: "Suma položky nesmie byť nula." };
 
-  const parts = [`Importované: ${created}`, `duplikáty: ${skipped}`];
-  if (invalid > 0) parts.push(`chybné riadky: ${invalid}`);
-  return created === 0 && skipped === 0 ? { error: parts.join(" · ") } : { success: parts.join(" · ") };
+  return saveEkasaRows(
+    [parsed.data],
+    `Manuálne · ${parsed.data.receiptNumber} · ${new Date().toISOString()}`,
+    user,
+  );
 }
 
 // ---------- Firemný profil a DPH nastavenia ----------

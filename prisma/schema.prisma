@@ -611,13 +611,19 @@ model EkasaSale {
   description     String?
   productId       String?
   product         Product? @relation(fields: [productId], references: [id])
+  productCode     String?
+  ean             String?
+  itemType        String?
+  source          String   @default("LEGACY") // "VRP2_XLSX" | "CSV" | "MANUAL" | "LEGACY"
+  sourceKey       String?  @unique // deterministická deduplikácia položky naprieč importmi
   quantity        Float    @default(1)
   totalGrossCents Int
-  vatRate         Int      @default(20)
-  importBatch     String // názov súboru + čas importu (dedup / undo)
+  vatRate         Int? // null = zdroj sadzbu DPH neposkytol; nikdy ju nehádame
+  importBatch     String // názov súboru + čas importu (dedup / audit)
   createdAt       DateTime @default(now())
 
-  @@unique([receiptNumber, saleDate])
+  @@index([receiptNumber, saleDate])
+  @@index([source, saleDate])
 }
 
 // ---------- Plnenie plánu ----------
