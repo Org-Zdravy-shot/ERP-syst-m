@@ -7,6 +7,7 @@ import type { MailMessage, MailProvider, MailResult } from "@/lib/finance/contra
  * Zoznam odoslaných správ je dostupný na introspekciu v testoch.
  */
 export class LogMailProvider implements MailProvider {
+  readonly providerName = "LOG";
   readonly sent: MailMessage[] = [];
 
   async send(message: MailMessage): Promise<MailResult> {

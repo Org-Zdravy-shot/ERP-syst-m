@@ -1,6 +1,9 @@
 import type { MailProvider } from "@/lib/finance/contracts";
 import { prisma } from "@/lib/prisma";
-import { NonRetryableError } from "@/lib/finance/outbox/errors";
+import {
+  NonRetryableError,
+  SkippedOutboxError,
+} from "@/lib/finance/outbox/errors";
 import { MAIL_FROM, MAIL_REPLY_TO } from "./config";
 import { buildInvoiceEmail, buildReminderEmail, type InvoiceEmailData } from "./templates";
 
@@ -11,6 +14,8 @@ export interface SendInvoiceEmailInput {
   kind: EmailKind;
   outboxEventId: string;
   provider: MailProvider;
+  actorId?: string;
+  now?: Date;
 }
 
 export interface SendInvoiceEmailResult {
@@ -19,9 +24,28 @@ export interface SendInvoiceEmailResult {
   toAddress: string;
 }
 
-interface IssuerSnapshotShape {
+interface MailPartySnapshot {
   name?: string;
+  email?: string;
   iban?: string;
+}
+
+export function mailPartyFromSnapshot(snapshot: unknown): MailPartySnapshot {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return {};
+  }
+  const candidate = snapshot as Record<string, unknown>;
+  return {
+    ...(typeof candidate.name === "string" && candidate.name.trim()
+      ? { name: candidate.name.trim() }
+      : {}),
+    ...(typeof candidate.email === "string" && candidate.email.trim()
+      ? { email: candidate.email.trim() }
+      : {}),
+    ...(typeof candidate.iban === "string" && candidate.iban.trim()
+      ? { iban: candidate.iban.trim() }
+      : {}),
+  };
 }
 
 /**
@@ -31,10 +55,20 @@ interface IssuerSnapshotShape {
  * naplánuje retry). NonRetryableError = terminálny stav bez opakovania.
  */
 export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<SendInvoiceEmailResult> {
+  const now = input.now ?? new Date();
   const invoice = await prisma.invoice.findUnique({
     where: { id: input.invoiceId },
-    include: {
-      client: true,
+    select: {
+      id: true,
+      direction: true,
+      documentStatus: true,
+      documentType: true,
+      invoiceNumber: true,
+      totalGrossCents: true,
+      variableSymbol: true,
+      dueDate: true,
+      issuerSnapshot: true,
+      counterpartySnapshot: true,
       paymentAllocations: {
         where: { reversedAt: null },
         select: { amountCents: true },
@@ -47,9 +81,20 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
     throw new NonRetryableError("Doklad nie je finalizovaný.");
   }
 
-  const toAddress = invoice.client?.email?.trim();
+  const recipient = mailPartyFromSnapshot(invoice.counterpartySnapshot);
+  const toAddress = recipient.email;
   if (!toAddress) {
-    throw new NonRetryableError(`Klient ${invoice.client?.name ?? ""} nemá e-mailovú adresu.`);
+    throw new NonRetryableError(
+      `Snapshot odberateľa ${recipient.name ?? ""} nemá e-mailovú adresu.`,
+    );
+  }
+  const paidCents = invoice.paymentAllocations.reduce(
+    (sum, allocation) => sum + allocation.amountCents,
+    0,
+  );
+  const outstandingCents = Math.max(0, invoice.totalGrossCents - paidCents);
+  if (input.kind === "REMINDER" && outstandingCents === 0) {
+    throw new SkippedOutboxError("Faktúra už bola uhradená.");
   }
 
   // Existujúca evidencia pre túto outbox udalosť → idempotencia
@@ -62,8 +107,12 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
   const document = await prisma.documentAsset.findFirst({
     where: {
       invoiceId: invoice.id,
-      type: { in: ["INVOICE_PDF", "CREDIT_NOTE_PDF"] },
+      type:
+        invoice.documentType === "CREDIT_NOTE"
+          ? "CREDIT_NOTE_PDF"
+          : "INVOICE_PDF",
       archivedAt: null,
+      isImmutable: true,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -75,20 +124,13 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
     throw new Error("PDF dokladu ešte nie je vygenerované.");
   }
 
-  const allocatedCents = invoice.paymentAllocations.reduce(
-    (sum, allocation) => sum + allocation.amountCents,
-    0,
-  );
-  const outstandingCents = Math.max(0, invoice.totalGrossCents - allocatedCents);
-  if (input.kind === "REMINDER" && outstandingCents === 0) {
-    throw new NonRetryableError("Faktúra je už uhradená; upomienka sa neposiela.");
-  }
-  const issuer = (invoice.issuerSnapshot ?? {}) as IssuerSnapshotShape;
+  const issuer = mailPartyFromSnapshot(invoice.issuerSnapshot);
   const emailData: InvoiceEmailData = {
     invoiceNumber: invoice.invoiceNumber,
     documentType: invoice.documentType === "CREDIT_NOTE" ? "CREDIT_NOTE" : "INVOICE",
-    clientName: invoice.client?.name ?? "",
-    totalGrossCents: input.kind === "REMINDER" ? outstandingCents : invoice.totalGrossCents,
+    clientName: recipient.name ?? "",
+    totalGrossCents:
+      input.kind === "REMINDER" ? outstandingCents : invoice.totalGrossCents,
     variableSymbol: invoice.variableSymbol,
     iban: issuer.iban ?? null,
     dueDate: invoice.dueDate,
@@ -97,7 +139,10 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
 
   const daysOverdue = Math.max(
     0,
-    Math.floor((Date.now() - invoice.dueDate.getTime()) / (24 * 3600 * 1000)),
+    Math.floor(
+      (now.getTime() - invoice.dueDate.getTime()) /
+        (24 * 3600 * 1000),
+    ),
   );
   const content =
     input.kind === "REMINDER"
@@ -108,20 +153,20 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
   const delivery = existing
     ? await prisma.emailDelivery.update({
         where: { id: existing.id },
-        data: { attemptCount: { increment: 1 }, lastAttemptAt: new Date(), status: "PENDING", subject: content.subject },
+        data: { attemptCount: { increment: 1 }, lastAttemptAt: now, status: "PENDING", subject: content.subject },
       })
     : await prisma.emailDelivery.create({
         data: {
           invoiceId: invoice.id,
           documentId: document?.id ?? null,
           outboxEventId: input.outboxEventId,
-          provider: "SMTP",
+          provider: input.provider.providerName,
           fromAddress: MAIL_FROM,
           toAddress,
           subject: content.subject,
           status: "PENDING",
           attemptCount: 1,
-          lastAttemptAt: new Date(),
+          lastAttemptAt: now,
         },
       });
 
@@ -150,6 +195,7 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
     });
     await prisma.auditLog.create({
       data: {
+        actorId: input.actorId,
         action: input.kind === "REMINDER" ? "REMINDER_EMAIL_SENT" : "INVOICE_EMAIL_SENT",
         entityType: "Invoice",
         entityId: invoice.id,

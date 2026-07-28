@@ -8,3 +8,10 @@ export class NonRetryableError extends Error {
     this.name = "NonRetryableError";
   }
 }
+
+export class SkippedOutboxError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SkippedOutboxError";
+  }
+}

@@ -5,11 +5,15 @@ import { DefaultDocumentService } from "@/lib/finance/documents/document-service
 import { SlovakInvoicePdfRenderer } from "@/lib/finance/documents/pdf-renderer";
 import { PrismaDocumentRepository } from "@/lib/finance/documents/prisma-repository";
 import { readS3DocumentStorageConfig, S3DocumentStorage } from "@/lib/finance/documents/storage";
+import {
+  DocumentConfigurationError,
+  DocumentIntegrityError,
+} from "@/lib/finance/documents/errors";
 import { hashesEqual, sha256 } from "@/lib/finance/documents/hash";
 import { prisma } from "@/lib/prisma";
 import { SmtpMailProvider } from "@/lib/finance/mail/smtp-provider";
 import { LogMailProvider } from "@/lib/finance/mail/log-provider";
-import { smtpConfigured } from "@/lib/finance/mail/config";
+import { MAIL_FROM, smtpConfigured } from "@/lib/finance/mail/config";
 import type { AttachmentLoader, MailProvider, ResolvedAttachment } from "@/lib/finance/mail/types";
 import { LocalFsDocumentStorage } from "./local-storage";
 
@@ -26,12 +30,17 @@ let storageSingleton: DocumentObjectStorage | undefined;
  */
 export function getWorkerStorage(): DocumentObjectStorage {
   if (!storageSingleton) {
-    if (process.env.NODE_ENV === "production" && !bucketConfigured()) {
-      throw new Error("Produkčné úložisko finančných dokumentov nie je nakonfigurované.");
+    if (bucketConfigured()) {
+      storageSingleton = new S3DocumentStorage(readS3DocumentStorageConfig());
+    } else if (process.env.NODE_ENV === "production") {
+      throw new DocumentConfigurationError(
+        "Produkčné úložisko finančných dokumentov nie je nakonfigurované.",
+      );
+    } else {
+      storageSingleton = new LocalFsDocumentStorage(
+        join(process.cwd(), ".local-bucket"),
+      );
     }
-    storageSingleton = bucketConfigured()
-      ? new S3DocumentStorage(readS3DocumentStorageConfig())
-      : new LocalFsDocumentStorage(join(process.cwd(), ".local-bucket"));
   }
   return storageSingleton;
 }
@@ -60,8 +69,21 @@ export class StorageAttachmentLoader implements AttachmentLoader {
     if (!document || document.archivedAt) {
       throw new Error(`Dokument ${documentId} sa nenašiel alebo je archivovaný.`);
     }
+    if (
+      !document.isImmutable ||
+      document.storageProvider !== this.storage.provider ||
+      document.bucket !== this.storage.bucket
+    ) {
+      throw new DocumentIntegrityError(
+        `Dokument ${documentId} nezodpovedá nakonfigurovanému úložisku.`,
+      );
+    }
     const object = await this.storage.getObject(document.objectKey);
-    if (object.byteSize !== document.byteSize || !hashesEqual(sha256(object.bytes), document.sha256)) {
+    if (
+      object.byteSize !== document.byteSize ||
+      !hashesEqual(sha256(object.bytes), document.sha256) ||
+      (object.sha256 && !hashesEqual(object.sha256, document.sha256))
+    ) {
       throw new Error(`Integrita dokumentu ${documentId} zlyhala — PDF sa neposiela.`);
     }
     return { fileName: document.fileName, contentType: document.contentType, bytes: object.bytes };
@@ -70,23 +92,40 @@ export class StorageAttachmentLoader implements AttachmentLoader {
 
 let mailProviderSingleton: MailProvider | undefined;
 
-/** SMTP provider keď je nakonfigurovaný, inak LogMailProvider (dev/E2E). */
+/** SMTP provider v produkcii; LogMailProvider je povolený iba v dev/teste. */
 export function getMailProvider(): MailProvider {
   if (!mailProviderSingleton) {
+    if (
+      process.env.NODE_ENV === "production" &&
+      (MAIL_FROM.toLowerCase() !== "info@zdravyshot.sk" ||
+        process.env.FINANCE_MAIL_DKIM_CONFIRMED !== "true")
+    ) {
+      throw new Error(
+        "Produkčný e-mail vyžaduje odosielateľa info@zdravyshot.sk a potvrdené DKIM.",
+      );
+    }
     const loader = new StorageAttachmentLoader(getWorkerStorage());
     if (smtpConfigured()) {
       mailProviderSingleton = new SmtpMailProvider(loader);
-    } else if (process.env.NODE_ENV !== "production") {
-      mailProviderSingleton = new LogMailProvider();
+    } else if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "Produkčný worker vyžaduje platnú konfiguráciu transakčného SMTP providera.",
+      );
     } else {
-      throw new Error("Produkčný SMTP provider nie je nakonfigurovaný.");
+      mailProviderSingleton = new LogMailProvider();
     }
   }
   return mailProviderSingleton;
 }
 
 export function mailSendingEnabled(): boolean {
-  // V produkcii chceme reálny SMTP; v dev je Log provider vždy dostupný.
+  if (
+    process.env.NODE_ENV === "production" &&
+    (MAIL_FROM.toLowerCase() !== "info@zdravyshot.sk" ||
+      process.env.FINANCE_MAIL_DKIM_CONFIRMED !== "true")
+  ) {
+    return false;
+  }
   return smtpConfigured() || process.env.NODE_ENV !== "production";
 }
 

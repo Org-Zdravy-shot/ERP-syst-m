@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { mailPartyFromSnapshot } from "@/lib/finance/mail/email-service";
 import { enqueueOutbox } from "./enqueue";
 
 /** Po koľkých dňoch po splatnosti sa posiela prvá upomienka. */
@@ -28,25 +29,25 @@ export async function enqueueDueReminders(now: Date = new Date()): Promise<Remin
       direction: "VYDANA",
       documentType: "INVOICE",
       documentStatus: "ISSUED",
-      // legacy UHRADENA (historicky uhradené bez alokácií) sa do A1 backfillu
-      // rešpektuje ako uzavreté — nespamovať upomienkami; STORNO tiež nie
-      status: { notIn: ["UHRADENA", "STORNO"] },
       dueDate: { lt: cutoff },
-      client: { email: { not: null } },
     },
     select: {
       id: true,
       totalGrossCents: true,
+      counterpartySnapshot: true,
       paymentAllocations: { where: { reversedAt: null }, select: { amountCents: true } },
     },
   });
 
   const bucket = weekBucket(now);
   let enqueued = 0;
+  let candidates = 0;
 
   for (const invoice of overdue) {
     const paid = invoice.paymentAllocations.reduce((sum, a) => sum + a.amountCents, 0);
     if (invoice.totalGrossCents - paid <= 0) continue; // uhradená
+    if (!mailPartyFromSnapshot(invoice.counterpartySnapshot).email) continue;
+    candidates += 1;
 
     const result = await enqueueOutbox({
       type: "REMINDER_EMAIL",
@@ -58,5 +59,5 @@ export async function enqueueDueReminders(now: Date = new Date()): Promise<Remin
     if (result.created) enqueued += 1;
   }
 
-  return { candidates: overdue.length, enqueued };
+  return { candidates, enqueued };
 }

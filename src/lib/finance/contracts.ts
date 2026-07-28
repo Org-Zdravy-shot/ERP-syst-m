@@ -189,6 +189,7 @@ export interface MailResult {
 export type MailDeliveryStatus = "PENDING" | "SENT" | "DELIVERED" | "FAILED" | "BOUNCED";
 
 export interface MailProvider {
+  readonly providerName: string;
   send(message: MailMessage): Promise<MailResult>;
   getDeliveryStatus(providerMessageId: string): Promise<MailDeliveryStatus>;
 }

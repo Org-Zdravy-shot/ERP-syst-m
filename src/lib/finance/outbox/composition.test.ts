@@ -29,6 +29,7 @@ describe("produkčná kompozícia financií", () => {
     vi.stubEnv("DOCUMENT_BUCKET_SECRET_ACCESS_KEY", "test-secret");
     vi.stubEnv("SMTP_HOST", "");
     vi.stubEnv("SMTP_PORT", "");
+    vi.stubEnv("FINANCE_MAIL_DKIM_CONFIRMED", "true");
     __resetCompositionForTests();
 
     expect(mailSendingEnabled()).toBe(false);

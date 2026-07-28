@@ -68,7 +68,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
 
   const session = await getSession();
   const canSendEmail =
-    hasFinancePermission(session.role, "CREATE_DRAFT") &&
+    hasFinancePermission(session.role, "SEND_DOCUMENT") &&
     invoice.direction === "VYDANA" &&
     invoice.documentStatus === "ISSUED";
 

@@ -1,7 +1,13 @@
+import { createHash } from "node:crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 import type { MailMessage, MailProvider, MailResult } from "@/lib/finance/contracts";
-import { MAIL_FROM_NAME, readSmtpConfig } from "./config";
+import { MAIL_FROM, MAIL_FROM_NAME, readSmtpConfig } from "./config";
 import type { AttachmentLoader } from "./types";
+
+function stableMessageId(idempotencyKey: string): string {
+  const digest = createHash("sha256").update(idempotencyKey).digest("hex");
+  return `<${digest}@zdravyshot.sk>`;
+}
 
 /**
  * Vendor-neutrálny MailProvider cez SMTP (nodemailer). Funguje s ľubovoľným
@@ -10,6 +16,7 @@ import type { AttachmentLoader } from "./types";
  * a message-id pri odoslaní → EmailDelivery.status SENT/FAILED.
  */
 export class SmtpMailProvider implements MailProvider {
+  readonly providerName = "SMTP";
   private transporter: Transporter | undefined;
 
   constructor(private readonly attachments: AttachmentLoader) {}
@@ -28,6 +35,9 @@ export class SmtpMailProvider implements MailProvider {
   }
 
   async send(message: MailMessage): Promise<MailResult> {
+    if (message.from.trim().toLowerCase() !== MAIL_FROM.toLowerCase()) {
+      throw new Error(`SMTP odosielateľ musí byť ${MAIL_FROM}.`);
+    }
     const attachments = await Promise.all(
       message.documentIds.map(async (id) => {
         const file = await this.attachments.load(id);
@@ -43,6 +53,7 @@ export class SmtpMailProvider implements MailProvider {
       text: message.text,
       html: message.html,
       attachments,
+      messageId: stableMessageId(message.idempotencyKey),
     });
 
     const accepted = (info.accepted ?? []).map(String);
