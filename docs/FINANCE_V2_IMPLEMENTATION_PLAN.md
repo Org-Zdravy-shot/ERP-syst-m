@@ -46,10 +46,15 @@
   potvrdiť KN kód a množstvo pridaného cukru na 100 ml pre každý recept;
 - [x] vytvoriť privátny Railway Bucket v regióne Amsterdam, nastaviť jeho
   produkčné premenné a overiť upload, download aj SHA-256;
-- nakonfigurovať transakčný SMTP, `info@zdravyshot.sk`, DKIM a cron; SPF ani
-  DMARC nemeniť bez kontroly existujúcich DNS záznamov;
-- vykonať obnovovací test produkčnej zálohy, bezpečnostnú kontrolu a spoločný
-  E2E scenár od objednávky po účtovnícky export;
+- [x] nastaviť Railway cron: outbox každých 5 minút, bankový sync každých
+  15 minút a upomienky denne o 07:00 UTC; produkčný test skončil bez backlogu
+  a bankový job sa pri vypnutom Tatra flage korektne preskočil;
+- nakonfigurovať transakčný SMTP, `info@zdravyshot.sk` a DKIM; existujúce SPF
+  ani DMARC nemeniť bez kontroly;
+- [x] obnoviť predimportnú produkčnú zálohu do izolovanej dočasnej databázy,
+  overiť obnovenú schému a dáta a dočasnú databázu následne odstrániť;
+- vykonať bezpečnostnú kontrolu a spoločný E2E scenár od objednávky po
+  účtovnícky export;
 - zapnúť `FINANCE_PRODUCTION_ISSUING_ENABLED` až po splnení všetkých go-live
   kontrol.
 
