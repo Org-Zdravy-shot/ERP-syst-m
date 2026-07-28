@@ -36,12 +36,15 @@ Nastavte referenčné premenné:
 DOCUMENT_BUCKET_NAME
 DOCUMENT_BUCKET_ENDPOINT
 DOCUMENT_BUCKET_REGION
+DOCUMENT_BUCKET_URL_STYLE=virtual
 DOCUMENT_BUCKET_ACCESS_KEY_ID
 DOCUMENT_BUCKET_SECRET_ACCESS_KEY
 ```
 
 Bucket musí zostať privátny. Prístupové údaje patria iba do Railway variables,
-nikdy do Gitu.
+nikdy do Gitu. Aktuálne Railway Buckety používajú
+`DOCUMENT_BUCKET_URL_STYLE=virtual`; hodnotu `path` použite iba pre staršie
+alebo iné S3-kompatibilné úložisko, ktoré ju výslovne vyžaduje.
 
 ## Testy
 

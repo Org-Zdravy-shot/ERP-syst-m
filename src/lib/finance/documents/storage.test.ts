@@ -3,9 +3,12 @@ import {
   PutObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { DocumentConfigurationError } from "./errors";
-import { S3DocumentStorage } from "./storage";
+import {
+  readS3DocumentStorageConfig,
+  S3DocumentStorage,
+} from "./storage";
 
 const send = vi.fn();
 const config = {
@@ -23,6 +26,40 @@ function storage(): S3DocumentStorage {
 
 beforeEach(() => {
   send.mockReset();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+function stubRequiredBucketEnvironment(): void {
+  vi.stubEnv("DOCUMENT_BUCKET_NAME", "finance-private");
+  vi.stubEnv("DOCUMENT_BUCKET_ENDPOINT", "https://storage.railway.app");
+  vi.stubEnv("DOCUMENT_BUCKET_REGION", "auto");
+  vi.stubEnv("DOCUMENT_BUCKET_ACCESS_KEY_ID", "test-access-key");
+  vi.stubEnv("DOCUMENT_BUCKET_SECRET_ACCESS_KEY", "test-secret-key");
+}
+
+test("Railway bucket používa predvolene virtual-hosted S3 URL", () => {
+  stubRequiredBucketEnvironment();
+
+  expect(readS3DocumentStorageConfig().urlStyle).toBe("virtual");
+});
+
+test("staršie S3 úložisko môže explicitne zapnúť path-style URL", () => {
+  stubRequiredBucketEnvironment();
+  vi.stubEnv("DOCUMENT_BUCKET_URL_STYLE", "path");
+
+  expect(readS3DocumentStorageConfig().urlStyle).toBe("path");
+});
+
+test("neznámy S3 URL štýl je odmietnutý", () => {
+  stubRequiredBucketEnvironment();
+  vi.stubEnv("DOCUMENT_BUCKET_URL_STYLE", "invalid");
+
+  expect(() => readS3DocumentStorageConfig()).toThrow(
+    DocumentConfigurationError,
+  );
 });
 
 test("S3 zápis je podmienený a nesmie prepísať existujúci objekt", async () => {

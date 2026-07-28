@@ -19,6 +19,7 @@ export interface S3DocumentStorageConfig {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
+  urlStyle?: "virtual" | "path";
   maxDocumentBytes?: number;
 }
 
@@ -34,6 +35,16 @@ function requiredEnvironmentValue(names: string[]): string {
 }
 
 export function readS3DocumentStorageConfig(): S3DocumentStorageConfig {
+  const urlStyle =
+    process.env.DOCUMENT_BUCKET_URL_STYLE?.trim().toLowerCase() ||
+    process.env.AWS_S3_URL_STYLE?.trim().toLowerCase() ||
+    "virtual";
+  if (urlStyle !== "virtual" && urlStyle !== "path") {
+    throw new DocumentConfigurationError(
+      "DOCUMENT_BUCKET_URL_STYLE musí byť „virtual“ alebo „path“.",
+    );
+  }
+
   return {
     bucket: requiredEnvironmentValue(["DOCUMENT_BUCKET_NAME", "BUCKET"]),
     endpoint: requiredEnvironmentValue(["DOCUMENT_BUCKET_ENDPOINT", "ENDPOINT"]),
@@ -49,6 +60,7 @@ export function readS3DocumentStorageConfig(): S3DocumentStorageConfig {
       "DOCUMENT_BUCKET_SECRET_ACCESS_KEY",
       "SECRET_ACCESS_KEY",
     ]),
+    urlStyle,
   };
 }
 
@@ -91,7 +103,9 @@ export class S3DocumentStorage implements DocumentObjectStorage {
     const clientConfig: S3ClientConfig = {
       endpoint: config.endpoint,
       region: config.region,
-      forcePathStyle: true,
+      // Nové Railway Buckety používajú virtual-hosted S3 URL. Path-style
+      // zostáva voliteľný pre staršie alebo iné S3-kompatibilné úložiská.
+      forcePathStyle: config.urlStyle === "path",
       credentials: {
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
