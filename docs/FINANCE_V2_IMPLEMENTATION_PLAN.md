@@ -27,6 +27,8 @@
   hardening v [PR #22](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/22)
 - [x] Doplnkový VRP2 XLSX import —
   [commit `9052bf9`](https://github.com/Org-Zdravy-shot/ERP-syst-m/commit/9052bf9793be2e858c200cc2d5f1afab851a9719)
+- [x] Railway Bucket kompatibilita s virtual-hosted S3 URL —
+  [PR #24](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/24)
 - [ ] Produkčný cutover a externé integrácie podľa remaining splitu nižšie
 
 ## Aktuálny remaining split
@@ -35,23 +37,34 @@
 
 - získať písomné potvrdenie účtovníka pre dátum registrácie DPH, historický
   hraničný dátum a sadzbu každého fakturovateľného produktu;
-- nakonfigurovať Railway Bucket, transakčný SMTP, `info@zdravyshot.sk`, DKIM a
-  cron; SPF ani DMARC nemeniť bez kontroly existujúcich DNS záznamov;
+- overenie k 28. júlu 2026 nepotvrdilo plošnú sadzbu 23 %: pri zatriedení
+  štiav do `ex 2009` platí podľa
+  [Finančnej správy](https://www.financnasprava.sk/sk/podnikatelia/dane/dan-z-pridanej-hodnoty/sadzby-dane)
+  sadzba 5 % pre šťavy bez pridaného cukru alebo najviac s 5 g pridaného
+  cukru na 100 ml; nad tento limit alebo pri inom zatriedení môže platiť 23 %.
+  Keďže verejné zloženie produktov uvádza med, pred nastavením ERP treba
+  potvrdiť KN kód a množstvo pridaného cukru na 100 ml pre každý recept;
+- [x] vytvoriť privátny Railway Bucket v regióne Amsterdam, nastaviť jeho
+  produkčné premenné a overiť upload, download aj SHA-256;
+- nakonfigurovať transakčný SMTP, `info@zdravyshot.sk`, DKIM a cron; SPF ani
+  DMARC nemeniť bez kontroly existujúcich DNS záznamov;
 - vykonať obnovovací test produkčnej zálohy, bezpečnostnú kontrolu a spoločný
   E2E scenár od objednávky po účtovnícky export;
 - zapnúť `FINANCE_PRODUCTION_ISSUING_ENABLED` až po splnení všetkých go-live
   kontrol.
 
-### Developer D — produkčný import a cutover
+### Developer D — produkčný import dokončený, zostáva organizačný cutover
 
-- dry-run reálneho `export.zip` bol 28. júla 2026 úspešný bez chýb:
+- [x] dry-run reálneho `export.zip` bol 28. júla 2026 úspešný bez chýb:
   5 partnerov, 8 vydaných a 2 prijaté faktúry, 27 položiek, vydané
   `498,70 €`, prijaté `47,89 €`, ďalšie číslo `2026009`;
-- pred commitom vytvoriť a overiť produkčnú zálohu, zopakovať dry-run rovnakého
-  súboru a potvrdiť jeho SHA-256; reálny export zostáva mimo Gitu;
-- commit spustiť s auditovaným adminom a vedomou stratégiou
-  `--mark-issued-paid --issued-paid-date=due-date`, potom overiť 8 alokovaných
-  úhrad, oba číselné rady, `ImportBatch`, audity a súhrnné sumy;
+- [x] pred commitom bola vytvorená produkčná databázová záloha
+  `zdravy-shot-20260725-001123.dump` s kontrolným SHA-256
+  `a75f986cd18c5672439b0f9261920920848ed848f872825f1c26a3656ec46da9`;
+- [x] importná dávka bola commitnutá auditovaným administrátorom a opätovne
+  overená: všetkých 8 vydaných aj obe prijaté faktúry majú plnú platobnú
+  alokáciu, rady sú `VYDANA-2026 = 8` a `PRIJATA-2026 = 2` a ďalšie vydané
+  číslo je `2026009`;
 - po akceptácii presunúť posledné exporty Omegy a SuperFaktúry do zabezpečeného
   archívu a nepoužívať ich na nové doklady.
 
