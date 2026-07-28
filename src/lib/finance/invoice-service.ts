@@ -134,14 +134,30 @@ function productionInfrastructureBlockers(env: NodeJS.ProcessEnv): string[] {
   if (env.FINANCE_PRODUCTION_ISSUING_ENABLED !== "true") {
     blockers.push("Produkčné vystavenie faktúr nie je explicitne povolené.");
   }
-  if (!env.FINANCE_BUCKET_NAME && !env.DOCUMENT_BUCKET_NAME && !env.BUCKET) {
+  if (!(env.DOCUMENT_BUCKET_NAME || env.BUCKET)) {
     blockers.push("Nie je nastavený privátny bucket pre finančné dokumenty.");
   }
-  if (!env.FINANCE_MAIL_PROVIDER && !env.SMTP_HOST) {
-    blockers.push("Nie je nastavený transakčný e-mailový provider.");
+  if (!(env.DOCUMENT_BUCKET_ENDPOINT || env.ENDPOINT)) {
+    blockers.push("Nie je nastavený endpoint privátneho bucketu.");
   }
-  if ((env.FINANCE_MAIL_FROM || env.MAIL_FROM)?.toLowerCase() !== "info@zdravyshot.sk") {
+  if (!(env.DOCUMENT_BUCKET_ACCESS_KEY_ID || env.ACCESS_KEY_ID)) {
+    blockers.push("Nie je nastavený prístupový kľúč privátneho bucketu.");
+  }
+  if (!(env.DOCUMENT_BUCKET_SECRET_ACCESS_KEY || env.SECRET_ACCESS_KEY)) {
+    blockers.push("Nie je nastavený tajný kľúč privátneho bucketu.");
+  }
+  const smtpPort = Number(env.SMTP_PORT);
+  if (!env.SMTP_HOST || !Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65_535) {
+    blockers.push("Nie je platne nastavený transakčný SMTP provider.");
+  }
+  if (!!env.SMTP_USER !== !!env.SMTP_PASS) {
+    blockers.push("SMTP používateľ a heslo musia byť nastavené spoločne.");
+  }
+  if (env.MAIL_FROM?.trim().toLowerCase() !== "info@zdravyshot.sk") {
     blockers.push("Odosielateľ faktúr musí byť info@zdravyshot.sk.");
+  }
+  if (env.FINANCE_MAIL_DKIM_CONFIRMED !== "true") {
+    blockers.push("DKIM transakčného e-mailového providera nie je potvrdený.");
   }
   return blockers;
 }

@@ -5,6 +5,7 @@ export type FinancePermission =
   | "CANCEL"
   | "CONFIGURE"
   | "ALLOCATE_PAYMENT"
+  | "SEND_DOCUMENT"
   | "EXPORT";
 
 const ALL_FINANCE_PERMISSIONS: readonly FinancePermission[] = [
@@ -14,13 +15,20 @@ const ALL_FINANCE_PERMISSIONS: readonly FinancePermission[] = [
   "CANCEL",
   "CONFIGURE",
   "ALLOCATE_PAYMENT",
+  "SEND_DOCUMENT",
   "EXPORT",
 ];
 
 const ROLE_PERMISSIONS: Record<string, readonly FinancePermission[]> = {
   admin: ALL_FINANCE_PERMISSIONS,
   FINANCE_ADMIN: ALL_FINANCE_PERMISSIONS,
-  FINANCE_OPERATOR: ["VIEW", "CREATE_DRAFT", "ALLOCATE_PAYMENT", "EXPORT"],
+  FINANCE_OPERATOR: [
+    "VIEW",
+    "CREATE_DRAFT",
+    "ALLOCATE_PAYMENT",
+    "SEND_DOCUMENT",
+    "EXPORT",
+  ],
 };
 
 export class FinanceAuthorizationError extends Error {

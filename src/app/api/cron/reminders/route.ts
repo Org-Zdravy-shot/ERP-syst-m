@@ -3,6 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { enqueueDueReminders } from "@/lib/finance/outbox/reminders";
 import { processPendingOutbox } from "@/lib/finance/outbox/worker";
 
+export const runtime = "nodejs";
+
+function authorized(request: NextRequest, secret: string): boolean {
+  const expected = Buffer.from(secret);
+  const supplied = Buffer.from(request.headers.get("x-cron-secret") ?? "");
+  return (
+    expected.length === supplied.length && timingSafeEqual(expected, supplied)
+  );
+}
+
 /**
  * Railway cron (napr. denne ráno): zaradí upomienky pre faktúry po splatnosti
  * a hneď ich odošle cez outbox. Idempotentné — jedna faktúra max jedna
@@ -13,14 +23,29 @@ export async function POST(request: NextRequest) {
   if (!secret || secret.length < 32) {
     return NextResponse.json({ error: "CRON_SECRET nie je nakonfigurovaný" }, { status: 503 });
   }
-  const suppliedSecret = request.headers.get("x-cron-secret") ?? "";
-  const expected = Buffer.from(secret);
-  const supplied = Buffer.from(suppliedSecret);
-  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+  if (!authorized(request, secret)) {
     return NextResponse.json({ error: "Neplatný cron secret" }, { status: 401 });
   }
 
-  const reminders = await enqueueDueReminders();
-  const outbox = await processPendingOutbox(100);
-  return NextResponse.json({ status: "done", reminders, outbox });
+  try {
+    const reminders = await enqueueDueReminders();
+    const outbox = await processPendingOutbox(100);
+    return NextResponse.json(
+      {
+        status: outbox.failed > 0 ? "failed" : "done",
+        reminders,
+        outbox,
+      },
+      { status: outbox.failed > 0 ? 502 : 200 },
+    );
+  } catch (error) {
+    console.error(
+      "Cron upomienok zlyhal:",
+      error instanceof Error ? error.message : "neznáma chyba",
+    );
+    return NextResponse.json(
+      { error: "Upomienky sa nepodarilo spracovať." },
+      { status: 500 },
+    );
+  }
 }

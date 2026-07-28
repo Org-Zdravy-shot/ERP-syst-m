@@ -18,7 +18,12 @@ export interface SmtpConfig {
 }
 
 export function smtpConfigured(): boolean {
-  return !!process.env.SMTP_HOST?.trim() && !!process.env.SMTP_PORT?.trim();
+  try {
+    readSmtpConfig();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function readSmtpConfig(): SmtpConfig {
@@ -27,17 +32,14 @@ export function readSmtpConfig(): SmtpConfig {
   if (!host || !portRaw) {
     throw new Error("SMTP nie je nakonfigurované — nastav SMTP_HOST a SMTP_PORT.");
   }
-  const port = Number.parseInt(portRaw, 10);
+  const port = Number(portRaw);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("SMTP_PORT musí byť celé číslo od 1 do 65535.");
   }
   const user = process.env.SMTP_USER?.trim() || undefined;
   const pass = process.env.SMTP_PASS?.trim() || undefined;
   if (!!user !== !!pass) {
-    throw new Error("SMTP_USER a SMTP_PASS musia byť nastavené spolu.");
-  }
-  if (process.env.NODE_ENV === "production" && MAIL_FROM.toLowerCase() !== "info@zdravyshot.sk") {
-    throw new Error("Produkčný odosielateľ musí byť info@zdravyshot.sk.");
+    throw new Error("SMTP_USER a SMTP_PASS musia byť nastavené spoločne.");
   }
   return {
     host,

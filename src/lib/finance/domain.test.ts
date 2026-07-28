@@ -77,6 +77,7 @@ test("oficiálny rad vydaných faktúr pokračuje číslom 2026009", () => {
 test("finančný operátor nemôže finalizovať ani meniť daňové nastavenia", () => {
   expect(hasFinancePermission("FINANCE_OPERATOR", "VIEW")).toBe(true);
   expect(hasFinancePermission("FINANCE_OPERATOR", "CREATE_DRAFT")).toBe(true);
+  expect(hasFinancePermission("FINANCE_OPERATOR", "SEND_DOCUMENT")).toBe(true);
   expect(hasFinancePermission("FINANCE_OPERATOR", "FINALIZE")).toBe(false);
   expect(hasFinancePermission("FINANCE_OPERATOR", "CONFIGURE")).toBe(false);
   expect(hasFinancePermission("admin", "FINALIZE")).toBe(true);
@@ -91,20 +92,30 @@ test("produkčná infraštruktúra je fail-closed", () => {
   const ready = evaluateProductionIssuingInfrastructure({
     NODE_ENV: "production",
     FINANCE_PRODUCTION_ISSUING_ENABLED: "true",
-    FINANCE_BUCKET_NAME: "finance-private",
-    FINANCE_MAIL_PROVIDER: "transactional-provider",
-    FINANCE_MAIL_FROM: "info@zdravyshot.sk",
+    DOCUMENT_BUCKET_NAME: "finance-private",
+    DOCUMENT_BUCKET_ENDPOINT: "https://bucket.example.test",
+    DOCUMENT_BUCKET_ACCESS_KEY_ID: "bucket-access",
+    DOCUMENT_BUCKET_SECRET_ACCESS_KEY: "bucket-secret",
+    SMTP_HOST: "smtp.example.test",
+    SMTP_PORT: "587",
+    SMTP_USER: "smtp-user",
+    SMTP_PASS: "smtp-password",
+    MAIL_FROM: "info@zdravyshot.sk",
+    FINANCE_MAIL_DKIM_CONFIRMED: "true",
   });
   expect(ready).toEqual({ ready: true, blockers: [] });
 
-  const readyWithRuntimeVariables = evaluateProductionIssuingInfrastructure({
+  const incomplete = evaluateProductionIssuingInfrastructure({
     NODE_ENV: "production",
     FINANCE_PRODUCTION_ISSUING_ENABLED: "true",
     DOCUMENT_BUCKET_NAME: "finance-private",
     SMTP_HOST: "smtp.example.sk",
     MAIL_FROM: "info@zdravyshot.sk",
   });
-  expect(readyWithRuntimeVariables).toEqual({ ready: true, blockers: [] });
+  expect(incomplete.ready).toBe(false);
+  expect(incomplete.blockers).toContain(
+    "Nie je nastavený endpoint privátneho bucketu.",
+  );
 });
 
 test("dobropisy nemôžu prekročiť sumu pôvodnej faktúry", () => {
