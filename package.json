@@ -11,6 +11,7 @@
     "db:deploy": "prisma migrate deploy",
     "backup:production": "sh scripts/backup-production.sh",
     "admin:production": "sh scripts/create-production-admin.sh",
+    "catalog:products": "tsx scripts/sync-product-catalog.ts",
     "finance:omega": "tsx scripts/import-omega.ts",
     "test": "vitest run"
   },

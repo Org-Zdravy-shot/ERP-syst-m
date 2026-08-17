@@ -13,25 +13,37 @@ import {
 import { formatCents, formatDate } from "@/lib/format";
 import { computeTotals, INVOICE_SOURCE_LABELS } from "@/lib/invoicing";
 import { invoiceDocumentStatusLabels, orderStatusLabels, orderChannelLabels } from "@/lib/zod-schemas";
-import { toggleClientActive } from "../_actions";
+import { saveClientProductPrices, toggleClientActive } from "../_actions";
+import { ClientPriceListForm } from "../ClientPriceListForm";
 import { SUBSCRIPTION_FREQUENCY_LABELS } from "@/app/(app)/objednavky/konstanty";
 
 export default async function KlientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getSession();
   const canViewFinance = hasFinancePermission(session.role, "VIEW");
+  const canConfigureFinance = hasFinancePermission(session.role, "CONFIGURE");
 
-  const client = await prisma.client.findUnique({
-    where: { id },
-    include: {
-      orders: { include: { items: true }, orderBy: { orderDate: "desc" } },
-      invoices: { orderBy: { issueDate: "desc" } },
-      subscriptions: { include: { items: { include: { product: true } } }, orderBy: { createdAt: "desc" } },
-    },
-  });
+  const [client, products] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id },
+      include: {
+        orders: { include: { items: true }, orderBy: { orderDate: "desc" } },
+        invoices: { orderBy: { issueDate: "desc" } },
+        subscriptions: { include: { items: { include: { product: true } } }, orderBy: { createdAt: "desc" } },
+        productPrices: true,
+      },
+    }),
+    prisma.product.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, sku: true, priceB2cCents: true },
+      orderBy: [{ name: "asc" }, { volumeMl: "asc" }],
+    }),
+  ]);
   if (!client) notFound();
 
   const toggleAction = toggleClientActive.bind(null, client.id);
+  const savePricesAction = saveClientProductPrices.bind(null, client.id);
+  const clientPrices = new Map(client.productPrices.map((price) => [price.productId, price.unitPriceCents]));
   const totalRevenueCents = client.invoices
     .filter((i) => i.direction === "VYDANA" && i.documentStatus === "ISSUED")
     .reduce((sum, i) => sum + i.totalGrossCents * (i.documentType === "CREDIT_NOTE" ? -1 : 1), 0);
@@ -98,6 +110,21 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
             )}
           </section>
 
+          {client.type === "B2B" && canViewFinance && !canConfigureFinance && (
+            <section className="rounded-[14px] border border-stone-200 bg-white p-5">
+              <h2 className="mb-3 font-semibold text-stone-900">Individuálny B2B cenník</h2>
+              <dl className="divide-y divide-stone-100">
+                {products.map((product) => (
+                  <div key={product.id}>
+                    {infoRow(product.name, (
+                      clientPrices.has(product.id) ? formatCents(clientPrices.get(product.id)!) : "Nenastavená"
+                    ))}
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
+
           <section className="rounded-[14px] border border-stone-200 bg-white p-5">
             <h2 className="mb-3 font-semibold text-stone-900">Predplatné</h2>
             {client.subscriptions.length === 0 && <p className="text-sm text-stone-400">Žiadne predplatné.</p>}
@@ -123,6 +150,16 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          {client.type === "B2B" && canConfigureFinance && (
+            <ClientPriceListForm
+              action={savePricesAction}
+              products={products.map((product) => ({
+                ...product,
+                unitPriceCents: clientPrices.get(product.id) ?? null,
+              }))}
+            />
+          )}
+
           <section className="rounded-[14px] border border-stone-200 bg-white">
             <h2 className="border-b border-stone-100 px-5 py-3 font-semibold text-stone-900">
               História objednávok ({client.orders.length})

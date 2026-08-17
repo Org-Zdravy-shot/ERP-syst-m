@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { nextNumber } from "@/lib/invoicing";
 import { orderChannelSchema, orderStatusSchema, subscriptionFrequencySchema, orderStatusLabels } from "@/lib/zod-schemas";
 import { ORDER_STATUS_TRANSITIONS, EDITABLE_ORDER_STATUSES } from "./konstanty";
+import { resolveUnitPriceCents } from "./pricing";
 
 export interface OrderFormState {
   error?: string;
@@ -257,10 +258,24 @@ export async function generateSubscriptionOrders(_prevState: OrderFormState, _fo
   const now = new Date();
   const due = await prisma.subscription.findMany({
     where: { isActive: true, nextRunDate: { lte: now } },
-    include: { client: true, items: { include: { product: true } } },
+    include: {
+      client: { include: { productPrices: true } },
+      items: { include: { product: true } },
+    },
   });
 
   if (due.length === 0) return { success: "Žiadne predplatné nie je splatné — nič sa negenerovalo." };
+
+  for (const sub of due) {
+    for (const item of sub.items) {
+      const unitPriceCents = resolveUnitPriceCents(sub.client.type, item.product, sub.client.productPrices);
+      if (unitPriceCents === null) {
+        return {
+          error: `Klient ${sub.client.name} nemá nastavenú B2B cenu produktu ${item.product.name}. Objednávky sa nevygenerovali.`,
+        };
+      }
+    }
+  }
 
   const numbers: string[] = [];
   for (const sub of due) {
@@ -275,12 +290,20 @@ export async function generateSubscriptionOrders(_prevState: OrderFormState, _fo
           deliveryDate: sub.nextRunDate,
           note: sub.note ?? null,
           items: {
-            create: sub.items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              unitPriceCents: sub.client.type === "B2B" ? item.product.priceB2bCents : item.product.priceB2cCents,
-              vatRate: item.product.vatRate,
-            })),
+            create: sub.items.map((item) => {
+              const unitPriceCents = resolveUnitPriceCents(
+                sub.client.type,
+                item.product,
+                sub.client.productPrices,
+              );
+              if (unitPriceCents === null) throw new Error("B2B cena nie je nastavená.");
+              return {
+                productId: item.productId,
+                quantity: item.quantity,
+                unitPriceCents,
+                vatRate: item.product.vatRate,
+              };
+            }),
           },
         },
       });

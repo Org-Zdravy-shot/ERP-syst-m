@@ -6,10 +6,16 @@ import type { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasFinancePermission } from "@/lib/finance/permissions";
+import { parseEurToCents } from "@/lib/format";
 import { clientSchema } from "@/lib/zod-schemas";
 
 export interface ClientFormState {
   error?: string;
+}
+
+export interface ClientProductPriceFormState {
+  error?: string;
+  success?: string;
 }
 
 function parseClientForm(formData: FormData) {
@@ -95,4 +101,75 @@ export async function toggleClientActive(clientId: string): Promise<void> {
   await prisma.client.update({ where: { id: clientId }, data: { isActive: !client.isActive } });
   revalidatePath("/klienti");
   revalidatePath(`/klienti/${clientId}`);
+}
+
+export async function saveClientProductPrices(
+  clientId: string,
+  _prevState: ClientProductPriceFormState,
+  formData: FormData,
+): Promise<ClientProductPriceFormState> {
+  const user = await requireUser();
+  if (!hasFinancePermission(user.role, "CONFIGURE")) {
+    return { error: "Cenník klienta môže meniť iba finančný administrátor." };
+  }
+
+  const [client, products] = await Promise.all([
+    prisma.client.findUnique({ where: { id: clientId }, select: { id: true, type: true } }),
+    prisma.product.findMany({ where: { isActive: true }, select: { id: true, name: true } }),
+  ]);
+  if (!client) return { error: "Klient neexistuje." };
+  if (client.type !== "B2B") return { error: "Individuálny cenník možno nastaviť iba B2B klientovi." };
+
+  const prices: Array<{ productId: string; productName: string; unitPriceCents: number | null }> = [];
+  for (const product of products) {
+    const raw = String(formData.get(`price:${product.id}`) ?? "").trim();
+    if (!raw) {
+      prices.push({ productId: product.id, productName: product.name, unitPriceCents: null });
+      continue;
+    }
+    try {
+      const unitPriceCents = parseEurToCents(raw);
+      if (unitPriceCents < 0 || unitPriceCents > 100_000_000) throw new Error("Cena je mimo povoleného rozsahu.");
+      prices.push({ productId: product.id, productName: product.name, unitPriceCents });
+    } catch {
+      return { error: `Produkt ${product.name} má neplatnú B2B cenu.` };
+    }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const price of prices) {
+        if (price.unitPriceCents === null) {
+          await tx.clientProductPrice.deleteMany({
+            where: { clientId, productId: price.productId },
+          });
+        } else {
+          await tx.clientProductPrice.upsert({
+            where: { clientId_productId: { clientId, productId: price.productId } },
+            create: { clientId, productId: price.productId, unitPriceCents: price.unitPriceCents },
+            update: { unitPriceCents: price.unitPriceCents },
+          });
+        }
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: user.userId,
+          actorEmail: user.email,
+          action: "CLIENT_PRODUCT_PRICES_SAVED",
+          entityType: "Client",
+          entityId: clientId,
+          afterData: prices.map((price) => ({
+            productId: price.productId,
+            unitPriceCents: price.unitPriceCents,
+          })),
+        },
+      });
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "B2B cenník sa nepodarilo uložiť." };
+  }
+
+  revalidatePath(`/klienti/${clientId}`);
+  revalidatePath("/objednavky");
+  return { success: "Individuálny B2B cenník bol uložený." };
 }

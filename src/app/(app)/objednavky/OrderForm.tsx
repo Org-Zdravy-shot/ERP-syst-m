@@ -5,18 +5,20 @@ import Link from "next/link";
 import { formatCents, parseEurToCents } from "@/lib/format";
 import { orderChannelLabels } from "@/lib/zod-schemas";
 import type { OrderFormState } from "./_actions";
+import { resolveUnitPriceCents } from "./pricing";
 
 export interface OrderFormClient {
   id: string;
   name: string;
   type: string;
+  productPrices: Array<{ productId: string; unitPriceCents: number }>;
 }
 
 export interface OrderFormProduct {
   id: string;
   name: string;
   sku: string;
-  priceB2bCents: number;
+  priceB2bCents: number | null;
   priceB2cCents: number;
   vatRate: number;
 }
@@ -86,8 +88,25 @@ export function OrderForm({
       updateRow(index, { productId });
       return;
     }
-    const priceCents = client?.type === "B2C" ? product.priceB2cCents : product.priceB2bCents;
-    updateRow(index, { productId, priceEur: centsToEurInput(priceCents), vatRate: product.vatRate });
+    const priceCents = client
+      ? resolveUnitPriceCents(client.type, product, client.productPrices)
+      : null;
+    updateRow(index, {
+      productId,
+      priceEur: priceCents === null ? "" : centsToEurInput(priceCents),
+      vatRate: product.vatRate,
+    });
+  }
+
+  function onClientChange(nextClientId: string) {
+    const nextClient = clients.find((candidate) => candidate.id === nextClientId);
+    setClientId(nextClientId);
+    setRows((previous) => previous.map((row) => {
+      const product = products.find((candidate) => candidate.id === row.productId);
+      if (!product || !nextClient) return { ...row, priceEur: "" };
+      const priceCents = resolveUnitPriceCents(nextClient.type, product, nextClient.productPrices);
+      return { ...row, priceEur: priceCents === null ? "" : centsToEurInput(priceCents) };
+    }));
   }
 
   function rowCents(row: ItemRow): { net: number; vat: number } | null {
@@ -143,7 +162,7 @@ export function OrderForm({
             name="clientId"
             required
             value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
+            onChange={(e) => onClientChange(e.target.value)}
             className={inputClass}
           >
             <option value="">— vyberte klienta —</option>
@@ -202,6 +221,9 @@ export function OrderForm({
             <tbody>
               {rows.map((row, index) => {
                 const cents = rowCents(row);
+                const selectedProduct = products.find((product) => product.id === row.productId);
+                const missingB2bPrice = !!client && client.type === "B2B" && !!selectedProduct &&
+                  resolveUnitPriceCents(client.type, selectedProduct, client.productPrices) === null;
                 return (
                   <tr key={index} className="border-b border-stone-100 last:border-0">
                     <td className="px-3 py-2">
@@ -238,6 +260,9 @@ export function OrderForm({
                         className={inputClass}
                         aria-label={`Cena ${index + 1}`}
                       />
+                      {missingB2bPrice && (
+                        <p className="mt-1 text-xs text-amber-700">Cenník klienta nie je nastavený — zadajte cenu ručne.</p>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <input

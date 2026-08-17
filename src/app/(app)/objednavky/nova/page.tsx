@@ -13,7 +13,12 @@ export default async function NovaObjednavkaPage({
   const [clients, products] = await Promise.all([
     prisma.client.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, type: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        productPrices: { select: { productId: true, unitPriceCents: true } },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.product.findMany({

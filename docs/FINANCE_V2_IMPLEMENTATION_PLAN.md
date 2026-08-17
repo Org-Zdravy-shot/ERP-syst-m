@@ -1,6 +1,6 @@
 # Financie v2 — implementačný a cutover plán
 
-> Stav dokumentu: aktuálny k 28. júlu 2026. Aktuálny remaining split nižšie
+> Stav dokumentu: aktuálny k 17. augusta 2026. Aktuálny remaining split nižšie
 > nahrádza pôvodné pridelenie A/B/C v historických častiach dokumentu.
 
 ## Stav implementácie
@@ -29,7 +29,13 @@
   [commit `9052bf9`](https://github.com/Org-Zdravy-shot/ERP-syst-m/commit/9052bf9793be2e858c200cc2d5f1afab851a9719)
 - [x] Railway Bucket kompatibilita s virtual-hosted S3 URL —
   [PR #24](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/24)
+- [x] Eurofins podklady spárované s produktmi, aktuálny B2C katalóg pripravený
+  a B2B ceny presunuté na individuálny cenník odberateľa; zdroje sú v
+  [`PRODUCT_CATALOG_SOURCES.md`](PRODUCT_CATALOG_SOURCES.md)
 - [ ] Produkčný cutover a externé integrácie podľa remaining splitu nižšie
+- [ ] Obnoviť platený Railway projekt; trial expiroval a 17. augusta 2026 sú
+  aplikačné aj PostgreSQL deploymenty odstránené. Pred opätovným nasadením
+  vytvoriť čerstvý `pg_dump` a až potom spustiť nové migrácie.
 
 ## Aktuálny remaining split
 
@@ -37,13 +43,20 @@
 
 - získať písomné potvrdenie účtovníka pre dátum registrácie DPH, historický
   hraničný dátum a sadzbu každého fakturovateľného produktu;
+- oficiálny register k 17. augustu 2026 eviduje existujúce `SK1124908675` iba
+  ako registráciu podľa §7a od 1. marca 2024, nie ako platiteľstvo podľa §4;
+  október 2026 preto zostáva iba nepotvrdeným pracovným odhadom budúceho
+  platiteľstva;
 - overenie k 28. júlu 2026 nepotvrdilo plošnú sadzbu 23 %: pri zatriedení
   štiav do `ex 2009` platí podľa
   [Finančnej správy](https://www.financnasprava.sk/sk/podnikatelia/dane/dan-z-pridanej-hodnoty/sadzby-dane)
   sadzba 5 % pre šťavy bez pridaného cukru alebo najviac s 5 g pridaného
   cukru na 100 ml; nad tento limit alebo pri inom zatriedení môže platiť 23 %.
-  Keďže verejné zloženie produktov uvádza med, pred nastavením ERP treba
-  potvrdiť KN kód a množstvo pridaného cukru na 100 ml pre každý recept;
+  Eurofins podklady uvádzajú 12 g celkových cukrov/100 ml pri Klasiku,
+  9,7 g pri Cvikle a 14 g pri Ananáse so škoricou; receptúry zaslané
+  laboratóriu uvádzajú 10 % medu pri Klasiku a 5 % pri Cvikle. Celkové cukry
+  však nie sú automaticky množstvom pridaného cukru, preto pred potvrdením
+  sadzieb treba stále potvrdiť KN kód a výklad účtovníka;
 - [x] vytvoriť privátny Railway Bucket v regióne Amsterdam, nastaviť jeho
   produkčné premenné a overiť upload, download aj SHA-256;
 - [x] nastaviť Railway cron: outbox každých 5 minút, bankový sync každých

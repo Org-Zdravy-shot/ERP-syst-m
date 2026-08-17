@@ -47,6 +47,7 @@ model Client {
   orders        Order[]
   invoices      Invoice[]
   subscriptions Subscription[]
+  productPrices ClientProductPrice[]
 
   @@index([iban])
 }
@@ -106,7 +107,7 @@ model Product {
   volumeMl      Int?
   unit          String   @default("ks") // "ks" | "kg" | "l" | "g" | "ml"
   priceB2cCents Int
-  priceB2bCents Int
+  priceB2bCents Int? // voliteľná legacy/predvolená cena; prednosť má cenník konkrétneho B2B klienta
   vatRate       Int      @default(20)
   minStock      Float    @default(0)
   shelfLifeDays Int      @default(30)
@@ -122,6 +123,23 @@ model Product {
   ekasaSales        EkasaSale[]
   vatRates          ProductVatRate[]
   invoiceItems      InvoiceItem[]
+  clientPrices      ClientProductPrice[]
+}
+
+// Aktuálna dohodnutá cena produktu pre konkrétneho B2B odberateľa.
+// História objednávok a faktúr je nemenná vďaka snapshotu unitPriceCents v ich položkách.
+model ClientProductPrice {
+  id             String   @id @default(cuid())
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unitPriceCents Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([clientId, productId])
+  @@index([productId])
 }
 
 model ProductVatRate {

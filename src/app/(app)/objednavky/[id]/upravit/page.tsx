@@ -15,7 +15,12 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
     prisma.order.findUnique({ where: { id }, include: { items: true } }),
     prisma.client.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, type: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        productPrices: { select: { productId: true, unitPriceCents: true } },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.product.findMany({
