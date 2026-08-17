@@ -9,7 +9,16 @@ import { GenerateOrdersButton, SubscriptionForm } from "./SubscriptionForm";
 export default async function PredplatnePage() {
   const [subscriptions, clients, products] = await Promise.all([
     prisma.subscription.findMany({ include: { client: true, items: { include: { product: true } } }, orderBy: { nextRunDate: "asc" } }),
-    prisma.client.findMany({ where: { isActive: true }, select: { id: true, name: true, type: true }, orderBy: { name: "asc" } }),
+    prisma.client.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        productPrices: { select: { productId: true, unitPriceCents: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
     prisma.product.findMany({ where: { isActive: true }, select: { id: true, name: true, sku: true, priceB2bCents: true, priceB2cCents: true, vatRate: true }, orderBy: { name: "asc" } }),
   ]);
 

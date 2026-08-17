@@ -86,7 +86,7 @@ export default async function FinanciePage() {
         name: p.name,
         costPerUnitCents,
         priceB2bCents: p.priceB2bCents,
-        marginB2bPct: marginPct(p.priceB2bCents),
+        marginB2bPct: p.priceB2bCents === null ? null : marginPct(p.priceB2bCents),
         priceB2cCents: p.priceB2cCents,
         marginB2cPct: marginPct(p.priceB2cCents),
       };
@@ -135,7 +135,7 @@ export default async function FinanciePage() {
                 <tr className={thead}>
                   <th className="px-[18px] py-2 font-medium">Produkt</th>
                   <th className="px-[18px] py-2 text-right font-medium">Náklad/ks</th>
-                  <th className="px-[18px] py-2 text-right font-medium">Cena B2B</th>
+                  <th className="px-[18px] py-2 text-right font-medium">Predvolená B2B</th>
                   <th className="px-[18px] py-2 text-right font-medium">Marža B2B</th>
                   <th className="px-[18px] py-2 text-right font-medium">Cena B2C</th>
                   <th className="px-[18px] py-2 text-right font-medium">Marža B2C</th>
@@ -146,9 +146,9 @@ export default async function FinanciePage() {
                   <tr key={m.id} className={tr}>
                     <td className={`${td} font-medium`}>{m.name}</td>
                     <td className={tdRightMuted}>{formatCents(m.costPerUnitCents)}</td>
-                    <td className={tdRight}>{formatCents(m.priceB2bCents)}</td>
-                    <td className={`px-[18px] py-[9px] text-right font-semibold tabular-nums ${m.marginB2bPct < 30 ? "text-red-600" : "text-[#1F7A0F]"}`}>
-                      {m.marginB2bPct} %
+                    <td className={tdRight}>{m.priceB2bCents === null ? "Podľa klienta" : formatCents(m.priceB2bCents)}</td>
+                    <td className={`px-[18px] py-[9px] text-right font-semibold tabular-nums ${m.marginB2bPct !== null && m.marginB2bPct < 30 ? "text-red-600" : "text-[#1F7A0F]"}`}>
+                      {m.marginB2bPct === null ? "—" : `${m.marginB2bPct} %`}
                     </td>
                     <td className={tdRight}>{formatCents(m.priceB2cCents)}</td>
                     <td className={`px-[18px] py-[9px] text-right font-semibold tabular-nums ${m.marginB2cPct < 30 ? "text-red-600" : "text-[#1F7A0F]"}`}>
