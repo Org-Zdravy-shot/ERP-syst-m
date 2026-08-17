@@ -1,8 +1,8 @@
 /**
- * Konfigurácia odosielania e-mailov. Tajomstvá (SMTP heslo) žijú výhradne
+ * Konfigurácia odosielania e-mailov. Tajomstvá (SMTP heslo/API kľúč) žijú výhradne
  * v Railway variables / .env — nikdy v kóde ani v databáze.
- * Poskytovateľ je vendor-neutrálny cez SMTP (nodemailer), aby sme sa
- * neviazali na jedného transakčného poskytovateľa.
+ * MailProvider ostáva vendor-neutrálny; produkcia môže použiť Resend HTTPS
+ * API alebo SMTP na Railway Pro a vyššom pláne.
  */
 
 export const MAIL_FROM = process.env.MAIL_FROM?.trim() || "info@zdravyshot.sk";
@@ -17,18 +17,50 @@ export interface SmtpConfig {
   pass?: string;
 }
 
-export function smtpConfigured(): boolean {
+export interface ResendConfig {
+  apiKey: string;
+}
+
+export type MailProviderKind = "RESEND" | "SMTP";
+
+export function readResendConfig(env: NodeJS.ProcessEnv = process.env): ResendConfig {
+  const apiKey = env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("Resend nie je nakonfigurovaný — nastav RESEND_API_KEY.");
+  }
+  return { apiKey };
+}
+
+export function resendConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   try {
-    readSmtpConfig();
+    readResendConfig(env);
     return true;
   } catch {
     return false;
   }
 }
 
-export function readSmtpConfig(): SmtpConfig {
-  const host = process.env.SMTP_HOST?.trim();
-  const portRaw = process.env.SMTP_PORT?.trim();
+export function resolveMailProviderKind(env: NodeJS.ProcessEnv = process.env): MailProviderKind {
+  const configured = env.MAIL_PROVIDER?.trim().toUpperCase();
+  if (configured === "RESEND" || configured === "SMTP") return configured;
+  if (configured) {
+    throw new Error("MAIL_PROVIDER musí byť RESEND alebo SMTP.");
+  }
+  return resendConfigured(env) ? "RESEND" : "SMTP";
+}
+
+export function smtpConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  try {
+    readSmtpConfig(env);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readSmtpConfig(env: NodeJS.ProcessEnv = process.env): SmtpConfig {
+  const host = env.SMTP_HOST?.trim();
+  const portRaw = env.SMTP_PORT?.trim();
   if (!host || !portRaw) {
     throw new Error("SMTP nie je nakonfigurované — nastav SMTP_HOST a SMTP_PORT.");
   }
@@ -36,18 +68,28 @@ export function readSmtpConfig(): SmtpConfig {
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("SMTP_PORT musí byť celé číslo od 1 do 65535.");
   }
-  const user = process.env.SMTP_USER?.trim() || undefined;
-  const pass = process.env.SMTP_PASS?.trim() || undefined;
+  const user = env.SMTP_USER?.trim() || undefined;
+  const pass = env.SMTP_PASS?.trim() || undefined;
   if (!!user !== !!pass) {
     throw new Error("SMTP_USER a SMTP_PASS musia byť nastavené spoločne.");
   }
   return {
     host,
     port,
-    secure: process.env.SMTP_SECURE === "1" || port === 465,
+    secure: env.SMTP_SECURE === "1" || port === 465,
     user,
     pass,
   };
+}
+
+export function mailProviderConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  try {
+    return resolveMailProviderKind(env) === "RESEND"
+      ? resendConfigured(env)
+      : smtpConfigured(env);
+  } catch {
+    return false;
+  }
 }
 
 /** Maximálny počet pokusov o odoslanie pred označením FAILED. */

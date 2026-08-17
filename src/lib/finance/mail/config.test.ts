@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { readSmtpConfig, smtpConfigured } from "./config";
+import {
+  mailProviderConfigured,
+  readResendConfig,
+  readSmtpConfig,
+  resolveMailProviderKind,
+  smtpConfigured,
+} from "./config";
 
 const original = {
   SMTP_HOST: process.env.SMTP_HOST,
@@ -7,6 +13,8 @@ const original = {
   SMTP_USER: process.env.SMTP_USER,
   SMTP_PASS: process.env.SMTP_PASS,
   SMTP_SECURE: process.env.SMTP_SECURE,
+  MAIL_PROVIDER: process.env.MAIL_PROVIDER,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
 };
 
 afterEach(() => {
@@ -14,6 +22,26 @@ afterEach(() => {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
   }
+});
+
+describe.sequential("výber e-mailového providera", () => {
+  test("uprednostní explicitný Resend s API kľúčom", () => {
+    process.env.MAIL_PROVIDER = "RESEND";
+    process.env.RESEND_API_KEY = "re_test";
+
+    expect(resolveMailProviderKind()).toBe("RESEND");
+    expect(readResendConfig()).toEqual({ apiKey: "re_test" });
+    expect(mailProviderConfigured()).toBe(true);
+  });
+
+  test("odmietne neznámy provider a Resend bez kľúča", () => {
+    process.env.MAIL_PROVIDER = "UNKNOWN";
+    expect(() => resolveMailProviderKind()).toThrow(/RESEND alebo SMTP/);
+
+    process.env.MAIL_PROVIDER = "RESEND";
+    delete process.env.RESEND_API_KEY;
+    expect(mailProviderConfigured()).toBe(false);
+  });
 });
 
 describe.sequential("SMTP konfigurácia", () => {

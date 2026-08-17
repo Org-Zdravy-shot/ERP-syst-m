@@ -12,8 +12,13 @@ import {
 import { hashesEqual, sha256 } from "@/lib/finance/documents/hash";
 import { prisma } from "@/lib/prisma";
 import { SmtpMailProvider } from "@/lib/finance/mail/smtp-provider";
+import { ResendMailProvider } from "@/lib/finance/mail/resend-provider";
 import { LogMailProvider } from "@/lib/finance/mail/log-provider";
-import { MAIL_FROM, smtpConfigured } from "@/lib/finance/mail/config";
+import {
+  MAIL_FROM,
+  mailProviderConfigured,
+  resolveMailProviderKind,
+} from "@/lib/finance/mail/config";
 import type { AttachmentLoader, MailProvider, ResolvedAttachment } from "@/lib/finance/mail/types";
 import { LocalFsDocumentStorage } from "./local-storage";
 
@@ -92,7 +97,7 @@ export class StorageAttachmentLoader implements AttachmentLoader {
 
 let mailProviderSingleton: MailProvider | undefined;
 
-/** SMTP provider v produkcii; LogMailProvider je povolený iba v dev/teste. */
+/** Resend/SMTP provider v produkcii; LogMailProvider je povolený iba v dev/teste. */
 export function getMailProvider(): MailProvider {
   if (!mailProviderSingleton) {
     if (
@@ -105,11 +110,13 @@ export function getMailProvider(): MailProvider {
       );
     }
     const loader = new StorageAttachmentLoader(getWorkerStorage());
-    if (smtpConfigured()) {
-      mailProviderSingleton = new SmtpMailProvider(loader);
+    if (mailProviderConfigured()) {
+      mailProviderSingleton = resolveMailProviderKind() === "RESEND"
+        ? new ResendMailProvider(loader)
+        : new SmtpMailProvider(loader);
     } else if (process.env.NODE_ENV === "production") {
       throw new Error(
-        "Produkčný worker vyžaduje platnú konfiguráciu transakčného SMTP providera.",
+        "Produkčný worker vyžaduje platnú konfiguráciu transakčného e-mailového providera.",
       );
     } else {
       mailProviderSingleton = new LogMailProvider();
@@ -126,7 +133,7 @@ export function mailSendingEnabled(): boolean {
   ) {
     return false;
   }
-  return smtpConfigured() || process.env.NODE_ENV !== "production";
+  return mailProviderConfigured() || process.env.NODE_ENV !== "production";
 }
 
 /** Reset singletonov — pre testy. */

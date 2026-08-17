@@ -35,9 +35,12 @@ aktívnych alokácií — max jedna upomienka za týždeň na faktúru.
 
 ## Provider
 
-Vendor-neutrálne cez SMTP (`SmtpMailProvider`, nodemailer). Bez nakonfigurovaného
-SMTP beží `LogMailProvider` iba v dev/teste; produkcia zlyhá bezpečne.
-Delivery/bounce cez webhook je vec 2. etapy; SMTP dáva SENT/FAILED.
+Doména používa vendor-neutrálne rozhranie `MailProvider`. Railway Hobby
+blokuje odchádzajúce SMTP, preto produkcia používa `ResendMailProvider` cez
+HTTPS API; `SmtpMailProvider` (nodemailer) ostáva fallbackom pre Railway Pro
+alebo inú infraštruktúru. Bez platnej konfigurácie beží `LogMailProvider` iba
+v dev/teste a produkcia zlyhá bezpečne. Delivery/bounce webhooky sú samostatná
+etapa; prijatie API/SMTP providerom zatiaľ znamená stav SENT.
 
 Odosielateľ: `info@zdravyshot.sk` (`MAIL_FROM`). DKIM musí byť potvrdený pred
 produkčným vystavovaním. Tajomstvá patria len do Railway variables.
@@ -50,6 +53,8 @@ produkčným vystavovaním. Tajomstvá patria len do Railway variables.
 ## Konfigurácia (.env)
 
 ```text
+MAIL_PROVIDER=RESEND, RESEND_API_KEY
+# alebo MAIL_PROVIDER=SMTP:
 SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS
 MAIL_FROM=info@zdravyshot.sk, MAIL_REPLY_TO, MAIL_FROM_NAME
 FINANCE_MAIL_DKIM_CONFIRMED=true

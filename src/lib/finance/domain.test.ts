@@ -105,6 +105,20 @@ test("produkčná infraštruktúra je fail-closed", () => {
   });
   expect(ready).toEqual({ ready: true, blockers: [] });
 
+  const resendReady = evaluateProductionIssuingInfrastructure({
+    NODE_ENV: "production",
+    FINANCE_PRODUCTION_ISSUING_ENABLED: "true",
+    DOCUMENT_BUCKET_NAME: "finance-private",
+    DOCUMENT_BUCKET_ENDPOINT: "https://bucket.example.test",
+    DOCUMENT_BUCKET_ACCESS_KEY_ID: "bucket-access",
+    DOCUMENT_BUCKET_SECRET_ACCESS_KEY: "bucket-secret",
+    MAIL_PROVIDER: "RESEND",
+    RESEND_API_KEY: "re_test",
+    MAIL_FROM: "info@zdravyshot.sk",
+    FINANCE_MAIL_DKIM_CONFIRMED: "true",
+  });
+  expect(resendReady).toEqual({ ready: true, blockers: [] });
+
   const incomplete = evaluateProductionIssuingInfrastructure({
     NODE_ENV: "production",
     FINANCE_PRODUCTION_ISSUING_ENABLED: "true",

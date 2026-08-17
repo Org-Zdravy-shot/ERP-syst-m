@@ -21,7 +21,7 @@ describe("produkčná kompozícia financií", () => {
     expect(() => getWorkerStorage()).toThrow(/Produkčné úložisko/);
   });
 
-  it("bez SMTP zlyhá namiesto označenia LogMailProvider správy za odoslanú", () => {
+  it("bez e-mailového providera zlyhá namiesto označenia LogMailProvider správy za odoslanú", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("DOCUMENT_BUCKET_NAME", "finance-private");
     vi.stubEnv("DOCUMENT_BUCKET_ENDPOINT", "https://bucket.invalid");
@@ -29,10 +29,28 @@ describe("produkčná kompozícia financií", () => {
     vi.stubEnv("DOCUMENT_BUCKET_SECRET_ACCESS_KEY", "test-secret");
     vi.stubEnv("SMTP_HOST", "");
     vi.stubEnv("SMTP_PORT", "");
+    vi.stubEnv("MAIL_PROVIDER", "SMTP");
+    vi.stubEnv("RESEND_API_KEY", "");
     vi.stubEnv("FINANCE_MAIL_DKIM_CONFIRMED", "true");
     __resetCompositionForTests();
 
     expect(mailSendingEnabled()).toBe(false);
-    expect(() => getMailProvider()).toThrow(/SMTP provider/);
+    expect(() => getMailProvider()).toThrow(/e-mailového providera/);
+  });
+
+  it("v produkcii vyberie Resend HTTPS provider", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DOCUMENT_BUCKET_NAME", "finance-private");
+    vi.stubEnv("DOCUMENT_BUCKET_ENDPOINT", "https://bucket.invalid");
+    vi.stubEnv("DOCUMENT_BUCKET_ACCESS_KEY_ID", "test-access");
+    vi.stubEnv("DOCUMENT_BUCKET_SECRET_ACCESS_KEY", "test-secret");
+    vi.stubEnv("MAIL_PROVIDER", "RESEND");
+    vi.stubEnv("RESEND_API_KEY", "re_test");
+    vi.stubEnv("MAIL_FROM", "info@zdravyshot.sk");
+    vi.stubEnv("FINANCE_MAIL_DKIM_CONFIRMED", "true");
+    __resetCompositionForTests();
+
+    expect(mailSendingEnabled()).toBe(true);
+    expect(getMailProvider().providerName).toBe("RESEND");
   });
 });

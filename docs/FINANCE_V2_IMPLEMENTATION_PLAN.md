@@ -33,9 +33,9 @@
   a B2B ceny presunuté na individuálny cenník odberateľa; zdroje sú v
   [`PRODUCT_CATALOG_SOURCES.md`](PRODUCT_CATALOG_SOURCES.md)
 - [ ] Produkčný cutover a externé integrácie podľa remaining splitu nižšie
-- [ ] Obnoviť platený Railway projekt; trial expiroval a 17. augusta 2026 sú
-  aplikačné aj PostgreSQL deploymenty odstránené. Pred opätovným nasadením
-  vytvoriť čerstvý `pg_dump` a až potom spustiť nové migrácie.
+- [x] Platený Railway projekt bol 17. augusta 2026 obnovený; pred migráciou
+  vznikol čitateľný `pg_dump`, aplikácia aj PostgreSQL sú opäť online a
+  hlavná ERP služba beží v regióne Amsterdam.
 
 ## Aktuálny remaining split
 
@@ -62,8 +62,10 @@
 - [x] nastaviť Railway cron: outbox každých 5 minút, bankový sync každých
   15 minút a upomienky denne o 07:00 UTC; produkčný test skončil bez backlogu
   a bankový job sa pri vypnutom Tatra flage korektne preskočil;
-- nakonfigurovať transakčný SMTP, `info@zdravyshot.sk` a DKIM; existujúce SPF
-  ani DMARC nemeniť bez kontroly;
+- [ ] dokončiť Resend HTTPS provider pre `info@zdravyshot.sk` a overiť DKIM;
+  Railway Hobby blokuje odchádzajúce SMTP, preto HostCreators SMTP ostáva iba
+  fallbackom pre Pro/inú infraštruktúru. Existujúce SPF ani DMARC nemeniť bez
+  kontroly;
 - [x] obnoviť predimportnú produkčnú zálohu do izolovanej dočasnej databázy,
   overiť obnovenú schému a dáta a dočasnú databázu následne odstrániť;
 - vykonať bezpečnostnú kontrolu a spoločný E2E scenár od objednávky po
