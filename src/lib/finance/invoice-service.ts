@@ -27,6 +27,7 @@ import {
   calculatePaymentStatus,
   FinanceDomainError,
 } from "./domain";
+import { resolveMailProviderKind } from "./mail/config";
 
 type Tx = Prisma.TransactionClient;
 
@@ -146,12 +147,22 @@ function productionInfrastructureBlockers(env: NodeJS.ProcessEnv): string[] {
   if (!(env.DOCUMENT_BUCKET_SECRET_ACCESS_KEY || env.SECRET_ACCESS_KEY)) {
     blockers.push("Nie je nastavený tajný kľúč privátneho bucketu.");
   }
-  const smtpPort = Number(env.SMTP_PORT);
-  if (!env.SMTP_HOST || !Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65_535) {
-    blockers.push("Nie je platne nastavený transakčný SMTP provider.");
-  }
-  if (!!env.SMTP_USER !== !!env.SMTP_PASS) {
-    blockers.push("SMTP používateľ a heslo musia byť nastavené spoločne.");
+  try {
+    if (resolveMailProviderKind(env) === "RESEND") {
+      if (!env.RESEND_API_KEY?.trim()) {
+        blockers.push("Nie je nastavený API kľúč transakčného Resend providera.");
+      }
+    } else {
+      const smtpPort = Number(env.SMTP_PORT);
+      if (!env.SMTP_HOST || !Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65_535) {
+        blockers.push("Nie je platne nastavený transakčný SMTP provider.");
+      }
+      if (!!env.SMTP_USER !== !!env.SMTP_PASS) {
+        blockers.push("SMTP používateľ a heslo musia byť nastavené spoločne.");
+      }
+    }
+  } catch (error) {
+    blockers.push(error instanceof Error ? error.message : "E-mailový provider nie je platne nastavený.");
   }
   if (env.MAIL_FROM?.trim().toLowerCase() !== "info@zdravyshot.sk") {
     blockers.push("Odosielateľ faktúr musí byť info@zdravyshot.sk.");
