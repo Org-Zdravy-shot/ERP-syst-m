@@ -23,7 +23,24 @@ export const paymentSourceSchema = z.enum(["MANUAL", "BANK_IMPORT", "TATRA_PREMI
 export const bankProviderSchema = z.enum(["TATRA_PREMIUM", "STATEMENT_IMPORT"]);
 export const bankConnectionStatusSchema = z.enum(["CONNECTED", "DISCONNECTED", "REAUTH_REQUIRED", "ERROR"]);
 export const bankTransactionStatusSchema = z.enum(["PENDING", "BOOKED"]);
-export const documentAssetTypeSchema = z.enum(["INVOICE_PDF", "CREDIT_NOTE_PDF", "ATTACHMENT"]);
+export const documentAssetTypeSchema = z.enum([
+  "INVOICE_PDF",
+  "CREDIT_NOTE_PDF",
+  "ATTACHMENT",
+  "EINVOICE_XML",
+  "RECEIVED_EINVOICE_XML",
+]);
+export const eInvoiceProviderSchema = z.literal("EFAKTURA");
+export const eInvoiceModeSchema = z.enum(["SANDBOX", "PRODUCTION"]);
+export const eInvoiceTransmissionStatusSchema = z.enum([
+  "PENDING",
+  "VALIDATED",
+  "QUEUED",
+  "SENT",
+  "DELIVERED",
+  "REJECTED",
+  "FAILED",
+]);
 export const outboxStatusSchema = z.enum(["PENDING", "PROCESSING", "DONE", "FAILED"]);
 export const emailDeliveryStatusSchema = z.enum(["PENDING", "SENT", "DELIVERED", "FAILED", "BOUNCED"]);
 export const importSourceSchema = z.enum(["OMEGA", "SUPERFAKTURA", "BANK_STATEMENT"]);

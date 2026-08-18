@@ -65,7 +65,9 @@ function toDocumentRecord(
   if (
     document.type !== "INVOICE_PDF" &&
     document.type !== "CREDIT_NOTE_PDF" &&
-    document.type !== "ATTACHMENT"
+    document.type !== "ATTACHMENT" &&
+    document.type !== "EINVOICE_XML" &&
+    document.type !== "RECEIVED_EINVOICE_XML"
   ) {
     throw new DocumentIntegrityError("Dokument má neznámy typ.");
   }

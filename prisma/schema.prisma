@@ -698,10 +698,12 @@ model Invoice {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  items              InvoiceItem[]
-  paymentAllocations PaymentAllocation[]
-  documents          DocumentAsset[]
-  emailDeliveries    EmailDelivery[]
+  items                    InvoiceItem[]
+  paymentAllocations       PaymentAllocation[]
+  documents                DocumentAsset[]
+  emailDeliveries          EmailDelivery[]
+  eInvoiceTransmissions    EInvoiceTransmission[]
+  receivedEInvoiceDocument EInvoiceReceivedDocument? @relation("ReceivedEInvoiceImport")
 
   @@unique([source, externalId])
   @@index([direction, documentStatus, issueDate])
@@ -844,7 +846,7 @@ model DocumentAsset {
   id              String    @id @default(cuid())
   invoiceId       String?
   invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  type            String // "INVOICE_PDF" | "CREDIT_NOTE_PDF" | "ATTACHMENT"
+  type            String // "INVOICE_PDF" | "CREDIT_NOTE_PDF" | "ATTACHMENT" | "EINVOICE_XML" | "RECEIVED_EINVOICE_XML"
   storageProvider String    @default("RAILWAY_BUCKET")
   bucket          String
   objectKey       String    @unique
@@ -857,10 +859,95 @@ model DocumentAsset {
   createdAt       DateTime  @default(now())
   archivedAt      DateTime?
 
-  emailDeliveries EmailDelivery[]
+  emailDeliveries          EmailDelivery[]
+  eInvoiceTransmission     EInvoiceTransmission?     @relation("EInvoiceTransmissionUbl")
+  receivedEInvoiceDocument EInvoiceReceivedDocument? @relation("ReceivedEInvoiceXml")
 
   @@index([invoiceId, type])
   @@index([sha256])
+}
+
+// Odchádzajúci prenos jedného nemenného UBL cez certifikovaného poskytovateľa.
+// Validačný a odosielací idempotency key sú zámerne oddelené.
+model EInvoiceTransmission {
+  id                       String        @id @default(cuid())
+  invoiceId                String
+  invoice                  Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  ublDocumentId            String        @unique
+  ublDocument              DocumentAsset @relation("EInvoiceTransmissionUbl", fields: [ublDocumentId], references: [id], onDelete: Restrict)
+  provider                 String        @default("EFAKTURA")
+  mode                     String        @default("SANDBOX") // "SANDBOX" | "PRODUCTION"
+  status                   String        @default("PENDING") // "PENDING" | "VALIDATED" | "QUEUED" | "SENT" | "DELIVERED" | "REJECTED" | "FAILED"
+  receiverPeppolId         String
+  ublSha256                String
+  validationIdempotencyKey String        @unique
+  sendIdempotencyKey       String        @unique
+  providerInvoiceId        String?
+  providerDocumentId       String?
+  providerJobId            String?
+  providerState            String?
+  validationResult         Json?
+  lastError                String?
+  validatedAt              DateTime?
+  submittedAt              DateTime?
+  lastStatusAt             DateTime?
+  deliveredAt              DateTime?
+  createdById              String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  @@unique([invoiceId, provider, mode, ublSha256])
+  @@unique([provider, mode, providerInvoiceId])
+  @@index([status, createdAt])
+  @@index([invoiceId, createdAt])
+}
+
+// Autoritatívny zoznam príchodzích Peppol dokladov. XML je v privátnom buckete.
+model EInvoiceReceivedDocument {
+  id                 String         @id @default(cuid())
+  provider           String         @default("EFAKTURA")
+  mode               String         @default("SANDBOX") // "SANDBOX" | "PRODUCTION"
+  providerDocumentId String
+  senderPeppolId     String?
+  senderName         String?
+  senderIco          String?
+  documentType       String
+  documentNumber     String
+  totalCents         Int
+  vatTotalCents      Int
+  currency           String
+  providerStatus     String
+  issueDate          DateTime?
+  receivedAt         DateTime
+  rawMetadata        Json?
+  xmlDocumentId      String?        @unique
+  xmlDocument        DocumentAsset? @relation("ReceivedEInvoiceXml", fields: [xmlDocumentId], references: [id], onDelete: Restrict)
+  invoiceId          String?        @unique
+  invoice            Invoice?       @relation("ReceivedEInvoiceImport", fields: [invoiceId], references: [id], onDelete: Restrict)
+  importedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@unique([provider, mode, providerDocumentId])
+  @@index([providerStatus, receivedAt])
+  @@index([senderIco, documentNumber])
+}
+
+// Raw payload sa uloží až po úspešnom HMAC overení. provider+webhookId deduplikuje retry.
+model EInvoiceWebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String    @default("EFAKTURA")
+  webhookId       String
+  eventType       String
+  organizationId  String?
+  payload         Json
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+  processingError String?
+
+  @@unique([provider, webhookId])
+  @@index([processedAt, receivedAt])
+  @@index([eventType, receivedAt])
 }
 
 model OutboxEvent {
