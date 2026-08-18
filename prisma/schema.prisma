@@ -23,6 +23,20 @@ model User {
   updatedAt    DateTime @updatedAt
 }
 
+// Perzistentná ochrana prihlasovania. keyHash je HMAC nad identitou/IP;
+// surový e-mail ani IP adresa sa do tabuľky nikdy neukladajú.
+model LoginRateLimit {
+  keyHash         String    @id
+  failureCount    Int       @default(0)
+  windowStartedAt DateTime
+  blockedUntil    DateTime?
+  expiresAt       DateTime
+  updatedAt       DateTime  @updatedAt
+
+  @@index([expiresAt])
+  @@index([blockedUntil])
+}
+
 // ---------- Klienti ----------
 
 model Client {
