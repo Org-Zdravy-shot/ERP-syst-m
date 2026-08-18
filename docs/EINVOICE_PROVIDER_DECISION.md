@@ -61,7 +61,9 @@ obsah dokladu. Ak validátor navrhne opravu, ERP ju zobrazí na kontrolu.
 - [x] čítanie stavov, stránkovanie prijatých dokladov a stiahnutie XML;
 - [x] overenie webhook podpisu vrátane rotácie secretu a replay ochrany;
 - [ ] sandbox účet, testovací API kľúč, organizácia a Peppol TEST enroll;
-- [ ] generátor Peppol BIS Billing 3.0 UBL + slovenské validačné pravidlá;
+- [x] deterministický generátor Peppol BIS Billing 3.0 UBL pre slovenskú
+  faktúru a dobropis (centy, DPH skupiny, jednotky, XML escaping, hash);
+- [ ] overenie generovaného UBL proti slovenskému FS overlayu v sandboxe;
 - [ ] DB evidencia prenosov, prijatých dokladov a webhook deduplikácie;
 - [ ] outbox, webhook route, administračná obrazovka a end-to-end sandbox test;
 - [ ] produkčná zmluva, autorizácia poskytovateľa vo Finančnej správe a live gate.
