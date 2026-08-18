@@ -86,6 +86,7 @@ export default async function DodavatelDetailPage({ params }: { params: Promise<
   const session = await getSession();
   const canViewFinance = hasFinancePermission(session.role, "VIEW");
   const canConfigureFinance = hasFinancePermission(session.role, "CONFIGURE");
+  const canCreateOrder = hasFinancePermission(session.role, "CREATE_DRAFT");
   const supplier = await prisma.supplier.findUnique({
     where: { id },
     include: {
@@ -193,6 +194,7 @@ export default async function DodavatelDetailPage({ params }: { params: Promise<
         title={supplier.name}
         subtitle={`${supplierKindLabels[supplier.kind] ?? supplier.kind} · ${supplier.isActive ? "aktívny dodávateľ" : "neaktívny"}`}
       >
+        {canCreateOrder && <Link href={`/dodavatelia/objednavky/nova?dodavatel=${supplier.id}`} className={btnSecondary}>+ Nákupná objednávka</Link>}
         <Link href={`/dodavatelia/${supplier.id}/upravit`} className={btnSecondary}>Upraviť</Link>
         <form action={toggleAction}>
           <button className={btnSecondary}>{supplier.isActive ? "Deaktivovať" : "Aktivovať"}</button>
@@ -519,7 +521,7 @@ export default async function DodavatelDetailPage({ params }: { params: Promise<
             <div className="divide-y divide-stone-100">
               {supplier.orders.map((order) => <div key={order.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
                 <div>
-                  <div className="font-medium text-stone-900">{order.orderNumber}</div>
+                  <Link href={`/dodavatelia/objednavky/${order.id}`} className="font-medium text-stone-900 hover:underline">{order.orderNumber}</Link>
                   <div className="text-xs text-stone-400">{formatDate(order.orderDate)}{order.requestedDeliveryDate ? ` · termín ${formatDate(order.requestedDeliveryDate)}` : ""}</div>
                 </div>
                 <Badge color={order.status === "RECEIVED" ? "emerald" : order.status === "CANCELLED" ? "red" : "amber"}>

@@ -167,9 +167,9 @@ jedným potvrdením vytvoriť koncepty objednávok rozdelené podľa dodávateľ
 
 ### S2 — objednávanie a sklad
 
-- [ ] nákupná objednávka a povolené stavové prechody;
-- [ ] čiastočný príjem s idempotentným skladovým pohybom;
-- [ ] automatický prepočet stavu a poslednej nákupnej ceny;
+- [x] nákupná objednávka a povolené stavové prechody;
+- [x] čiastočný príjem s idempotentným skladovým pohybom;
+- [x] automatický prepočet stavu a poslednej nákupnej ceny;
 - [ ] low-stock odporúčania a vytvorenie konceptov podľa dodávateľa;
 - [ ] integračné a E2E testy.
 

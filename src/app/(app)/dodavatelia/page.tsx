@@ -2,7 +2,7 @@ import Form from "next/form";
 import Link from "next/link";
 import { Badge } from "@/components/Badge";
 import { PageHeader } from "@/components/PageHeader";
-import { btnPrimary, card, filterPill, table, td, tdMuted, tdRight, th, thRight, thead, tr } from "@/components/ui";
+import { btnPrimary, btnSecondary, card, filterPill, table, td, tdMuted, tdRight, th, thRight, thead, tr } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { supplierSourceLabels } from "@/lib/zod-schemas";
 
@@ -66,6 +66,7 @@ export default async function DodavateliaPage({
   return (
     <>
       <PageHeader title="Dodávatelia" subtitle="Kontakty, ponuky, nákupy, záväzky a vratné obaly">
+        <Link href="/dodavatelia/objednavky" className={btnSecondary}>Nákupné objednávky</Link>
         <Link href="/dodavatelia/novy" className={btnPrimary}>+ Nový dodávateľ</Link>
       </PageHeader>
 
