@@ -26,6 +26,13 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M12 13v8" />
     </>
   ),
+  dodavatelia: (
+    <>
+      <path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5v-9Z" />
+      <path d="M3 7.5 12 12l9-4.5M12 12v9" />
+      <path d="m8 5 9 4.5v4" />
+    </>
+  ),
   objednavky: (
     <>
       <circle cx="9" cy="20" r="1.4" />
@@ -66,6 +73,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Prehľad", icon: "prehlad" },
   { href: "/vyroba", label: "Výroba", icon: "vyroba" },
   { href: "/sklad", label: "Sklad", icon: "sklad" },
+  { href: "/dodavatelia", label: "Dodávatelia", icon: "dodavatelia" },
   { href: "/objednavky", label: "Objednávky", icon: "objednavky" },
   { href: "/plan", label: "Plnenie plánu", icon: "plan" },
   { href: "/financie", label: "Financie", icon: "financie" },
