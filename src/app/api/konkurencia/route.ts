@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fetchSintelExport, sintelConfigured } from "@/app/(app)/konkurencia/sintel";
+import { configuredSecret, secretMatches } from "@/lib/security/secrets";
 
 /**
  * Napojenie externého modelu na sledovanie konkurencie (FULL SINTEL).
@@ -10,8 +11,11 @@ import { fetchSintelExport, sintelConfigured } from "@/app/(app)/konkurencia/sin
  * GET /api/konkurencia  →  export FULL SINTEL (konkurenti, top príspevky, rady)
  */
 export async function GET(request: NextRequest) {
-  const apiKey = request.headers.get("x-api-key");
-  if (!apiKey || apiKey !== process.env.INBOX_API_KEY) {
+  const configuredApiKey = process.env.INBOX_API_KEY;
+  if (!configuredSecret(configuredApiKey)) {
+    return NextResponse.json({ error: "Externé API nie je nakonfigurované" }, { status: 503 });
+  }
+  if (!secretMatches(configuredApiKey, request.headers.get("x-api-key"))) {
     return NextResponse.json({ error: "Neplatný API kľúč" }, { status: 401 });
   }
 

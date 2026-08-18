@@ -69,25 +69,25 @@ export async function issueInvoiceFromOrder(
 // ---------- Ručná faktúra ----------
 
 const invoiceItemSchema = z.object({
-  description: z.string().min(1, "Popis položky je povinný"),
-  quantity: z.number().positive("Množstvo musí byť kladné"),
-  unit: z.string().min(1),
-  unitPriceCents: z.number().int("Cena musí byť v centoch"),
-  vatRate: z.number().int().nonnegative(),
+  description: z.string().trim().min(1, "Popis položky je povinný").max(500),
+  quantity: z.number().positive("Množstvo musí byť kladné").max(1_000_000),
+  unit: z.string().trim().min(1).max(20),
+  unitPriceCents: z.number().int("Cena musí byť v centoch").min(0).max(100_000_000),
+  vatRate: z.number().int().min(0).max(100),
 });
 
 const manualInvoiceSchema = z
   .object({
     direction: invoiceDirectionSchema,
-    clientId: z.string().optional(),
-    supplierName: z.string().optional(),
-    externalNumber: z.string().optional(),
+    clientId: z.string().max(100).optional(),
+    supplierName: z.string().max(255).optional(),
+    externalNumber: z.string().max(100).optional(),
     issueDate: z.date(),
     dueDate: z.date(),
     deliveryDate: z.date().optional(),
-    variableSymbol: z.string().optional(),
-    note: z.string().optional(),
-    items: z.array(invoiceItemSchema).min(1, "Pridajte aspoň jednu položku"),
+    variableSymbol: z.string().max(30).optional(),
+    note: z.string().max(2_000).optional(),
+    items: z.array(invoiceItemSchema).min(1, "Pridajte aspoň jednu položku").max(200),
   })
   .refine((d) => (d.direction === "VYDANA" ? !!d.clientId : true), {
     message: "Pri vydanej faktúre vyberte klienta.",
@@ -185,6 +185,7 @@ export async function cancelInvoice(
   const user = await requireFinancePermission("CANCEL");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!reason) return { error: "Dôvod storna je povinný." };
+  if (reason.length > 1_000) return { error: "Dôvod storna môže mať najviac 1 000 znakov." };
 
   try {
     await invoiceService.cancel(invoiceId, reason, user.userId);
@@ -209,6 +210,7 @@ export async function createCreditNoteFromInvoice(
   const reason = String(formData.get("reason") ?? "").trim();
   if (!issueDate || !dueDate || !deliveryDate) return { error: "Vyplňte všetky dátumy dobropisu." };
   if (!reason) return { error: "Dôvod dobropisu je povinný." };
+  if (reason.length > 1_000) return { error: "Dôvod dobropisu môže mať najviac 1 000 znakov." };
 
   let creditNoteId: string;
   try {
@@ -234,15 +236,15 @@ export async function createCreditNoteFromInvoice(
 // ---------- eKasa import ----------
 
 const ekasaRowSchema = z.object({
-  saleDate: z.string().min(1),
-  receiptNumber: z.string().optional(),
-  description: z.string().optional(),
-  productCode: z.string().optional(),
-  ean: z.string().optional(),
-  itemType: z.string().optional(),
+  saleDate: z.string().min(1).max(50),
+  receiptNumber: z.string().max(200).optional(),
+  description: z.string().max(500).optional(),
+  productCode: z.string().max(100).optional(),
+  ean: z.string().max(100).optional(),
+  itemType: z.string().max(100).optional(),
   source: z.enum(["VRP2_XLSX", "CSV", "MANUAL"]).default("CSV"),
-  quantity: z.number().finite().refine((value) => value !== 0, "Množstvo nesmie byť nula").default(1),
-  totalGrossCents: z.number().int(),
+  quantity: z.number().finite().min(-1_000_000).max(1_000_000).refine((value) => value !== 0, "Množstvo nesmie byť nula").default(1),
+  totalGrossCents: z.number().int().safe().min(-100_000_000).max(100_000_000),
   vatRate: z.number().int().min(0).max(100).nullable().optional(),
 });
 
@@ -427,23 +429,23 @@ export async function createManualEkasaSale(
 
 const financeProfileFormSchema = z
   .object({
-    legalName: z.string().min(1, "Obchodné meno je povinné"),
-    tradeName: z.string().optional(),
-    ico: z.string().min(1, "IČO je povinné"),
-    dic: z.string().min(1, "DIČ je povinné"),
-    icDph: z.string().optional(),
-    email: z.string().email("Neplatný e-mail"),
-    phone: z.string().optional(),
-    street: z.string().min(1, "Ulica je povinná"),
-    city: z.string().min(1, "Mesto je povinné"),
-    zip: z.string().min(1, "PSČ je povinné"),
+    legalName: z.string().min(1, "Obchodné meno je povinné").max(255),
+    tradeName: z.string().max(255).optional(),
+    ico: z.string().min(1, "IČO je povinné").max(20),
+    dic: z.string().min(1, "DIČ je povinné").max(20),
+    icDph: z.string().max(20).optional(),
+    email: z.string().email("Neplatný e-mail").max(320),
+    phone: z.string().max(50).optional(),
+    street: z.string().min(1, "Ulica je povinná").max(255),
+    city: z.string().min(1, "Mesto je povinné").max(100),
+    zip: z.string().min(1, "PSČ je povinné").max(20),
     validFrom: z.date(),
     vatStatus: vatStatusSchema,
     vatRegisteredFrom: z.date().optional(),
     accountantConfirmed: z.boolean(),
-    accountantConfirmedBy: z.string().optional(),
+    accountantConfirmedBy: z.string().max(255).optional(),
     iban: z.string().regex(/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/, "Neplatný IBAN"),
-    bic: z.string().optional(),
+    bic: z.string().max(20).optional(),
   })
   .refine((value) => value.vatStatus !== "PAYER" || !!value.vatRegisteredFrom, {
     message: "Platiteľ DPH musí mať dátum registrácie.",

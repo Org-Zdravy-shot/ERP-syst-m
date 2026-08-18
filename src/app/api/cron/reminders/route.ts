@@ -1,17 +1,9 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { enqueueDueReminders } from "@/lib/finance/outbox/reminders";
 import { processPendingOutbox } from "@/lib/finance/outbox/worker";
+import { configuredSecret, secretMatches } from "@/lib/security/secrets";
 
 export const runtime = "nodejs";
-
-function authorized(request: NextRequest, secret: string): boolean {
-  const expected = Buffer.from(secret);
-  const supplied = Buffer.from(request.headers.get("x-cron-secret") ?? "");
-  return (
-    expected.length === supplied.length && timingSafeEqual(expected, supplied)
-  );
-}
 
 /**
  * Railway cron (napr. denne ráno): zaradí upomienky pre faktúry po splatnosti
@@ -20,10 +12,10 @@ function authorized(request: NextRequest, secret: string): boolean {
  */
 export async function POST(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || secret.length < 32) {
+  if (!configuredSecret(secret)) {
     return NextResponse.json({ error: "CRON_SECRET nie je nakonfigurovaný" }, { status: 503 });
   }
-  if (!authorized(request, secret)) {
+  if (!secretMatches(secret, request.headers.get("x-cron-secret"))) {
     return NextResponse.json({ error: "Neplatný cron secret" }, { status: 401 });
   }
 

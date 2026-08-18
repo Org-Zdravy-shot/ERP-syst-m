@@ -26,9 +26,15 @@ export function formatQty(qty: number, unit?: string): string {
 /** "12,50" alebo "12.50" (EUR) → centy */
 export function parseEurToCents(value: string): number {
   const normalized = value.replace(/\s/g, "").replace(",", ".");
-  const parsed = Number.parseFloat(normalized);
-  if (Number.isNaN(parsed)) throw new Error(`Neplatná suma: ${value}`);
-  return Math.round(parsed * 100);
+  if (!/^[+-]?\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    throw new Error(`Neplatná suma: ${value}`);
+  }
+  const parsed = Number(normalized);
+  const cents = Math.round(parsed * 100);
+  if (!Number.isFinite(parsed) || !Number.isSafeInteger(cents)) {
+    throw new Error(`Neplatná suma: ${value}`);
+  }
+  return cents;
 }
 
 export const MONTH_NAMES_SK = [

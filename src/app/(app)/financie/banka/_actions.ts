@@ -7,6 +7,7 @@ import { tatraPremiumEnabled } from "@/lib/finance/banking/flags";
 import { parseStatementCsv } from "@/lib/finance/banking/statement";
 import { allocatePayment, reverseAllocation } from "@/lib/finance/matching/engine";
 import { requireFinancePermission } from "@/lib/finance/permissions";
+import { parseEurToCents } from "@/lib/format";
 
 export interface BankFormState {
   error?: string;
@@ -83,8 +84,8 @@ export async function parseStatementAction(
 }
 
 const statementRowSchema = z.object({
-  providerTransactionId: z.string().min(1),
-  providerAccountId: z.string().min(1),
+  providerTransactionId: z.string().min(1).max(255),
+  providerAccountId: z.string().min(1).max(100),
   status: z.enum(["PENDING", "BOOKED"]),
   bookingDate: z.string().refine((value) => !Number.isNaN(Date.parse(value)), "Neplatný dátum zaúčtovania."),
   valueDate: z
@@ -93,12 +94,12 @@ const statementRowSchema = z.object({
     .optional(),
   amountCents: z.number().int().safe().refine((value) => value !== 0, "Suma transakcie nesmie byť nula."),
   currency: z.literal("EUR"),
-  counterpartyName: z.string().optional(),
-  counterpartyIban: z.string().optional(),
-  variableSymbol: z.string().optional(),
-  constantSymbol: z.string().optional(),
-  specificSymbol: z.string().optional(),
-  remittanceInfo: z.string().optional(),
+  counterpartyName: z.string().max(255).optional(),
+  counterpartyIban: z.string().max(100).optional(),
+  variableSymbol: z.string().max(30).optional(),
+  constantSymbol: z.string().max(30).optional(),
+  specificSymbol: z.string().max(30).optional(),
+  remittanceInfo: z.string().max(2_000).optional(),
 });
 
 /** Dočasný import bankového výpisu — riadky parsuje klient (preview), zapisuje server. */
@@ -143,11 +144,15 @@ export async function allocatePaymentAction(_prev: BankFormState, formData: Form
 
   const paymentId = String(formData.get("paymentId") ?? "");
   const invoiceId = String(formData.get("invoiceId") ?? "");
-  const amountRaw = String(formData.get("amount") ?? "").replace(/\s/g, "").replace(",", ".");
-  const amountCents = Math.round(Number.parseFloat(amountRaw) * 100);
+  let amountCents: number;
+  try {
+    amountCents = parseEurToCents(String(formData.get("amount") ?? ""));
+  } catch {
+    return { error: "Zadajte platnú kladnú sumu najviac s dvoma desatinnými miestami." };
+  }
 
   if (!paymentId || !invoiceId) return { error: "Vyberte platbu aj faktúru." };
-  if (Number.isNaN(amountCents) || amountCents <= 0) return { error: "Zadajte platnú kladnú sumu." };
+  if (amountCents <= 0) return { error: "Zadajte platnú kladnú sumu." };
 
   try {
     await allocatePayment(paymentId, invoiceId, amountCents, user.userId);
@@ -166,6 +171,7 @@ export async function reverseAllocationAction(_prev: BankFormState, formData: Fo
   const user = await requireFinancePermission("ALLOCATE_PAYMENT");
   const allocationId = String(formData.get("allocationId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim() || "Manuálne zrušenie";
+  if (reason.length > 500) return { error: "Dôvod zrušenia môže mať najviac 500 znakov." };
 
   try {
     await reverseAllocation(allocationId, user.userId, reason);

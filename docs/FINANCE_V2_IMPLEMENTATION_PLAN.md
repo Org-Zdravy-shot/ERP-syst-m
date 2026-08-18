@@ -71,8 +71,11 @@
   pre Pro/inú infraštruktúru. Existujúce SPF ani DMARC nemeniť bez kontroly;
 - [x] obnoviť predimportnú produkčnú zálohu do izolovanej dočasnej databázy,
   overiť obnovenú schému a dáta a dočasnú databázu následne odstrániť;
-- vykonať bezpečnostnú kontrolu a spoločný E2E scenár od objednávky po
-  účtovnícky export;
+- [x] vykonať bezpečnostnú kontrolu — výsledok a read-only produkčný readiness
+  check sú v
+  [`FINANCE_SECURITY_REVIEW_2026-08-18.md`](FINANCE_SECURITY_REVIEW_2026-08-18.md);
+- [ ] dokončiť spoločný E2E scenár od objednávky po účtovnícky export; aktuálne
+  sa správne zastaví na nepotvrdenom DPH profile a odloženej aktivácii DKIM;
 - zapnúť `FINANCE_PRODUCTION_ISSUING_ENABLED` až po splnení všetkých go-live
   kontrol.
 
