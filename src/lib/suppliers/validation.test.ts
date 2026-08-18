@@ -31,6 +31,16 @@ test("dodávateľ prijme osobu aj firmu, ale odmietne neplatné kontaktné údaj
       source: "OTHER",
     }).success,
   ).toBe(false);
+  expect(
+    supplierSchema.safeParse({
+      kind: "COMPANY",
+      name: "Včelárstvo",
+      website: "javascript:alert(1)",
+      paymentTermsDays: 14,
+      currency: "EUR",
+      source: "OTHER",
+    }).success,
+  ).toBe(false);
 });
 
 test("ponuka môže byť služba alebo jedna skladová položka, nikdy obe", () => {

@@ -145,7 +145,14 @@ export const supplierSchema = z.object({
   icDph: z.string().trim().max(24).optional(),
   email: z.string().trim().email("Neplatný e-mail").max(320).optional().or(z.literal("")),
   phone: z.string().trim().max(50).optional(),
-  website: z.string().trim().url("Neplatná webová adresa").max(2_048).optional().or(z.literal("")),
+  website: z
+    .string()
+    .trim()
+    .url("Neplatná webová adresa")
+    .max(2_048)
+    .refine((value) => /^https?:\/\//i.test(value), "Webová adresa musí používať http alebo https")
+    .optional()
+    .or(z.literal("")),
   paymentTermsDays: z.number().int().min(0).max(3650),
   currency: currencySchema,
   source: supplierSourceSchema,

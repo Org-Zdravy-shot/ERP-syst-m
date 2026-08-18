@@ -159,8 +159,8 @@ jedným potvrdením vytvoriť koncepty objednávok rozdelené podľa dodávateľ
 
 ### S1 — adresár a profil
 
-- [ ] navigácia, zoznam, vyhľadávanie, vytvorenie a editácia;
-- [ ] kontakty, lokality, bankové účty a štítky;
+- [x] navigácia, zoznam, vyhľadávanie, vytvorenie a editácia;
+- [x] kontakty, lokality, bankové účty a štítky;
 - [ ] ponuky, ceny, preferovaný dodávateľ a história;
 - [ ] vratné obaly a ostatný finančný ledger;
 - [ ] súhrn histórie, faktúr a audit.
