@@ -257,24 +257,25 @@ model SupplierOrder {
 }
 
 model SupplierOrderItem {
-  id              String               @id @default(cuid())
-  supplierOrderId String
-  supplierOrder   SupplierOrder        @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
-  catalogItemId   String?
-  catalogItem     SupplierCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
-  materialId      String?
-  material        Material?            @relation(fields: [materialId], references: [id], onDelete: SetNull)
-  productId       String?
-  product         Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
-  lineNumber      Int                  @default(1)
-  description     String
-  supplierSku     String?
-  quantity        Float
-  unit            String
-  unitPriceCents  Int
-  priceType       String               @default("NET") // "NET" | "GROSS"
-  vatRate         Int                  @default(0)
-  createdAt       DateTime             @default(now())
+  id               String               @id @default(cuid())
+  supplierOrderId  String
+  supplierOrder    SupplierOrder        @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+  catalogItemId    String?
+  catalogItem      SupplierCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  materialId       String?
+  material         Material?            @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  productId        String?
+  product          Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  lineNumber       Int                  @default(1)
+  description      String
+  supplierSku      String?
+  quantity         Float
+  unit             String
+  unitPriceCents   Int
+  pricePerQuantity Float                @default(1)
+  priceType        String               @default("NET") // "NET" | "GROSS"
+  vatRate          Int                  @default(0)
+  createdAt        DateTime             @default(now())
 
   deliveryItems SupplierDeliveryItem[]
 
@@ -423,20 +424,21 @@ model TaxProfile {
 // ---------- Katalóg ----------
 
 model Product {
-  id            String   @id @default(cuid())
-  sku           String   @unique // "ZS-060"
-  name          String // "Zázvorový shot 60ml"
-  volumeMl      Int?
-  unit          String   @default("ks") // "ks" | "kg" | "l" | "g" | "ml"
-  priceB2cCents Int
-  priceB2bCents Int? // voliteľná legacy/predvolená cena; prednosť má cenník konkrétneho B2B klienta
-  vatRate       Int      @default(20)
-  minStock      Float    @default(0)
-  targetStock   Float?
-  shelfLifeDays Int      @default(30)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  sku                    String   @unique // "ZS-060"
+  name                   String // "Zázvorový shot 60ml"
+  volumeMl               Int?
+  unit                   String   @default("ks") // "ks" | "kg" | "l" | "g" | "ml"
+  priceB2cCents          Int
+  priceB2bCents          Int? // voliteľná legacy/predvolená cena; prednosť má cenník konkrétneho B2B klienta
+  lastPurchasePriceCents Int      @default(0) // posledná nákupná cena za jednu jednotku
+  vatRate                Int      @default(20)
+  minStock               Float    @default(0)
+  targetStock            Float?
+  shelfLifeDays          Int      @default(30)
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   recipe               Recipe?
   batches              ProductionBatch[]

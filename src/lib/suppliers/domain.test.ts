@@ -26,13 +26,18 @@ test("netto a brutto nákupné ceny sa prepočítajú po riadkoch", () => {
     [
       { quantity: 2, unitPriceCents: 1_000, priceType: "NET", vatRate: 23 },
       { quantity: 1, unitPriceCents: 1_230, priceType: "GROSS", vatRate: 23 },
+      { quantity: 30, unitPriceCents: 9_000, pricePerQuantity: 30, priceType: "NET", vatRate: 0 },
     ],
     500,
     100,
   );
   expect(result.lines[0]).toMatchObject({ totalNetCents: 2_000, totalVatCents: 460, totalGrossCents: 2_460 });
   expect(result.lines[1]).toMatchObject({ totalNetCents: 1_000, totalVatCents: 230, totalGrossCents: 1_230 });
-  expect(result.totalGrossCents).toBe(4_090);
+  expect(result.lines[2]).toMatchObject({ totalNetCents: 9_000, totalVatCents: 0, totalGrossCents: 9_000 });
+  expect(result.totalGrossCents).toBe(13_090);
+  expect(() => calculateSupplierOrderTotals([
+    { quantity: 1, unitPriceCents: 100, pricePerQuantity: 0, priceType: "NET", vatRate: 0 },
+  ])).toThrow(SupplierDomainError);
 });
 
 test("množstevná cena vyberie najvyšší platný stupeň", () => {
