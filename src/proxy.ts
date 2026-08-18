@@ -1,9 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+const PUBLIC_PATHS = new Set([
+  "/api/health",
+  "/api/financie/einvoice/webhook",
+]);
+
 // Rýchla kontrola prítomnosti session cookie — skutočné overenie robí
 // requireUser() v (app)/layout.tsx a v server actions.
 export function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname === "/api/health") {
+  // eFaktúra webhook nemá používateľskú session; chráni ho povinný HMAC podpis
+  // priamo v route handleri. Povolený je iba presný endpoint, nie celý prefix.
+  if (PUBLIC_PATHS.has(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
   const hasSession = request.cookies.has("zs_session");
