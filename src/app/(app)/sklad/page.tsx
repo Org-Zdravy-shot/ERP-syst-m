@@ -3,7 +3,9 @@ import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/Badge";
 import { getMaterialStockLevels, getProductStockLevels, type StockLevel } from "@/lib/stock";
 import { formatQty } from "@/lib/format";
-import { btnPrimary, card, cardHeader, table, thead, th, thRight, tr, td, tdRight, tdRightMuted } from "@/components/ui";
+import { btnPrimary, btnSecondary, card, cardHeader, table, thead, th, thRight, tr, td, tdRight, tdRightMuted } from "@/components/ui";
+import { getSession } from "@/lib/auth";
+import { hasFinancePermission } from "@/lib/finance/permissions";
 
 function StockTable({ title, levels }: { title: string; levels: StockLevel[] }) {
   return (
@@ -43,9 +45,10 @@ function StockTable({ title, levels }: { title: string; levels: StockLevel[] }) 
 }
 
 export default async function SkladPage() {
-  const [materials, products] = await Promise.all([
+  const [materials, products, session] = await Promise.all([
     getMaterialStockLevels(),
     getProductStockLevels(),
+    getSession(),
   ]);
   const lowCount = [...materials, ...products].filter((i) => i.isLow).length;
 
@@ -59,6 +62,9 @@ export default async function SkladPage() {
             : "Všetky zásoby nad minimom"
         }
       >
+        {hasFinancePermission(session.role, "VIEW") && <Link href="/dodavatelia/doobjednanie" className={btnSecondary}>
+          Doobjednanie zásob
+        </Link>}
         <Link href="/sklad/pohyby" className={btnPrimary}>
           Pohyby + nový pohyb
         </Link>

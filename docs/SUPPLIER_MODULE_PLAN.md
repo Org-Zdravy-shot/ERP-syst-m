@@ -170,8 +170,8 @@ jedným potvrdením vytvoriť koncepty objednávok rozdelené podľa dodávateľ
 - [x] nákupná objednávka a povolené stavové prechody;
 - [x] čiastočný príjem s idempotentným skladovým pohybom;
 - [x] automatický prepočet stavu a poslednej nákupnej ceny;
-- [ ] low-stock odporúčania a vytvorenie konceptov podľa dodávateľa;
-- [ ] integračné a E2E testy.
+- [x] low-stock odporúčania a vytvorenie konceptov podľa dodávateľa;
+- [x] integračné a E2E testy (izolovaný DB flow dodávateľ → objednávka → dva príjmy → sklad → vratný obal → idempotencia).
 
 ### S3 — riadená automatizácia
 

@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   returnableFindMany: vi.fn(),
   returnableMovementCreate: vi.fn(),
   stockMovementCreate: vi.fn(),
+  stockAggregate: vi.fn(),
+  materialFindUnique: vi.fn(),
+  supplierOrderItemFindMany: vi.fn(),
   materialUpdate: vi.fn(),
   productUpdate: vi.fn(),
   auditCreate: vi.fn(),
@@ -31,6 +34,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }))
 
 import {
   createSupplierOrder,
+  createReplenishmentDrafts,
   receiveSupplierOrder,
   transitionSupplierOrder,
 } from "./_order-actions";
@@ -40,6 +44,7 @@ function transactionClient() {
     $queryRaw: mocks.queryRaw,
     supplier: { findUnique: mocks.supplierFindUnique },
     supplierCatalogItem: { findMany: mocks.catalogFindMany },
+    supplierOrderItem: { findMany: mocks.supplierOrderItemFindMany },
     supplierOrder: {
       findUnique: mocks.orderFindUnique,
       create: mocks.orderCreate,
@@ -52,9 +57,9 @@ function transactionClient() {
     supplierDeliveryItem: { create: mocks.deliveryItemCreate },
     supplierReturnableType: { findMany: mocks.returnableFindMany },
     supplierReturnableMovement: { create: mocks.returnableMovementCreate },
-    stockMovement: { create: mocks.stockMovementCreate },
-    material: { update: mocks.materialUpdate },
-    product: { update: mocks.productUpdate },
+    stockMovement: { create: mocks.stockMovementCreate, aggregate: mocks.stockAggregate },
+    material: { findUnique: mocks.materialFindUnique, update: mocks.materialUpdate },
+    product: { findUnique: vi.fn(), update: mocks.productUpdate },
     auditLog: { create: mocks.auditCreate },
   };
 }
@@ -114,6 +119,9 @@ beforeEach(() => {
   mocks.stockMovementCreate.mockResolvedValue({ id: "movement-1" });
   mocks.deliveryItemCreate.mockResolvedValue({ id: "delivery-item-1" });
   mocks.orderUpdate.mockResolvedValue({});
+  mocks.stockAggregate.mockResolvedValue({ _sum: { quantity: 2 } });
+  mocks.materialFindUnique.mockResolvedValue({ isActive: true, minStock: 10, targetStock: 20 });
+  mocks.supplierOrderItemFindMany.mockResolvedValue([]);
 });
 
 test("koncept môže vytvoriť iba používateľ s finančným oprávnením", async () => {
@@ -228,4 +236,64 @@ test("opakovaný idempotency kľúč nevytvorí druhý príjem", async () => {
   expect(mocks.orderFindUnique).not.toHaveBeenCalled();
   expect(mocks.deliveryCreate).not.toHaveBeenCalled();
   expect(mocks.stockMovementCreate).not.toHaveBeenCalled();
+});
+
+test("doobjednanie na serveri znovu prepočíta stav a vytvorí iba koncept", async () => {
+  mocks.catalogFindMany.mockResolvedValue([{
+    id: "offer-1",
+    supplierId: "supplier-1",
+    supplier: { id: "supplier-1", isActive: true },
+    materialId: "material-1",
+    productId: null,
+    supplierSku: "MED5",
+    name: "Med",
+    unit: "kg",
+    isActive: true,
+    packQuantity: 5,
+    minOrderQuantity: 5,
+    orderMultiple: 5,
+    leadTimeDays: 7,
+    prices: [{ unitPriceCents: 500, pricePerQuantity: 1, minimumQuantity: 0, priceType: "NET", vatRate: 23, validFrom: new Date("2026-01-01"), validTo: null }],
+  }]);
+  const form = new FormData();
+  form.set("items", JSON.stringify([{ kind: "material", itemId: "material-1", catalogItemId: "offer-1", quantity: 20 }]));
+
+  await expect(createReplenishmentDrafts({}, form)).rejects.toThrow("redirect");
+  expect(mocks.orderCreate).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      supplierId: "supplier-1",
+      note: expect.stringContaining("doobjednania"),
+      items: { create: [expect.objectContaining({ catalogItemId: "offer-1", quantity: 20 })] },
+    }),
+  });
+  expect(mocks.auditCreate).toHaveBeenCalledWith({
+    data: expect.objectContaining({ action: "SUPPLIER_ORDER_CREATED_FROM_REPLENISHMENT" }),
+  });
+});
+
+test("stará obrazovka doobjednania nevytvorí duplicitný koncept, ak stav už pokrýva otvorená objednávka", async () => {
+  mocks.catalogFindMany.mockResolvedValue([{
+    id: "offer-1",
+    supplierId: "supplier-1",
+    supplier: { id: "supplier-1", isActive: true },
+    materialId: "material-1",
+    productId: null,
+    supplierSku: null,
+    name: "Med",
+    unit: "kg",
+    isActive: true,
+    packQuantity: 5,
+    minOrderQuantity: 5,
+    orderMultiple: 5,
+    leadTimeDays: 7,
+    prices: [{ unitPriceCents: 500, pricePerQuantity: 1, minimumQuantity: 0, priceType: "NET", vatRate: 23, validFrom: new Date("2026-01-01"), validTo: null }],
+  }]);
+  mocks.supplierOrderItemFindMany.mockResolvedValue([{ quantity: 10, deliveryItems: [] }]);
+  const form = new FormData();
+  form.set("items", JSON.stringify([{ kind: "material", itemId: "material-1", catalogItemId: "offer-1", quantity: 20 }]));
+
+  await expect(createReplenishmentDrafts({}, form)).resolves.toMatchObject({
+    error: expect.stringContaining("pokrýva otvorená objednávka"),
+  });
+  expect(mocks.orderCreate).not.toHaveBeenCalled();
 });

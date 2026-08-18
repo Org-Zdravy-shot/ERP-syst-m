@@ -42,6 +42,7 @@ export default async function NakupneObjednavkyPage({
     <>
       <PageHeader title="Nákupné objednávky" subtitle="Koncepty, potvrdenia, termíny a príjmy od dodávateľov">
         <Link href="/dodavatelia" className={btnSecondary}>Dodávatelia</Link>
+        <Link href="/dodavatelia/doobjednanie" className={btnSecondary}>Doobjednanie</Link>
         {canCreate && <Link href="/dodavatelia/objednavky/nova" className={btnPrimary}>+ Nová objednávka</Link>}
       </PageHeader>
 
