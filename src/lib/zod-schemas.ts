@@ -241,22 +241,32 @@ export const supplierReturnableTypeSchema = z.object({
   reminderNote: optionalLongText,
 });
 
-export const supplierReturnableMovementSchema = z.object({
-  quantity: z.number().finite().refine((value) => value !== 0, "Množstvo nesmie byť nula."),
-  occurredAt: z.date(),
-  dueDate: z.date().optional(),
-  reference: optionalShortText,
-  note: optionalLongText,
-});
+export const supplierReturnableMovementSchema = z
+  .object({
+    quantity: z.number().finite().refine((value) => value !== 0, "Množstvo nesmie byť nula."),
+    occurredAt: z.date(),
+    dueDate: z.date().optional(),
+    reference: optionalShortText,
+    note: optionalLongText,
+  })
+  .refine((data) => !data.dueDate || data.dueDate >= data.occurredAt, {
+    message: "Termín vrátenia nesmie byť pred dátumom pohybu.",
+    path: ["dueDate"],
+  });
 
-export const supplierAccountEntrySchema = z.object({
-  type: supplierAccountEntryTypeSchema,
-  amountCents: z.number().int().safe().refine((value) => value !== 0, "Suma nesmie byť nula."),
-  occurredAt: z.date(),
-  dueDate: z.date().optional(),
-  reference: optionalShortText,
-  note: optionalLongText,
-});
+export const supplierAccountEntrySchema = z
+  .object({
+    type: supplierAccountEntryTypeSchema,
+    amountCents: z.number().int().safe().refine((value) => value !== 0, "Suma nesmie byť nula."),
+    occurredAt: z.date(),
+    dueDate: z.date().optional(),
+    reference: optionalShortText,
+    note: optionalLongText,
+  })
+  .refine((data) => !data.dueDate || data.dueDate >= data.occurredAt, {
+    message: "Splatnosť nesmie byť pred dátumom finančného pohybu.",
+    path: ["dueDate"],
+  });
 
 export const clientSchema = z.object({
   type: clientTypeSchema,

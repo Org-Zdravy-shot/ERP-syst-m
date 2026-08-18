@@ -84,12 +84,24 @@ test("cenová platnosť a geografické súradnice majú bezpečné hranice", () 
 
 test("ledger pohyby musia byť nenulové, ale môžu ísť oboma smermi", () => {
   const at = new Date("2026-08-18");
+  const before = new Date("2026-08-17");
   expect(supplierReturnableMovementSchema.safeParse({ quantity: -2, occurredAt: at }).success).toBe(true);
   expect(supplierReturnableMovementSchema.safeParse({ quantity: 0, occurredAt: at }).success).toBe(false);
+  expect(
+    supplierReturnableMovementSchema.safeParse({ quantity: 2, occurredAt: at, dueDate: before }).success,
+  ).toBe(false);
   expect(
     supplierAccountEntrySchema.safeParse({ type: "CREDIT", amountCents: -2_000, occurredAt: at }).success,
   ).toBe(true);
   expect(
     supplierAccountEntrySchema.safeParse({ type: "CREDIT", amountCents: 0, occurredAt: at }).success,
+  ).toBe(false);
+  expect(
+    supplierAccountEntrySchema.safeParse({
+      type: "DEPOSIT",
+      amountCents: 2_000,
+      occurredAt: at,
+      dueDate: before,
+    }).success,
   ).toBe(false);
 });
