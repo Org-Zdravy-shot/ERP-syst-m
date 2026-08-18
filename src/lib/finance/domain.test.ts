@@ -72,6 +72,7 @@ test("časová platnosť je na oboch hraniciach inkluzívna", () => {
 test("oficiálny rad vydaných faktúr pokračuje číslom 2026009", () => {
   expect(formatDocumentNumber("VYDANA", 2026, 9)).toBe("2026009");
   expect(formatDocumentNumber("PRIJATA", 2026, 9)).toBe("PF2026009");
+  expect(formatDocumentNumber("NAKUP", 2026, 9)).toBe("NO2026009");
 });
 
 test("finančný operátor nemôže finalizovať ani meniť daňové nastavenia", () => {
