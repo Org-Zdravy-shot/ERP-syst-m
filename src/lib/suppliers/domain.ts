@@ -57,6 +57,7 @@ function addSafeCents(left: number, right: number, label: string): number {
 export interface SupplierOrderLineInput {
   quantity: number;
   unitPriceCents: number;
+  pricePerQuantity?: number;
   priceType: SupplierPriceType;
   vatRate: number;
 }
@@ -102,6 +103,10 @@ export function calculateSupplierOrderTotals(
     if (line.unitPriceCents < 0) {
       throw new SupplierDomainError(`Cena na riadku ${index + 1} nesmie byť záporná.`);
     }
+    const pricePerQuantity = line.pricePerQuantity ?? 1;
+    if (!Number.isFinite(pricePerQuantity) || pricePerQuantity <= 0) {
+      throw new SupplierDomainError(`Cenová jednotka na riadku ${index + 1} musí byť kladná.`);
+    }
     if (!Number.isInteger(line.vatRate) || line.vatRate < 0 || line.vatRate > 100) {
       throw new SupplierDomainError(`DPH na riadku ${index + 1} je neplatná.`);
     }
@@ -110,11 +115,11 @@ export function calculateSupplierOrderTotals(
     let totalVat: number;
     let totalGross: number;
     if (line.priceType === "NET") {
-      totalNet = Math.round(line.quantity * line.unitPriceCents);
+      totalNet = Math.round((line.quantity / pricePerQuantity) * line.unitPriceCents);
       totalVat = Math.round((totalNet * line.vatRate) / 100);
       totalGross = addSafeCents(totalNet, totalVat, `Suma na riadku ${index + 1}`);
     } else if (line.priceType === "GROSS") {
-      totalGross = Math.round(line.quantity * line.unitPriceCents);
+      totalGross = Math.round((line.quantity / pricePerQuantity) * line.unitPriceCents);
       totalNet = Math.round((totalGross * 100) / (100 + line.vatRate));
       totalVat = totalGross - totalNet;
     } else {
