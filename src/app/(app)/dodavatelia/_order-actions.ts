@@ -13,6 +13,7 @@ import {
   assertSupplierOrderTransition,
   calculateSupplierOrderTotals,
   deriveSupplierOrderReceiptStatus,
+  recommendedOrderQuantity,
   selectActiveSupplierPrice,
   SupplierDomainError,
   type SupplierOrderStatus,
@@ -23,6 +24,13 @@ export interface SupplierOrderFormState {
   error?: string;
   success?: string;
 }
+
+const replenishmentLineSchema = z.object({
+  kind: z.enum(["material", "product"]),
+  itemId: z.string().min(1),
+  catalogItemId: z.string().min(1),
+  quantity: z.number().positive().max(1_000_000_000),
+});
 
 class SupplierOrderActionError extends Error {}
 
@@ -181,6 +189,7 @@ async function resolveOrderLines(
 }
 
 function refreshOrder(orderId?: string, supplierId?: string): void {
+  revalidatePath("/");
   revalidatePath("/dodavatelia");
   revalidatePath("/dodavatelia/objednavky");
   revalidatePath("/dodavatelia/doobjednanie");
@@ -541,4 +550,164 @@ export async function receiveSupplierOrder(
   } catch (error) {
     return { error: error instanceof SupplierOrderActionError || error instanceof SupplierDomainError ? error.message : "Príjem sa nepodarilo uložiť." };
   }
+}
+
+export async function updateStockTarget(
+  itemRef: string,
+  _previous: SupplierOrderFormState,
+  formData: FormData,
+): Promise<SupplierOrderFormState> {
+  let user: AuthenticatedUser;
+  try {
+    user = await requireFinance("CONFIGURE");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Nemáte oprávnenie." };
+  }
+  const [kind, id] = itemRef.split(":");
+  if ((kind !== "material" && kind !== "product") || !id) return { error: "Neplatná skladová položka." };
+  const minStock = Number(String(formData.get("minStock") ?? "").replace(",", "."));
+  const targetRaw = String(formData.get("targetStock") ?? "").trim();
+  const targetStock = targetRaw ? Number(targetRaw.replace(",", ".")) : null;
+  if (!Number.isFinite(minStock) || minStock < 0 || (targetStock !== null && (!Number.isFinite(targetStock) || targetStock < minStock))) {
+    return { error: "Minimum musí byť nezáporné a cieľová zásoba nesmie byť nižšia než minimum." };
+  }
+  try {
+    await prisma.$transaction(async (tx) => {
+      const before = kind === "material"
+        ? await tx.material.findUnique({ where: { id }, select: { minStock: true, targetStock: true } })
+        : await tx.product.findUnique({ where: { id }, select: { minStock: true, targetStock: true } });
+      if (!before) throw new SupplierOrderActionError("Skladová položka neexistuje.");
+      if (kind === "material") await tx.material.update({ where: { id }, data: { minStock, targetStock } });
+      else await tx.product.update({ where: { id }, data: { minStock, targetStock } });
+      await tx.auditLog.create({
+        data: {
+          actorId: user.userId,
+          actorEmail: user.email,
+          action: "STOCK_REPLENISHMENT_TARGET_UPDATED",
+          entityType: kind === "material" ? "Material" : "Product",
+          entityId: id,
+          beforeData: { minStock: before.minStock, targetStock: before.targetStock },
+          afterData: { minStock, targetStock },
+        },
+      });
+    });
+    refreshOrder();
+    return { success: "Limity zásoby boli uložené." };
+  } catch (error) {
+    return { error: error instanceof SupplierOrderActionError ? error.message : "Limity sa nepodarilo uložiť." };
+  }
+}
+
+export async function createReplenishmentDrafts(
+  _previous: SupplierOrderFormState,
+  formData: FormData,
+): Promise<SupplierOrderFormState> {
+  let user: AuthenticatedUser;
+  try {
+    user = await requireFinance("CREATE_DRAFT");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Nemáte oprávnenie." };
+  }
+  const parsed = z.array(replenishmentLineSchema).min(1, "Vyberte aspoň jednu položku.").max(100).safeParse(parseJson(formData.get("items")));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatný návrh doobjednania." };
+  const itemKeys = parsed.data.map((item) => `${item.kind}:${item.itemId}`);
+  if (new Set(itemKeys).size !== itemKeys.length) return { error: "Každú skladovú položku možno vybrať iba raz." };
+
+  let createdIds: string[];
+  try {
+    createdIds = await prisma.$transaction(async (tx) => {
+      const sorted = [...parsed.data].sort((left, right) => `${left.kind}:${left.itemId}`.localeCompare(`${right.kind}:${right.itemId}`));
+      for (const item of sorted) {
+        if (item.kind === "material") await tx.$queryRaw`SELECT "id" FROM "Material" WHERE "id" = ${item.itemId} FOR UPDATE`;
+        else await tx.$queryRaw`SELECT "id" FROM "Product" WHERE "id" = ${item.itemId} FOR UPDATE`;
+      }
+      const offers = await tx.supplierCatalogItem.findMany({
+        where: { id: { in: parsed.data.map((item) => item.catalogItemId) }, isActive: true, supplier: { isActive: true } },
+        include: { supplier: true, prices: true },
+      });
+      if (offers.length !== parsed.data.length) throw new SupplierOrderActionError("Niektorá vybraná ponuka už nie je aktívna.");
+      const offersById = new Map(offers.map((offer) => [offer.id, offer]));
+      const verified: Array<{ supplierId: string; catalogItemId: string; quantity: number; leadTimeDays: number }> = [];
+      for (const selection of parsed.data) {
+        const offer = offersById.get(selection.catalogItemId);
+        if (!offer) throw new SupplierOrderActionError("Vybraná ponuka neexistuje.");
+        if (selection.kind === "material" ? offer.materialId !== selection.itemId : offer.productId !== selection.itemId) {
+          throw new SupplierOrderActionError("Ponuka nepatrí k vybranej skladovej položke.");
+        }
+        const stock = await tx.stockMovement.aggregate({
+          where: selection.kind === "material" ? { materialId: selection.itemId } : { productId: selection.itemId },
+          _sum: { quantity: true },
+        });
+        const target = selection.kind === "material"
+          ? await tx.material.findUnique({ where: { id: selection.itemId }, select: { isActive: true, minStock: true, targetStock: true } })
+          : await tx.product.findUnique({ where: { id: selection.itemId }, select: { isActive: true, minStock: true, targetStock: true } });
+        if (!target?.isActive) throw new SupplierOrderActionError("Skladová položka neexistuje alebo je neaktívna.");
+        const openLines = await tx.supplierOrderItem.findMany({
+          where: {
+            ...(selection.kind === "material" ? { materialId: selection.itemId } : { productId: selection.itemId }),
+            supplierOrder: { status: { in: ["DRAFT", "APPROVED", "SENT", "CONFIRMED", "PARTIALLY_RECEIVED"] } },
+          },
+          include: { deliveryItems: { select: { quantity: true } } },
+        });
+        const openOrderQuantity = openLines.reduce(
+          (sum, line) => sum + Math.max(0, line.quantity - line.deliveryItems.reduce((received, delivery) => received + delivery.quantity, 0)),
+          0,
+        );
+        const recommendation = recommendedOrderQuantity({
+          currentQuantity: stock._sum.quantity ?? 0,
+          openOrderQuantity,
+          minStock: target.minStock,
+          targetStock: target.targetStock,
+          minOrderQuantity: offer.minOrderQuantity,
+          packQuantity: offer.packQuantity,
+          orderMultiple: offer.orderMultiple,
+        });
+        if (recommendation === 0) throw new SupplierOrderActionError("Niektorá položka už nie je pod limitom alebo ju pokrýva otvorená objednávka. Obnovte stránku.");
+        if (selection.quantity + 1e-9 < recommendation) {
+          throw new SupplierOrderActionError(`Zadané množstvo je nižšie než aktuálne odporúčanie ${recommendation} ${offer.unit}.`);
+        }
+        verified.push({ supplierId: offer.supplierId, catalogItemId: offer.id, quantity: selection.quantity, leadTimeDays: offer.leadTimeDays });
+      }
+      const groups = new Map<string, typeof verified>();
+      for (const item of verified) groups.set(item.supplierId, [...(groups.get(item.supplierId) ?? []), item]);
+      const created: string[] = [];
+      const now = new Date();
+      for (const [supplierId, items] of groups) {
+        const { lines } = await resolveOrderLines(tx, supplierId, items, now);
+        calculateSupplierOrderTotals(lines);
+        const orderNumber = await nextNumber(tx, "NAKUP", now.getFullYear());
+        const maxLeadTimeDays = Math.max(...items.map((item) => item.leadTimeDays));
+        const requestedDeliveryDate = new Date(now.getTime() + maxLeadTimeDays * 24 * 60 * 60 * 1_000);
+        const order = await tx.supplierOrder.create({
+          data: {
+            orderNumber,
+            supplierId,
+            orderDate: now,
+            requestedDeliveryDate,
+            note: "Automaticky pripravený koncept z doobjednania nízkych zásob.",
+            createdById: user.userId,
+            items: { create: lines },
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: user.userId,
+            actorEmail: user.email,
+            action: "SUPPLIER_ORDER_CREATED_FROM_REPLENISHMENT",
+            entityType: "SupplierOrder",
+            entityId: order.id,
+            metadata: { supplierId, source: "REPLENISHMENT" },
+            afterData: { orderNumber, itemCount: lines.length, status: "DRAFT" },
+          },
+        });
+        created.push(order.id);
+      }
+      return created;
+    });
+  } catch (error) {
+    return { error: error instanceof SupplierOrderActionError || error instanceof SupplierDomainError ? error.message : "Koncepty doobjednania sa nepodarilo vytvoriť." };
+  }
+  refreshOrder();
+  if (createdIds.length === 1) redirect(`/dodavatelia/objednavky/${createdIds[0]}`);
+  redirect("/dodavatelia/objednavky?stav=open");
 }

@@ -66,6 +66,7 @@ export default async function DodavateliaPage({
   return (
     <>
       <PageHeader title="Dodávatelia" subtitle="Kontakty, ponuky, nákupy, záväzky a vratné obaly">
+        <Link href="/dodavatelia/doobjednanie" className={btnSecondary}>Doobjednanie zásob</Link>
         <Link href="/dodavatelia/objednavky" className={btnSecondary}>Nákupné objednávky</Link>
         <Link href="/dodavatelia/novy" className={btnPrimary}>+ Nový dodávateľ</Link>
       </PageHeader>
