@@ -86,6 +86,14 @@ export interface EFakturaReceivedPage {
   hasMore: boolean;
 }
 
+export interface EFakturaRecipientLookup {
+  peppolId: string;
+  found: boolean;
+  lookupUnavailable: boolean;
+  smlState?: string;
+  pdState?: string;
+}
+
 interface ApiEnvelope<T> {
   data?: T;
   message?: unknown;
@@ -252,6 +260,35 @@ export class EFakturaApiClient {
         : undefined,
       repairFindings: Array.isArray(data.repair) ? data.repair : [],
       repairsApplied: Array.isArray(data.repair_applied) ? data.repair_applied : [],
+    };
+  }
+
+  async lookupRecipient(peppolId: string): Promise<EFakturaRecipientLookup> {
+    const normalized = peppolId.trim();
+    if (!/^\d{4}:[^\s:]+$/.test(normalized)) {
+      throw new EFakturaProviderError(
+        "VALIDATION",
+        "Peppol ID príjemcu musí mať formát štvormiestna schéma:identifikátor.",
+      );
+    }
+
+    const query = new URLSearchParams({ peppolId: normalized });
+    const data = await this.requestJson<any>(
+      `/agent/peppol/recipient?${query.toString()}`,
+    );
+    if (typeof data.found !== "boolean") {
+      throw new EFakturaProviderError(
+        "PROTOCOL",
+        "eFaktura.sk nevrátila platný výsledok overenia príjemcu.",
+      );
+    }
+
+    return {
+      peppolId: optionalString(data.peppol_id) ?? normalized,
+      found: data.found,
+      lookupUnavailable: data.lookup_unavailable === true,
+      smlState: optionalString(data.sml_state),
+      pdState: optionalString(data.pd_state),
     };
   }
 
