@@ -32,6 +32,9 @@ export interface RenderedPeppolUbl {
   xml: string;
   bytes: Uint8Array;
   sha256: string;
+  /** Stabilný kľúč iba pre validateOnly request. */
+  validationIdempotencyKey: string;
+  /** Stabilný kľúč iba pre skutočné odoslanie; nesmie sa zdieľať s validáciou. */
   idempotencyKey: string;
   receiverPeppolId: string;
 }
@@ -396,7 +399,8 @@ export function renderPeppolBisUbl(input: PeppolUblInput): RenderedPeppolUbl {
     xml,
     bytes,
     sha256,
-    idempotencyKey: `einvoice/${input.id}/${sha256}`,
+    validationIdempotencyKey: `einvoice/validate/${input.id}/${sha256}`,
+    idempotencyKey: `einvoice/send/${input.id}/${sha256}`,
     receiverPeppolId: `${buyerEndpoint.schemeId}:${buyerEndpoint.value}`,
   };
 }

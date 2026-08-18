@@ -111,7 +111,9 @@ describe("Peppol BIS Billing 3.0 UBL", () => {
     expect(first.receiverPeppolId).toBe("0245:2123456789");
     expect(first.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(first.sha256).toBe(second.sha256);
-    expect(first.idempotencyKey).toBe(`einvoice/invoice-db-1/${first.sha256}`);
+    expect(first.validationIdempotencyKey).toBe(`einvoice/validate/invoice-db-1/${first.sha256}`);
+    expect(first.idempotencyKey).toBe(`einvoice/send/invoice-db-1/${first.sha256}`);
+    expect(first.validationIdempotencyKey).not.toBe(first.idempotencyKey);
     expect(Buffer.from(first.bytes).toString("utf8")).toBe(first.xml);
   });
 
