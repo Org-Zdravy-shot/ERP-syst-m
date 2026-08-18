@@ -1,12 +1,20 @@
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 
 export interface SessionData {
   userId?: string;
   name?: string;
   email?: string;
   role?: string;
+}
+
+export interface AuthenticatedUser {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
 }
 
 function getSessionSecret(): string {
@@ -31,9 +39,31 @@ export async function getSession() {
   return getIronSession<SessionData>(cookieStore, sessionOptions);
 }
 
-/** Použiť na začiatku každej server action a chránenej stránky. */
-export async function requireUser(): Promise<Required<SessionData>> {
+/**
+ * Vráti aktuálneho databázového používateľa. Rola a identita zo session sa
+ * nepoužívajú na autorizáciu, aby sa zmena roly alebo zmazanie účtu prejavili
+ * okamžite bez čakania na odhlásenie.
+ */
+export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   const session = await getSession();
-  if (!session.userId) redirect("/login");
-  return session as Required<SessionData>;
+  if (!session.userId) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, name: true, email: true, role: true },
+  });
+  if (!user) return null;
+  return {
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  };
+}
+
+/** Použiť na začiatku každej server action a chránenej stránky. */
+export async function requireUser(): Promise<AuthenticatedUser> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  return user;
 }

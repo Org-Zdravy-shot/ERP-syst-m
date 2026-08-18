@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { inboxPayloadSchema } from "@/lib/zod-schemas";
+import { configuredSecret, secretMatches } from "@/lib/security/secrets";
 
 /**
  * Jednotný vstupný bod pre externé systémy: webový e-shop (objednávky/dopyty)
@@ -11,11 +12,10 @@ import { inboxPayloadSchema } from "@/lib/zod-schemas";
  */
 export async function POST(request: NextRequest) {
   const configuredApiKey = process.env.INBOX_API_KEY;
-  if (!configuredApiKey || configuredApiKey.length < 32) {
+  if (!configuredSecret(configuredApiKey)) {
     return NextResponse.json({ error: "Inbox API nie je nakonfigurované" }, { status: 503 });
   }
-  const apiKey = request.headers.get("x-api-key");
-  if (!apiKey || apiKey !== configuredApiKey) {
+  if (!secretMatches(configuredApiKey, request.headers.get("x-api-key"))) {
     return NextResponse.json({ error: "Neplatný API kľúč" }, { status: 401 });
   }
 
