@@ -26,6 +26,16 @@ export class DocumentIntegrityError extends Error {
   }
 }
 
+export class DocumentUploadError extends Error {
+  constructor(
+    message: string,
+    readonly status: 400 | 413 | 415 | 422 = 400,
+  ) {
+    super(message);
+    this.name = "DocumentUploadError";
+  }
+}
+
 export class DocumentAccessError extends Error {
   constructor(message = "Na túto operáciu nemáte oprávnenie.") {
     super(message);

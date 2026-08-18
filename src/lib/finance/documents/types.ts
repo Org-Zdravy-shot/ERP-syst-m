@@ -40,6 +40,18 @@ export interface GeneratedDocumentInput {
   createdById?: string;
 }
 
+export interface InvoiceAttachmentTarget {
+  id: string;
+  direction: "VYDANA" | "PRIJATA";
+}
+
+export interface UploadedAttachmentInput
+  extends Omit<GeneratedDocumentInput, "type"> {
+  type: "ATTACHMENT";
+  actorId: string;
+  actorEmail?: string;
+}
+
 export interface DocumentRecord extends StoredDocument {
   storageProvider: string;
   bucket: string;
@@ -49,7 +61,9 @@ export interface DocumentRecord extends StoredDocument {
 
 export interface DocumentRepository {
   getInvoicePdfData(invoiceId: string): Promise<InvoicePdfData | null>;
+  getInvoiceAttachmentTarget(invoiceId: string): Promise<InvoiceAttachmentTarget | null>;
   saveGeneratedDocument(input: GeneratedDocumentInput): Promise<StoredDocument>;
+  saveUploadedAttachment(input: UploadedAttachmentInput): Promise<StoredDocument>;
   getDocument(documentId: string): Promise<DocumentRecord | null>;
   recordAuthorizedDownload(input: {
     document: DocumentRecord;

@@ -9,8 +9,10 @@ import type {
   DocumentRecord,
   DocumentRepository,
   GeneratedDocumentInput,
+  InvoiceAttachmentTarget,
   InvoicePdfData,
   InvoicePdfRenderer,
+  UploadedAttachmentInput,
 } from "./types";
 
 class FixedRenderer implements InvoicePdfRenderer {
@@ -23,12 +25,23 @@ class FixedRenderer implements InvoicePdfRenderer {
 
 class FakeDocumentRepository implements DocumentRepository {
   readonly audits: Array<{ documentId: string; actorId: string }> = [];
+  readonly uploadedInputs: UploadedAttachmentInput[] = [];
   document?: DocumentRecord;
 
-  constructor(private readonly invoice: InvoicePdfData | null) {}
+  constructor(
+    private readonly invoice: InvoicePdfData | null,
+    readonly attachmentTarget: InvoiceAttachmentTarget | null = {
+      id: "invoice-test-1",
+      direction: "PRIJATA",
+    },
+  ) {}
 
   async getInvoicePdfData(): Promise<InvoicePdfData | null> {
     return this.invoice;
+  }
+
+  async getInvoiceAttachmentTarget(): Promise<InvoiceAttachmentTarget | null> {
+    return this.attachmentTarget;
   }
 
   async saveGeneratedDocument(input: GeneratedDocumentInput): Promise<StoredDocument> {
@@ -47,6 +60,11 @@ class FakeDocumentRepository implements DocumentRepository {
       createdAt: new Date("2026-07-24T12:00:00.000Z"),
     };
     return this.document;
+  }
+
+  async saveUploadedAttachment(input: UploadedAttachmentInput): Promise<StoredDocument> {
+    this.uploadedInputs.push(input);
+    return this.saveGeneratedDocument(input);
   }
 
   async getDocument(): Promise<DocumentRecord | null> {
@@ -123,4 +141,69 @@ test("download odmietne dokument z iného bucketu", async () => {
   await expect(
     sourceService.getAuthorizedDownload(document.id, "finance-admin-1"),
   ).rejects.toThrow(/iného úložiska/);
+});
+
+test("prílohu prijatej faktúry uloží nemenne, bezpečne pomenuje a zaeviduje aktéra", async () => {
+  const repository = new FakeDocumentRepository(null);
+  const storage = new MemoryDocumentStorage();
+  const service = new DefaultDocumentService(
+    repository,
+    storage,
+    new FixedRenderer(),
+  );
+  const bytes = new TextEncoder().encode("%PDF-1.7\ninvoice attachment");
+
+  const document = await service.storeInvoiceAttachment({
+    invoiceId: "invoice-test-1",
+    actorId: "finance-operator-1",
+    actorEmail: "operator@example.sk",
+    fileName: "../../Dodávateľská faktúra.exe",
+    contentType: "text/html",
+    bytes,
+  });
+
+  const checksum = sha256(bytes);
+  expect(document.type).toBe("ATTACHMENT");
+  expect(document.fileName).toBe("Dodávateľská faktúra.pdf");
+  expect(document.contentType).toBe("application/pdf");
+  expect(document.objectKey).toBe(
+    `finance/invoices/invoice-test-1/attachments/${checksum}`,
+  );
+  expect(repository.uploadedInputs[0]).toMatchObject({
+    actorId: "finance-operator-1",
+    actorEmail: "operator@example.sk",
+    createdById: "finance-operator-1",
+    sha256: checksum,
+  });
+  expect(await service.verifyHash(document.id)).toBe(true);
+});
+
+test("prílohy odmietne pri vydanej faktúre a pri falošnom type súboru", async () => {
+  const outgoingRepository = new FakeDocumentRepository(null, {
+    id: "invoice-test-1",
+    direction: "VYDANA",
+  });
+  const outgoingService = new DefaultDocumentService(
+    outgoingRepository,
+    new MemoryDocumentStorage(),
+    new FixedRenderer(),
+  );
+
+  await expect(
+    outgoingService.storeInvoiceAttachment({
+      invoiceId: "invoice-test-1",
+      actorId: "finance-admin-1",
+      fileName: "faktura.pdf",
+      bytes: new TextEncoder().encode("%PDF-1.7\ntest"),
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+
+  await expect(
+    outgoingService.storeInvoiceAttachment({
+      invoiceId: "invoice-test-1",
+      actorId: "finance-admin-1",
+      fileName: "faktura.pdf",
+      bytes: new TextEncoder().encode("<html>not a pdf</html>"),
+    }),
+  ).rejects.toMatchObject({ status: 415 });
 });

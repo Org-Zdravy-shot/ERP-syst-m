@@ -161,8 +161,18 @@ export interface AuthorizedDocumentDownload {
   body: ReadableStream<Uint8Array>;
 }
 
+export interface StoreInvoiceAttachmentInput {
+  invoiceId: string;
+  actorId: string;
+  actorEmail?: string;
+  fileName: string;
+  contentType?: string;
+  bytes: Uint8Array;
+}
+
 export interface DocumentService {
   generateAndStoreInvoicePdf(invoiceId: string): Promise<StoredDocument>;
+  storeInvoiceAttachment(input: StoreInvoiceAttachmentInput): Promise<StoredDocument>;
   verifyHash(documentId: string): Promise<boolean>;
   getAuthorizedDownload(documentId: string, actorId: string): Promise<AuthorizedDocumentDownload>;
 }

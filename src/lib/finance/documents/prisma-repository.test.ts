@@ -2,6 +2,9 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  upsert: vi.fn(),
+  auditCreate: vi.fn(),
+  transaction: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -9,6 +12,7 @@ vi.mock("@/lib/prisma", () => ({
     invoice: {
       findUnique: mocks.findUnique,
     },
+    $transaction: mocks.transaction,
   },
 }));
 
@@ -58,6 +62,15 @@ function databaseInvoice(
 
 beforeEach(() => {
   mocks.findUnique.mockReset();
+  mocks.upsert.mockReset();
+  mocks.auditCreate.mockReset();
+  mocks.transaction.mockReset();
+  mocks.transaction.mockImplementation(async (callback) =>
+    callback({
+      documentAsset: { upsert: mocks.upsert },
+      auditLog: { create: mocks.auditCreate },
+    }),
+  );
 });
 
 test("dobropis prenesie číslo pôvodnej faktúry do PDF dát", async () => {
@@ -113,4 +126,76 @@ test("doklad neplatiteľa nesmie obsahovať vyčíslenú DPH", async () => {
   await expect(
     new PrismaDocumentRepository().getInvoicePdfData("invoice-test-1"),
   ).rejects.toThrow(/neplatiteľa DPH/);
+});
+
+test("načíta cieľ prílohy prijatej faktúry", async () => {
+  mocks.findUnique.mockResolvedValue({
+    id: "received-invoice-1",
+    direction: "PRIJATA",
+  });
+
+  await expect(
+    new PrismaDocumentRepository().getInvoiceAttachmentTarget(
+      "received-invoice-1",
+    ),
+  ).resolves.toEqual({ id: "received-invoice-1", direction: "PRIJATA" });
+});
+
+test("uloženie prílohy a audit prebehnú v jednej databázovej transakcii", async () => {
+  const createdAt = new Date("2026-08-18T10:00:00.000Z");
+  mocks.upsert.mockResolvedValue({
+    id: "attachment-1",
+    invoiceId: "received-invoice-1",
+    type: "ATTACHMENT",
+    storageProvider: "RAILWAY_BUCKET",
+    bucket: "finance-documents",
+    objectKey: "finance/invoices/received-invoice-1/attachments/hash-1",
+    fileName: "dodavatelska-faktura.pdf",
+    contentType: "application/pdf",
+    byteSize: 1234,
+    sha256: "hash-1",
+    isImmutable: true,
+    createdAt,
+    archivedAt: null,
+  });
+
+  const stored = await new PrismaDocumentRepository().saveUploadedAttachment({
+    invoiceId: "received-invoice-1",
+    type: "ATTACHMENT",
+    storageProvider: "RAILWAY_BUCKET",
+    bucket: "finance-documents",
+    objectKey: "finance/invoices/received-invoice-1/attachments/hash-1",
+    fileName: "dodavatelska-faktura.pdf",
+    contentType: "application/pdf",
+    byteSize: 1234,
+    sha256: "hash-1",
+    createdById: "finance-admin-1",
+    actorId: "finance-admin-1",
+    actorEmail: "admin@zdravyshot.sk",
+  });
+
+  expect(stored.id).toBe("attachment-1");
+  expect(mocks.transaction).toHaveBeenCalledOnce();
+  expect(mocks.upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: {
+        objectKey:
+          "finance/invoices/received-invoice-1/attachments/hash-1",
+      },
+      create: expect.objectContaining({
+        type: "ATTACHMENT",
+        isImmutable: true,
+        createdById: "finance-admin-1",
+      }),
+    }),
+  );
+  expect(mocks.auditCreate).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      actorId: "finance-admin-1",
+      actorEmail: "admin@zdravyshot.sk",
+      action: "DOCUMENT_ATTACHMENT_STORED",
+      entityType: "DocumentAsset",
+      entityId: "attachment-1",
+    }),
+  });
 });
