@@ -127,8 +127,10 @@ ERP bude jediný pracovný systém pre:
 podporuje EUR a slovenské domáce doklady. Cudzie meny a OSS nie sú súčasťou
 prvého produkčného releasu.
 
-eFaktúra je druhá etapa. Do septembra 2026 sa vyberie certifikovaný
-poskytovateľ, do októbra sa zapojí sandbox a produkčné odosielanie aj prijímanie
+eFaktúra je druhá etapa. Dňa 18. augusta 2026 bol pre sandbox vybraný
+certifikovaný poskytovateľ eFaktura.sk; rozhodnutie a implementačný stav sú v
+[`docs/EINVOICE_PROVIDER_DECISION.md`](./EINVOICE_PROVIDER_DECISION.md). Do
+októbra sa zapojí sandbox a produkčné odosielanie aj prijímanie
 musí byť hotové najneskôr v decembri 2026. Samotné PDF nebude po 1. januári 2027
 postačovať pre dotknuté doklady.
 
