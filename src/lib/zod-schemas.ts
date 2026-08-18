@@ -32,6 +32,27 @@ export const importStatusSchema = z.enum(["PENDING", "VALIDATED", "COMMITTED", "
 export const subscriptionFrequencySchema = z.enum(["WEEKLY", "BIWEEKLY", "MONTHLY"]);
 export const inboxSourceSchema = z.enum(["EMAIL", "WEB_FORM", "MANUAL"]);
 export const inboxStatusSchema = z.enum(["NOVA", "SPRACOVANA", "IGNOROVANA"]);
+export const supplierKindSchema = z.enum(["COMPANY", "PERSON"]);
+export const supplierSourceSchema = z.enum(["REFERRAL", "WEB", "FAIR", "MARKETPLACE", "EXISTING", "OTHER"]);
+export const supplierLocationTypeSchema = z.enum(["REGISTERED", "WAREHOUSE", "PICKUP", "BILLING", "OTHER"]);
+export const supplierPriceTypeSchema = z.enum(["NET", "GROSS"]);
+export const supplierOrderStatusSchema = z.enum([
+  "DRAFT",
+  "APPROVED",
+  "SENT",
+  "CONFIRMED",
+  "PARTIALLY_RECEIVED",
+  "RECEIVED",
+  "CANCELLED",
+]);
+export const supplierReturnableOwnerSchema = z.enum(["SUPPLIER", "COMPANY"]);
+export const supplierAccountEntryTypeSchema = z.enum([
+  "OPENING_BALANCE",
+  "DEPOSIT",
+  "CREDIT",
+  "ADJUSTMENT",
+  "OTHER",
+]);
 
 export const invoiceDocumentStatusLabels: Record<string, string> = {
   DRAFT: "Koncept",
@@ -66,6 +87,169 @@ export const emailDeliveryStatusLabels: Record<string, string> = {
   FAILED: "Odoslanie zlyhalo",
   BOUNCED: "Nedoručiteľné",
 };
+
+export const supplierKindLabels: Record<string, string> = {
+  COMPANY: "Firma",
+  PERSON: "Fyzická osoba",
+};
+
+export const supplierSourceLabels: Record<string, string> = {
+  REFERRAL: "Odporúčanie",
+  WEB: "Web",
+  FAIR: "Veľtrh alebo podujatie",
+  MARKETPLACE: "Trhovisko",
+  EXISTING: "Existujúci kontakt",
+  OTHER: "Iné",
+};
+
+export const supplierLocationTypeLabels: Record<string, string> = {
+  REGISTERED: "Sídlo",
+  WAREHOUSE: "Sklad",
+  PICKUP: "Osobný odber",
+  BILLING: "Fakturačná adresa",
+  OTHER: "Iné miesto",
+};
+
+export const supplierOrderStatusLabels: Record<string, string> = {
+  DRAFT: "Koncept",
+  APPROVED: "Schválená",
+  SENT: "Odoslaná",
+  CONFIRMED: "Potvrdená",
+  PARTIALLY_RECEIVED: "Čiastočne prijatá",
+  RECEIVED: "Prijatá",
+  CANCELLED: "Zrušená",
+};
+
+export const supplierReturnableOwnerLabels: Record<string, string> = {
+  SUPPLIER: "Patrí dodávateľovi",
+  COMPANY: "Patrí nám",
+};
+
+export const supplierAccountEntryTypeLabels: Record<string, string> = {
+  OPENING_BALANCE: "Počiatočný stav",
+  DEPOSIT: "Depozit",
+  CREDIT: "Kredit alebo zápočet",
+  ADJUSTMENT: "Korekcia",
+  OTHER: "Iné",
+};
+
+const optionalShortText = z.string().trim().max(255).optional();
+const optionalLongText = z.string().trim().max(5_000).optional();
+
+export const supplierSchema = z.object({
+  kind: supplierKindSchema,
+  name: z.string().trim().min(1, "Názov dodávateľa je povinný").max(255),
+  legalName: optionalShortText,
+  ico: z.string().trim().max(20).optional(),
+  dic: z.string().trim().max(20).optional(),
+  icDph: z.string().trim().max(24).optional(),
+  email: z.string().trim().email("Neplatný e-mail").max(320).optional().or(z.literal("")),
+  phone: z.string().trim().max(50).optional(),
+  website: z.string().trim().url("Neplatná webová adresa").max(2_048).optional().or(z.literal("")),
+  paymentTermsDays: z.number().int().min(0).max(3650),
+  currency: currencySchema,
+  source: supplierSourceSchema,
+  sourceDetail: optionalShortText,
+  rating: z.number().int().min(1).max(5).optional(),
+  note: optionalLongText,
+});
+
+export const supplierContactSchema = z.object({
+  name: z.string().trim().min(1, "Meno kontaktu je povinné").max(255),
+  role: optionalShortText,
+  email: z.string().trim().email("Neplatný e-mail").max(320).optional().or(z.literal("")),
+  phone: z.string().trim().max(50).optional(),
+  isPrimary: z.boolean().default(false),
+  note: optionalLongText,
+});
+
+export const supplierLocationSchema = z.object({
+  type: supplierLocationTypeSchema,
+  name: z.string().trim().min(1, "Názov miesta je povinný").max(255),
+  street: optionalShortText,
+  city: optionalShortText,
+  zip: z.string().trim().max(20).optional(),
+  country: z.string().trim().length(2).transform((value) => value.toUpperCase()),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  openingHours: z.string().trim().max(1_000).optional(),
+  deliveryInstructions: optionalLongText,
+  isPrimary: z.boolean().default(false),
+});
+
+export const supplierBankAccountSchema = z.object({
+  name: optionalShortText,
+  iban: z
+    .string()
+    .transform((value) => value.replace(/\s+/g, "").toUpperCase())
+    .refine((value) => /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(value), "Neplatný formát IBAN"),
+  bic: z.string().trim().max(20).optional(),
+  currency: currencySchema,
+  isPrimary: z.boolean().default(false),
+});
+
+export const supplierCatalogItemSchema = z
+  .object({
+    materialId: z.string().min(1).optional(),
+    productId: z.string().min(1).optional(),
+    supplierSku: optionalShortText,
+    name: z.string().trim().min(1, "Názov ponuky je povinný").max(255),
+    unit: unitSchema,
+    packQuantity: z.number().positive().max(1_000_000),
+    minOrderQuantity: z.number().nonnegative().max(1_000_000_000),
+    orderMultiple: z.number().positive().max(1_000_000),
+    leadTimeDays: z.number().int().min(0).max(3650),
+    originCountry: z.string().trim().length(2).transform((value) => value.toUpperCase()).optional(),
+    qualityNote: optionalLongText,
+    note: optionalLongText,
+    isPreferred: z.boolean().default(false),
+  })
+  .refine((data) => !(data.materialId && data.productId), {
+    message: "Ponuka nemôže byť naraz priradená k surovine aj produktu.",
+  });
+
+export const supplierPriceSchema = z
+  .object({
+    unitPriceCents: z.number().int().nonnegative().max(100_000_000_000),
+    pricePerQuantity: z.number().positive().max(1_000_000),
+    minimumQuantity: z.number().nonnegative().max(1_000_000_000),
+    currency: currencySchema,
+    priceType: supplierPriceTypeSchema,
+    vatRate: z.number().int().min(0).max(100).optional(),
+    validFrom: z.date(),
+    validTo: z.date().optional(),
+    note: optionalLongText,
+  })
+  .refine((data) => !data.validTo || data.validTo >= data.validFrom, {
+    message: "Koniec platnosti ceny nesmie byť pred jej začiatkom.",
+    path: ["validTo"],
+  });
+
+export const supplierReturnableTypeSchema = z.object({
+  name: z.string().trim().min(1, "Názov vratného obalu je povinný").max(255),
+  unit: unitSchema,
+  owner: supplierReturnableOwnerSchema,
+  depositCents: z.number().int().nonnegative().max(100_000_000).optional(),
+  expectedReturnDays: z.number().int().positive().max(3650).optional(),
+  reminderNote: optionalLongText,
+});
+
+export const supplierReturnableMovementSchema = z.object({
+  quantity: z.number().finite().refine((value) => value !== 0, "Množstvo nesmie byť nula."),
+  occurredAt: z.date(),
+  dueDate: z.date().optional(),
+  reference: optionalShortText,
+  note: optionalLongText,
+});
+
+export const supplierAccountEntrySchema = z.object({
+  type: supplierAccountEntryTypeSchema,
+  amountCents: z.number().int().safe().refine((value) => value !== 0, "Suma nesmie byť nula."),
+  occurredAt: z.date(),
+  dueDate: z.date().optional(),
+  reference: optionalShortText,
+  note: optionalLongText,
+});
 
 export const clientSchema = z.object({
   type: clientTypeSchema,

@@ -1,15 +1,16 @@
 import type { Prisma } from "@prisma/client";
-import { formatDocumentNumber } from "./finance/domain";
+import { formatDocumentNumber, type DocumentNumberKind } from "./finance/domain";
 
 type Tx = Prisma.TransactionClient;
 
 /**
  * Transakčne bezpečné číslovanie dokladov.
  * counterId napr. "VYDANA-2026" → "FA2026001", "PRIJATA-2026" → "PF2026001",
- * "OBJ-2026" → "OBJ2026-0001", "SARZA-2026" → "S2026-0001".
+ * "OBJ-2026" → "OBJ2026-0001", "SARZA-2026" → "S2026-0001",
+ * "NAKUP-2026" → "NO2026001".
  * VŽDY volať vnútri prisma.$transaction — inak hrozia duplikáty.
  */
-export async function nextNumber(tx: Tx, kind: "VYDANA" | "PRIJATA" | "OBJ" | "SARZA", year: number): Promise<string> {
+export async function nextNumber(tx: Tx, kind: DocumentNumberKind, year: number): Promise<string> {
   const counterId = `${kind}-${year}`;
   const counter = await tx.docCounter.upsert({
     where: { id: counterId },

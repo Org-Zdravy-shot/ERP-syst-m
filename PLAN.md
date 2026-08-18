@@ -6,6 +6,10 @@ Interný ERP pre Zdravý shot. Na projekte pracujú **dvaja ľudia paralelne, ka
 > SuperFaktúry/Omegy je rozpísaná v
 > [`docs/FINANCE_V2_IMPLEMENTATION_PLAN.md`](docs/FINANCE_V2_IMPLEMENTATION_PLAN.md).
 > Tento dokument nižšie zostáva historickým plánom pôvodnej v1.
+>
+> **Aktívny modul dodávateľov:** dátový model, používateľské profily, vratné
+> obaly, nákupné objednávky a doobjednávanie sú rozpísané v
+> [`docs/SUPPLIER_MODULE_PLAN.md`](docs/SUPPLIER_MODULE_PLAN.md).
 
 ## Stav
 

@@ -152,8 +152,10 @@ export function isDateWithinValidity(date: Date, validFrom: Date, validTo?: Date
   return timestamp >= validFrom.getTime() && (!validTo || timestamp <= validTo.getTime());
 }
 
+export type DocumentNumberKind = "VYDANA" | "PRIJATA" | "OBJ" | "SARZA" | "NAKUP";
+
 export function formatDocumentNumber(
-  kind: "VYDANA" | "PRIJATA" | "OBJ" | "SARZA",
+  kind: DocumentNumberKind,
   year: number,
   sequence: number,
 ): string {
@@ -169,5 +171,7 @@ export function formatDocumentNumber(
       return `OBJ${year}-${String(sequence).padStart(4, "0")}`;
     case "SARZA":
       return `S${year}-${String(sequence).padStart(4, "0")}`;
+    case "NAKUP":
+      return `NO${year}${String(sequence).padStart(3, "0")}`;
   }
 }

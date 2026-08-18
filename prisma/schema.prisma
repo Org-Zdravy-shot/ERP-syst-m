@@ -66,6 +66,314 @@ model Client {
   @@index([iban])
 }
 
+// ---------- Dodávatelia ----------
+
+model Supplier {
+  id               String   @id @default(cuid())
+  kind             String   @default("COMPANY") // "COMPANY" | "PERSON"
+  name             String
+  legalName        String?
+  ico              String?  @unique
+  dic              String?
+  icDph            String?
+  email            String?
+  phone            String?
+  website          String?
+  paymentTermsDays Int      @default(14)
+  currency         String   @default("EUR")
+  source           String   @default("OTHER") // "REFERRAL" | "WEB" | "FAIR" | "MARKETPLACE" | "EXISTING" | "OTHER"
+  sourceDetail     String?
+  rating           Int?
+  note             String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  contacts        SupplierContact[]
+  locations       SupplierLocation[]
+  bankAccounts    SupplierBankAccount[]
+  tags            SupplierTag[]
+  catalogItems    SupplierCatalogItem[]
+  orders          SupplierOrder[]
+  returnableTypes SupplierReturnableType[]
+  accountEntries  SupplierAccountEntry[]
+  invoices        Invoice[]
+  stockMovements  StockMovement[]
+
+  @@index([name])
+  @@index([source, isActive])
+}
+
+model SupplierContact {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name       String
+  role       String?
+  email      String?
+  phone      String?
+  isPrimary  Boolean  @default(false)
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([supplierId, isPrimary])
+}
+
+model SupplierLocation {
+  id                   String   @id @default(cuid())
+  supplierId           String
+  supplier             Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  type                 String   @default("OTHER") // "REGISTERED" | "WAREHOUSE" | "PICKUP" | "BILLING" | "OTHER"
+  name                 String
+  street               String?
+  city                 String?
+  zip                  String?
+  country              String   @default("SK")
+  latitude             Float?
+  longitude            Float?
+  openingHours         String?
+  deliveryInstructions String?
+  isPrimary            Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([supplierId, type])
+  @@index([city])
+}
+
+model SupplierBankAccount {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name       String?
+  iban       String
+  bic        String?
+  currency   String   @default("EUR")
+  isPrimary  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([supplierId, iban])
+  @@index([iban])
+}
+
+model SupplierTag {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name       String
+  createdAt  DateTime @default(now())
+
+  @@unique([supplierId, name])
+  @@index([name])
+}
+
+// Stabilná ponuka/SKU dodávateľa. Môže byť naviazaná na surovinu, produkt,
+// alebo na žiadnu skladovú položku (služba). Nikdy nie na obe naraz.
+model SupplierCatalogItem {
+  id               String    @id @default(cuid())
+  supplierId       String
+  supplier         Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  materialId       String?
+  material         Material? @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  productId        String?
+  product          Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  supplierSku      String?
+  name             String
+  unit             String
+  packQuantity     Float     @default(1)
+  minOrderQuantity Float     @default(0)
+  orderMultiple    Float     @default(1)
+  leadTimeDays     Int       @default(0)
+  originCountry    String?
+  qualityNote      String?
+  note             String?
+  isPreferred      Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  prices     SupplierPrice[]
+  orderItems SupplierOrderItem[]
+
+  @@index([supplierId, isActive])
+  @@index([materialId, isPreferred])
+  @@index([productId, isPreferred])
+}
+
+// Ceny sa neprepisujú. Nová dohoda vytvorí nový časovo platný riadok.
+model SupplierPrice {
+  id               String              @id @default(cuid())
+  catalogItemId    String
+  catalogItem      SupplierCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  unitPriceCents   Int
+  pricePerQuantity Float               @default(1)
+  minimumQuantity  Float               @default(0)
+  currency         String              @default("EUR")
+  priceType        String              @default("NET") // "NET" | "GROSS"
+  vatRate          Int?
+  validFrom        DateTime
+  validTo          DateTime?
+  note             String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([catalogItemId, validFrom, minimumQuantity])
+  @@index([catalogItemId, validFrom, validTo])
+}
+
+model SupplierOrder {
+  id                       String    @id @default(cuid())
+  orderNumber              String    @unique // "NO2026001"
+  supplierId               String
+  supplier                 Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status                   String    @default("DRAFT") // "DRAFT" | "APPROVED" | "SENT" | "CONFIRMED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED"
+  orderDate                DateTime  @default(now())
+  requestedDeliveryDate    DateTime?
+  confirmedDeliveryDate    DateTime?
+  currency                 String    @default("EUR")
+  shippingCents            Int       @default(0)
+  discountCents            Int       @default(0)
+  supplierSnapshot         Json?
+  deliveryLocationSnapshot Json?
+  note                     String?
+  createdById              String?
+  approvedById             String?
+  approvedAt               DateTime?
+  sentAt                   DateTime?
+  confirmedAt              DateTime?
+  cancelledAt              DateTime?
+  cancelReason             String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  items      SupplierOrderItem[]
+  deliveries SupplierDelivery[]
+
+  @@index([supplierId, orderDate])
+  @@index([status, requestedDeliveryDate])
+}
+
+model SupplierOrderItem {
+  id              String               @id @default(cuid())
+  supplierOrderId String
+  supplierOrder   SupplierOrder        @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+  catalogItemId   String?
+  catalogItem     SupplierCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  materialId      String?
+  material        Material?            @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  productId       String?
+  product         Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  lineNumber      Int                  @default(1)
+  description     String
+  supplierSku     String?
+  quantity        Float
+  unit            String
+  unitPriceCents  Int
+  priceType       String               @default("NET") // "NET" | "GROSS"
+  vatRate         Int                  @default(0)
+  createdAt       DateTime             @default(now())
+
+  deliveryItems SupplierDeliveryItem[]
+
+  @@unique([supplierOrderId, lineNumber])
+  @@index([materialId])
+  @@index([productId])
+}
+
+model SupplierDelivery {
+  id                 String        @id @default(cuid())
+  supplierOrderId    String
+  supplierOrder      SupplierOrder @relation(fields: [supplierOrderId], references: [id], onDelete: Restrict)
+  deliveryNoteNumber String?
+  receivedAt         DateTime      @default(now())
+  note               String?
+  createdById        String?
+  idempotencyKey     String        @unique
+  createdAt          DateTime      @default(now())
+
+  items               SupplierDeliveryItem[]
+  returnableMovements SupplierReturnableMovement[]
+
+  @@index([supplierOrderId, receivedAt])
+}
+
+model SupplierDeliveryItem {
+  id                  String            @id @default(cuid())
+  supplierDeliveryId  String
+  supplierDelivery    SupplierDelivery  @relation(fields: [supplierDeliveryId], references: [id], onDelete: Restrict)
+  supplierOrderItemId String
+  supplierOrderItem   SupplierOrderItem @relation(fields: [supplierOrderItemId], references: [id], onDelete: Restrict)
+  quantity            Float
+  stockMovementId     String?           @unique
+  stockMovement       StockMovement?    @relation(fields: [stockMovementId], references: [id], onDelete: Restrict)
+  note                String?
+  createdAt           DateTime          @default(now())
+
+  @@unique([supplierDeliveryId, supplierOrderItemId])
+  @@index([supplierOrderItemId])
+}
+
+model SupplierReturnableType {
+  id                 String   @id @default(cuid())
+  supplierId         String
+  supplier           Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  name               String
+  unit               String   @default("ks")
+  owner              String   @default("SUPPLIER") // "SUPPLIER" | "COMPANY"
+  depositCents       Int?
+  expectedReturnDays Int?
+  reminderNote       String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  movements SupplierReturnableMovement[]
+
+  @@unique([supplierId, name])
+  @@index([supplierId, isActive])
+}
+
+// Kladné množstvo zvyšuje nevyriešený zostatok, záporné znamená vrátenie.
+model SupplierReturnableMovement {
+  id                 String                 @id @default(cuid())
+  returnableTypeId   String
+  returnableType     SupplierReturnableType @relation(fields: [returnableTypeId], references: [id], onDelete: Restrict)
+  supplierDeliveryId String?
+  supplierDelivery   SupplierDelivery?      @relation(fields: [supplierDeliveryId], references: [id], onDelete: SetNull)
+  quantity           Float
+  occurredAt         DateTime               @default(now())
+  dueDate            DateTime?
+  reference          String?
+  note               String?
+  createdById        String?
+  createdAt          DateTime               @default(now())
+
+  @@index([returnableTypeId, occurredAt])
+  @@index([dueDate])
+}
+
+// Kladná suma = dlhujeme dodávateľovi, záporná = dodávateľ dlhuje nám.
+// Faktúry a ich platby sem nekopírujeme; ich zostatok sa počíta samostatne.
+model SupplierAccountEntry {
+  id          String    @id @default(cuid())
+  supplierId  String
+  supplier    Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  type        String // "OPENING_BALANCE" | "DEPOSIT" | "CREDIT" | "ADJUSTMENT" | "OTHER"
+  amountCents Int
+  occurredAt  DateTime  @default(now())
+  dueDate     DateTime?
+  reference   String?
+  note        String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([supplierId, occurredAt])
+  @@index([dueDate])
+}
+
 // ---------- Firemný a daňový profil ----------
 
 model CompanyProfile {
@@ -124,20 +432,23 @@ model Product {
   priceB2bCents Int? // voliteľná legacy/predvolená cena; prednosť má cenník konkrétneho B2B klienta
   vatRate       Int      @default(20)
   minStock      Float    @default(0)
+  targetStock   Float?
   shelfLifeDays Int      @default(30)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  recipe            Recipe?
-  batches           ProductionBatch[]
-  orderItems        OrderItem[]
-  movements         StockMovement[]
-  subscriptionItems SubscriptionItem[]
-  ekasaSales        EkasaSale[]
-  vatRates          ProductVatRate[]
-  invoiceItems      InvoiceItem[]
-  clientPrices      ClientProductPrice[]
+  recipe               Recipe?
+  batches              ProductionBatch[]
+  orderItems           OrderItem[]
+  movements            StockMovement[]
+  subscriptionItems    SubscriptionItem[]
+  ekasaSales           EkasaSale[]
+  vatRates             ProductVatRate[]
+  invoiceItems         InvoiceItem[]
+  clientPrices         ClientProductPrice[]
+  supplierCatalogItems SupplierCatalogItem[]
+  supplierOrderItems   SupplierOrderItem[]
 }
 
 // Aktuálna dohodnutá cena produktu pre konkrétneho B2B odberateľa.
@@ -178,13 +489,16 @@ model Material {
   name           String // "Zázvor čerstvý"
   unit           String // "kg" | "l" | "ks" | "g" | "ml"
   minStock       Float    @default(0)
+  targetStock    Float?
   lastPriceCents Int      @default(0) // posledná nákupná cena za jednotku
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  recipeItems RecipeItem[]
-  movements   StockMovement[]
+  recipeItems          RecipeItem[]
+  movements            StockMovement[]
+  supplierCatalogItems SupplierCatalogItem[]
+  supplierOrderItems   SupplierOrderItem[]
 }
 
 // ---------- Výroba ----------
@@ -244,13 +558,18 @@ model StockMovement {
   batch          ProductionBatch? @relation(fields: [batchId], references: [id])
   orderId        String?
   order          Order?           @relation(fields: [orderId], references: [id])
+  supplierId     String?
+  supplier       Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   unitPriceCents Int? // nákladová cena pri príjme
   note           String?
   createdById    String?
   createdAt      DateTime         @default(now())
 
+  supplierDeliveryItem SupplierDeliveryItem?
+
   @@index([materialId])
   @@index([productId])
+  @@index([supplierId, createdAt])
 }
 
 // ---------- Objednávky a predplatné ----------
@@ -348,6 +667,8 @@ model Invoice {
   currency             String    @default("EUR")
   clientId             String?
   client               Client?   @relation(fields: [clientId], references: [id])
+  supplierId           String?
+  supplier             Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   supplierName         String? // legacy zobrazenie prijatej faktúry
   orderId              String?
   order                Order?    @relation(fields: [orderId], references: [id])
@@ -382,6 +703,7 @@ model Invoice {
 
   @@unique([source, externalId])
   @@index([direction, documentStatus, issueDate])
+  @@index([supplierId, issueDate])
   @@index([originalInvoiceId])
 }
 
@@ -630,7 +952,7 @@ model AuditLog {
   @@index([actorId, createdAt])
 }
 
-// Bezpečné číslovanie dokladov per rok+typ, id napr. "VYDANA-2026", "OBJ-2026", "SARZA-2026"
+// Bezpečné číslovanie dokladov per rok+typ, id napr. "VYDANA-2026", "OBJ-2026", "SARZA-2026", "NAKUP-2026"
 model DocCounter {
   id         String @id
   lastNumber Int    @default(0)
