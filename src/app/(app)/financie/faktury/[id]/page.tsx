@@ -15,11 +15,13 @@ import {
   invoicePaymentStatusLabels,
 } from "@/lib/zod-schemas";
 import { calculatePaymentStatus } from "@/lib/finance/domain";
-import { getSession } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { hasFinancePermission } from "@/lib/finance/permissions";
+import { readEFakturaConfig } from "@/lib/finance/einvoice/config";
 import { cancelInvoice, createCreditNoteFromInvoice, finalizeInvoice } from "../../_actions";
 import { InvoiceDocuments } from "./InvoiceDocuments";
 import { InvoiceEmails } from "./InvoiceEmails";
+import { InvoiceEInvoice } from "./InvoiceEInvoice";
 import { InvoiceWorkflowActions } from "./InvoiceStatusActions";
 
 export default async function FakturaDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -62,18 +64,59 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           createdAt: true,
         },
       },
+      eInvoiceTransmissions: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          mode: true,
+          status: true,
+          receiverPeppolId: true,
+          ublSha256: true,
+          lastError: true,
+          validatedAt: true,
+          submittedAt: true,
+          deliveredAt: true,
+          createdAt: true,
+          ublDocument: { select: { id: true, fileName: true } },
+        },
+      },
     },
   });
   if (!invoice) notFound();
 
-  const session = await getSession();
+  const currentUser = await requireUser();
   const canSendEmail =
-    hasFinancePermission(session.role, "SEND_DOCUMENT") &&
+    hasFinancePermission(currentUser.role, "SEND_DOCUMENT") &&
     invoice.direction === "VYDANA" &&
     invoice.documentStatus === "ISSUED";
   const canUploadAttachment =
-    hasFinancePermission(session.role, "CREATE_DRAFT") &&
+    hasFinancePermission(currentUser.role, "CREATE_DRAFT") &&
     invoice.direction === "PRIJATA";
+  let eInvoiceConfigurationReady = false;
+  try {
+    readEFakturaConfig();
+    eInvoiceConfigurationReady = true;
+  } catch {
+    // Panel zostáva iba informačný. Server action používa rovnakú fail-closed
+    // konfiguráciu a žiadnu hodnotu tajomstva neposiela do klienta.
+  }
+  const canValidateEInvoice =
+    hasFinancePermission(currentUser.role, "SEND_DOCUMENT") &&
+    invoice.direction === "VYDANA" &&
+    invoice.documentStatus === "ISSUED" &&
+    Boolean(invoice.order?.orderNumber) &&
+    eInvoiceConfigurationReady;
+  const eInvoiceDisabledReason = !eInvoiceConfigurationReady
+    ? "Sandbox eFaktúry ešte nie je zapnutý. Produkčné odosielanie zostáva zablokované."
+    : invoice.direction !== "VYDANA"
+      ? "eFaktúra sa v tomto paneli pripravuje iba pre vydané doklady."
+      : invoice.documentStatus !== "ISSUED"
+        ? "Doklad musí byť najskôr finalizovaný."
+        : !invoice.order?.orderNumber
+          ? "Dokladu chýba číslo objednávky kupujúceho (BuyerReference)."
+          : !hasFinancePermission(currentUser.role, "SEND_DOCUMENT")
+            ? "Na validáciu eFaktúry nemáte oprávnenie."
+            : undefined;
 
   const isIssued = invoice.direction === "VYDANA";
   const isCreditNote = invoice.documentType === "CREDIT_NOTE";
@@ -225,6 +268,21 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                 ...delivery,
                 sentAt: delivery.sentAt ? delivery.sentAt.toISOString() : null,
                 createdAt: delivery.createdAt.toISOString(),
+              }))}
+            />
+          )}
+
+          {invoice.direction === "VYDANA" && (
+            <InvoiceEInvoice
+              invoiceId={invoice.id}
+              canValidate={canValidateEInvoice}
+              disabledReason={eInvoiceDisabledReason}
+              transmissions={invoice.eInvoiceTransmissions.map((transmission) => ({
+                ...transmission,
+                validatedAt: transmission.validatedAt?.toISOString() ?? null,
+                submittedAt: transmission.submittedAt?.toISOString() ?? null,
+                deliveredAt: transmission.deliveredAt?.toISOString() ?? null,
+                createdAt: transmission.createdAt.toISOString(),
               }))}
             />
           )}
