@@ -161,9 +161,9 @@ jedným potvrdením vytvoriť koncepty objednávok rozdelené podľa dodávateľ
 
 - [x] navigácia, zoznam, vyhľadávanie, vytvorenie a editácia;
 - [x] kontakty, lokality, bankové účty a štítky;
-- [ ] ponuky, ceny, preferovaný dodávateľ a história;
-- [ ] vratné obaly a ostatný finančný ledger;
-- [ ] súhrn histórie, faktúr a audit.
+- [x] ponuky, ceny, preferovaný dodávateľ a história;
+- [x] vratné obaly a ostatný finančný ledger;
+- [x] súhrn histórie, faktúr a audit.
 
 ### S2 — objednávanie a sklad
 
