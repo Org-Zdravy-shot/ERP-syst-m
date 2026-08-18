@@ -74,6 +74,9 @@
 - [x] vykonať bezpečnostnú kontrolu — výsledok a read-only produkčný readiness
   check sú v
   [`FINANCE_SECURITY_REVIEW_2026-08-18.md`](FINANCE_SECURITY_REVIEW_2026-08-18.md);
+- [x] doplniť perzistentný rate limit prihlasovania s anonymizovanými HMAC
+  kľúčmi a auditom blokovania — sledované v
+  [issue #31](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/31);
 - [ ] dokončiť spoločný E2E scenár od objednávky po účtovnícky export; aktuálne
   sa správne zastaví na nepotvrdenom DPH profile a odloženej aktivácii DKIM;
 - zapnúť `FINANCE_PRODUCTION_ISSUING_ENABLED` až po splnení všetkých go-live

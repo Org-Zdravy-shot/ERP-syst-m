@@ -28,6 +28,11 @@ a e-mailovej domény.
   [GHSA-fxqj-rqcc-2cmp](https://github.com/advisories/GHSA-fxqj-rqcc-2cmp),
   [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) a
   [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx).
+- Prihlasovanie má perzistentný databázový rate limit: kombinácia identity a
+  IP sa po 5 zlyhaniach za 15 minút zablokuje na 15 minút, IP po 25
+  zlyhaniach. Databáza aj audit obsahujú iba HMAC identifikátory, nikdy surový
+  e-mail, heslo ani IP adresu. Neexistujúci používateľ prejde rovnakou bcrypt
+  kontrolou, aby odpoveď neprezrádzala existenciu účtu.
 
 ## Overené kontroly
 
@@ -64,9 +69,6 @@ nesmie obísť go-live gate.
 
 - Produkčná aktivácia Resend a DKIM je odložená v
   [issue #29](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/29).
-- Perzistentný rate limit prihlasovania je sledovaný v
-  [issue #31](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/31). Má byť
-  dokončený pred širším sprístupnením ERP internetu.
 - Tatra Premium API zostáva vypnuté do ukončenia bankového onboardingu a
   sandbox kontraktných testov.
 - CSP sa nezapína naslepo, pretože Next.js používa frameworkové inline skripty;
