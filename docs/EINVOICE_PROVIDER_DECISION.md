@@ -68,7 +68,8 @@ obsah dokladu. Ak validátor navrhne opravu, ERP ju zobrazí na kontrolu.
 - [ ] overenie generovaného UBL proti slovenskému FS overlayu v sandboxe;
 - [x] DB evidencia prenosov, prijatých dokladov a webhook deduplikácie;
 - [x] podpísaný verejný webhook route s idempotentným spracovaním stavov;
-- [ ] outbox, administračná obrazovka a end-to-end sandbox test;
+- [x] nemenné uloženie ERP UBL a idempotentný `validateOnly` workflow;
+- [ ] ostrý odosielací outbox, administračná obrazovka a end-to-end sandbox test;
 - [ ] produkčná zmluva, autorizácia poskytovateľa vo Finančnej správe a live gate.
 
 ## Údaje, ktoré bude musieť dodať vlastník účtu

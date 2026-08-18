@@ -41,6 +41,7 @@ function databaseInvoice(
     totalNetCents: fixture.totalNetCents,
     totalVatCents: fixture.totalVatCents,
     totalGrossCents: fixture.totalGrossCents,
+    order: { orderNumber: "OBJ2026-0042" },
     originalInvoice: null,
     items: fixture.lines.map((line) => ({
       productId: line.productId ?? null,
@@ -77,7 +78,11 @@ test("dobropis prenesie číslo pôvodnej faktúry do PDF dát", async () => {
   mocks.findUnique.mockResolvedValue(
     databaseInvoice({
       documentType: "CREDIT_NOTE",
-      originalInvoice: { invoiceNumber: "2026008" },
+      order: null,
+      originalInvoice: {
+        invoiceNumber: "2026008",
+        order: { orderNumber: "OBJ2026-0041" },
+      },
     }),
   );
 
@@ -85,6 +90,17 @@ test("dobropis prenesie číslo pôvodnej faktúry do PDF dát", async () => {
     "invoice-test-1",
   );
   expect(data?.originalInvoiceNumber).toBe("2026008");
+  expect(data?.buyerReference).toBe("OBJ2026-0041");
+});
+
+test("faktúra prenesie číslo objednávky kupujúceho ako BuyerReference", async () => {
+  mocks.findUnique.mockResolvedValue(databaseInvoice());
+
+  const data = await new PrismaDocumentRepository().getInvoicePdfData(
+    "invoice-test-1",
+  );
+
+  expect(data?.buyerReference).toBe("OBJ2026-0042");
 });
 
 test("dobropis bez čísla pôvodnej faktúry sa odmietne", async () => {

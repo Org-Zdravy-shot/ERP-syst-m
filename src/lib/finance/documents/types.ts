@@ -17,6 +17,8 @@ export interface InvoicePdfData {
   finalizedAt: Date;
   currency: "EUR";
   variableSymbol?: string;
+  /** Číslo objednávky kupujúceho; pre Peppol BuyerReference sa nesmie vymyslieť. */
+  buyerReference?: string;
   note?: string;
   issuer: PartySnapshot;
   counterparty: PartySnapshot;
