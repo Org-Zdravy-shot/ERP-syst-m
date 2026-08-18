@@ -15,6 +15,9 @@ Implementácia developera B pre nemenné fakturačné PDF a privátne dokumenty.
 - autorizovaný download cez ERP bez verejnej bucket URL;
 - kontrola SHA-256 pred každým downloadom;
 - audit `DOCUMENT_DOWNLOADED`.
+- nemenné PDF/JPG/PNG prílohy prijatých faktúr do 10 MB;
+- kontrola skutočného typu súboru podľa binárnej hlavičky, bezpečný názov a
+  audit `DOCUMENT_ATTACHMENT_STORED`.
 
 PDF je možné vytvoriť iba pre vydaný a finalizovaný doklad s nemennými
 snapshotmi dodávateľa, odberateľa, dane a položiek.
@@ -22,6 +25,9 @@ snapshotmi dodávateľa, odberateľa, dane a položiek.
 ## API
 
 - `POST /api/financie/faktury/:id/dokumenty` — vygeneruje a uloží PDF;
+- `POST /api/financie/faktury/:id/dokumenty?typ=priloha` — uloží raw telo
+  požiadavky ako prílohu prijatej faktúry; URL-encoded názov očakáva v hlavičke
+  `X-File-Name-Encoded`;
 - `GET /api/financie/dokumenty/:id` — overí integritu, zapíše audit a vráti
   súbor ako `attachment`.
 

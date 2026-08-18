@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { btnSmallPrimary } from "@/components/ui";
 
 interface InvoiceDocumentItem {
@@ -21,11 +21,15 @@ function formatBytes(bytes: number): string {
 export function InvoiceDocuments({
   invoiceId,
   documents,
+  allowPdfGeneration,
   canGenerate,
+  canUploadAttachment,
 }: {
   invoiceId: string;
   documents: InvoiceDocumentItem[];
+  allowPdfGeneration: boolean;
   canGenerate: boolean;
+  canUploadAttachment: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -60,25 +64,106 @@ export function InvoiceDocuments({
     }
   }
 
+  async function uploadAttachment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const file = new FormData(form).get("attachment");
+    if (!(file instanceof File) || file.size === 0) {
+      setError("Vyberte PDF, JPG alebo PNG prílohu.");
+      return;
+    }
+
+    setPending(true);
+    setError(undefined);
+    try {
+      const response = await fetch(
+        `/api/financie/faktury/${encodeURIComponent(invoiceId)}/dokumenty?typ=priloha`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": file.type || "application/octet-stream",
+            "X-File-Name-Encoded": encodeURIComponent(file.name),
+          },
+          body: file,
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Prílohu sa nepodarilo nahrať.");
+      }
+      form.reset();
+      router.refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Prílohu sa nepodarilo nahrať.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <section className="rounded-[14px] border border-stone-200 bg-white p-5 print:hidden">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-semibold text-stone-900">Dokumenty</h2>
-        <button
-          type="button"
-          className={btnSmallPrimary}
-          disabled={!canGenerate || pending}
-          onClick={generatePdf}
-        >
-          {pending ? "Generujem…" : "Vygenerovať PDF"}
-        </button>
+        {allowPdfGeneration && (
+          <button
+            type="button"
+            className={btnSmallPrimary}
+            disabled={!canGenerate || pending}
+            onClick={generatePdf}
+          >
+            {pending ? "Pracujem…" : "Vygenerovať PDF"}
+          </button>
+        )}
       </div>
 
-      {!canGenerate && (
+      {allowPdfGeneration && !canGenerate && (
         <p className="mt-3 text-xs leading-5 text-stone-500">
           Nemenné PDF je možné vytvoriť až po finalizácii dokladu a uložení
           snapshotov.
         </p>
+      )}
+
+      {canUploadAttachment && (
+        <form
+          className="mt-3 rounded-[10px] border border-dashed border-stone-300 bg-stone-50 p-3"
+          onSubmit={uploadAttachment}
+        >
+          <label
+            htmlFor="invoice-attachment"
+            className="mb-1.5 block text-xs font-medium text-stone-700"
+          >
+            Príloha prijatej faktúry
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              id="invoice-attachment"
+              name="attachment"
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+              required
+              disabled={pending}
+              className="min-w-0 flex-1 text-xs text-stone-600 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-stone-700"
+            />
+            <button
+              type="submit"
+              className={btnSmallPrimary}
+              disabled={pending}
+            >
+              {pending ? "Nahrávam…" : "Nahrať prílohu"}
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-stone-500">
+            PDF, JPG alebo PNG, najviac 10 MB. Súbor sa uloží nemenne do
+            súkromného archívu.
+          </p>
+        </form>
       )}
 
       {error && (
@@ -103,7 +188,8 @@ export function InvoiceDocuments({
                   {document.fileName}
                 </p>
                 <p className="mt-0.5 text-[11px] text-stone-500">
-                  {formatBytes(document.byteSize)} · SHA-256{" "}
+                  {document.type === "ATTACHMENT" ? "Príloha" : "Nemenné PDF"}
+                  {" · "}{formatBytes(document.byteSize)} · SHA-256{" "}
                   {document.sha256.slice(0, 12)}…
                 </p>
               </div>

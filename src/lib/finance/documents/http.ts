@@ -5,6 +5,7 @@ import {
   DocumentGenerationError,
   DocumentIntegrityError,
   DocumentNotFoundError,
+  DocumentUploadError,
 } from "./errors";
 
 export function documentErrorResponse(error: unknown): Response {
@@ -19,6 +20,9 @@ export function documentErrorResponse(error: unknown): Response {
   }
   if (error instanceof DocumentIntegrityError) {
     return Response.json({ error: error.message }, { status: 409 });
+  }
+  if (error instanceof DocumentUploadError) {
+    return Response.json({ error: error.message }, { status: error.status });
   }
   if (error instanceof DocumentGenerationError) {
     return Response.json({ error: error.message }, { status: 422 });

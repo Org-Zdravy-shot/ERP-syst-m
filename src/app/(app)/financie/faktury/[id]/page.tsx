@@ -71,6 +71,9 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
     hasFinancePermission(session.role, "SEND_DOCUMENT") &&
     invoice.direction === "VYDANA" &&
     invoice.documentStatus === "ISSUED";
+  const canUploadAttachment =
+    hasFinancePermission(session.role, "CREATE_DRAFT") &&
+    invoice.direction === "PRIJATA";
 
   const isIssued = invoice.direction === "VYDANA";
   const isCreditNote = invoice.documentType === "CREDIT_NOTE";
@@ -195,6 +198,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
 
           <InvoiceDocuments
             invoiceId={invoice.id}
+            allowPdfGeneration={invoice.direction === "VYDANA"}
             canGenerate={
               invoice.direction === "VYDANA" &&
               invoice.documentStatus === "ISSUED" &&
@@ -203,9 +207,10 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                   invoice.finalizedAt &&
                   invoice.issuerSnapshot &&
                   invoice.counterpartySnapshot &&
-                  invoice.taxSnapshot,
+                invoice.taxSnapshot,
               )
             }
+            canUploadAttachment={canUploadAttachment}
             documents={invoice.documents.map((document) => ({
               ...document,
               createdAt: document.createdAt.toISOString(),

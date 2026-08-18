@@ -1,18 +1,27 @@
 import { requireFinanceDocumentUser } from "@/lib/finance/documents/authorization";
 import { documentErrorResponse } from "@/lib/finance/documents/http";
 import { getDocumentService } from "@/lib/finance/documents";
+import { readInvoiceAttachmentRequest } from "@/lib/finance/documents/upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireFinanceDocumentUser("CREATE_DRAFT");
+    const user = await requireFinanceDocumentUser("CREATE_DRAFT");
     const { id } = await context.params;
-    const document = await getDocumentService().generateAndStoreInvoicePdf(id);
+    const isAttachment = new URL(request.url).searchParams.get("typ") === "priloha";
+    const document = isAttachment
+      ? await getDocumentService().storeInvoiceAttachment({
+          invoiceId: id,
+          actorId: user.id,
+          actorEmail: user.email,
+          ...(await readInvoiceAttachmentRequest(request)),
+        })
+      : await getDocumentService().generateAndStoreInvoicePdf(id);
 
     return Response.json(
       {

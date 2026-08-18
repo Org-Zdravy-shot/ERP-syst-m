@@ -8,7 +8,9 @@ import type {
   DocumentRecord,
   DocumentRepository,
   GeneratedDocumentInput,
+  InvoiceAttachmentTarget,
   InvoicePdfData,
+  UploadedAttachmentInput,
 } from "./types";
 
 const optionalString = z.preprocess(
@@ -272,6 +274,20 @@ export class PrismaDocumentRepository implements DocumentRepository {
     };
   }
 
+  async getInvoiceAttachmentTarget(
+    invoiceId: string,
+  ): Promise<InvoiceAttachmentTarget | null> {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, direction: true },
+    });
+    if (!invoice) return null;
+    if (invoice.direction !== "VYDANA" && invoice.direction !== "PRIJATA") {
+      throw new DocumentIntegrityError("Faktúra má neznámy smer.");
+    }
+    return { id: invoice.id, direction: invoice.direction };
+  }
+
   async saveGeneratedDocument(input: GeneratedDocumentInput) {
     const document = await prisma.documentAsset.upsert({
       where: { objectKey: input.objectKey },
@@ -314,6 +330,79 @@ export class PrismaDocumentRepository implements DocumentRepository {
     ) {
       throw new DocumentIntegrityError(
         "Existujúci záznam dokumentu nezodpovedá generovanému súboru.",
+      );
+    }
+    return record;
+  }
+
+  async saveUploadedAttachment(input: UploadedAttachmentInput) {
+    const document = await prisma.$transaction(async (tx) => {
+      const stored = await tx.documentAsset.upsert({
+        where: { objectKey: input.objectKey },
+        update: {},
+        create: {
+          invoiceId: input.invoiceId,
+          type: input.type,
+          storageProvider: input.storageProvider,
+          bucket: input.bucket,
+          objectKey: input.objectKey,
+          fileName: input.fileName,
+          contentType: input.contentType,
+          byteSize: input.byteSize,
+          sha256: input.sha256,
+          isImmutable: true,
+          createdById: input.createdById,
+        },
+        select: {
+          id: true,
+          invoiceId: true,
+          type: true,
+          storageProvider: true,
+          bucket: true,
+          objectKey: true,
+          fileName: true,
+          contentType: true,
+          byteSize: true,
+          sha256: true,
+          isImmutable: true,
+          createdAt: true,
+          archivedAt: true,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: input.actorId,
+          actorEmail: input.actorEmail,
+          action: "DOCUMENT_ATTACHMENT_STORED",
+          entityType: "DocumentAsset",
+          entityId: stored.id,
+          metadata: {
+            invoiceId: input.invoiceId,
+            fileName: stored.fileName,
+            contentType: stored.contentType,
+            byteSize: stored.byteSize,
+            sha256: stored.sha256,
+          },
+        },
+      });
+      return stored;
+    });
+
+    const record = toDocumentRecord(document);
+    if (
+      record.invoiceId !== input.invoiceId ||
+      record.type !== "ATTACHMENT" ||
+      record.storageProvider !== input.storageProvider ||
+      record.bucket !== input.bucket ||
+      record.objectKey !== input.objectKey ||
+      record.sha256 !== input.sha256 ||
+      record.byteSize !== input.byteSize ||
+      record.contentType !== input.contentType ||
+      !record.isImmutable
+    ) {
+      throw new DocumentIntegrityError(
+        "Existujúci záznam prílohy nezodpovedá nahranému súboru.",
       );
     }
     return record;

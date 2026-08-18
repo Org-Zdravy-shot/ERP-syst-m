@@ -1,6 +1,6 @@
 # Financie v2 — implementačný a cutover plán
 
-> Stav dokumentu: aktuálny k 17. augusta 2026. Aktuálny remaining split nižšie
+> Stav dokumentu: aktuálny k 18. augustu 2026. Aktuálny remaining split nižšie
 > nahrádza pôvodné pridelenie A/B/C v historických častiach dokumentu.
 
 ## Stav implementácie
@@ -62,10 +62,13 @@
 - [x] nastaviť Railway cron: outbox každých 5 minút, bankový sync každých
   15 minút a upomienky denne o 07:00 UTC; produkčný test skončil bez backlogu
   a bankový job sa pri vypnutom Tatra flage korektne preskočil;
-- [ ] dokončiť Resend HTTPS provider pre `info@zdravyshot.sk` a overiť DKIM;
-  Railway Hobby blokuje odchádzajúce SMTP, preto HostCreators SMTP ostáva iba
-  fallbackom pre Pro/inú infraštruktúru. Existujúce SPF ani DMARC nemeniť bez
-  kontroly;
+- [x] implementovať a nasadiť Resend HTTPS provider pre `info@zdravyshot.sk` —
+  [PR #28](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/28);
+- [ ] **odložené:** aktivovať Resend v produkcii, doplniť jeho DNS záznamy a
+  skúšobným e-mailom overiť DKIM, SPF aj DMARC — sledované v
+  [issue #29](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/29). Railway
+  Hobby blokuje odchádzajúce SMTP, preto HostCreators SMTP ostáva iba fallbackom
+  pre Pro/inú infraštruktúru. Existujúce SPF ani DMARC nemeniť bez kontroly;
 - [x] obnoviť predimportnú produkčnú zálohu do izolovanej dočasnej databázy,
   overiť obnovenú schému a dáta a dočasnú databázu následne odstrániť;
 - vykonať bezpečnostnú kontrolu a spoločný E2E scenár od objednávky po
@@ -97,7 +100,8 @@
 
 ### Zostávajúce funkčné rozšírenia
 
-- doplniť nahrávanie všeobecných príloh prijatých faktúr do privátneho bucketu;
+- [x] doplniť nahrávanie všeobecných príloh prijatých faktúr do privátneho
+  bucketu s kontrolou typu, limitom veľkosti, SHA-256 a auditom;
 - podľa zvoleného mail providera doplniť webhook pre `DELIVERED` a `BOUNCED`;
 - druhá etapa: vybrať certifikovaného eFaktúra providera do septembra 2026,
   zapojiť sandbox do októbra a produkciu najneskôr v decembri 2026.
