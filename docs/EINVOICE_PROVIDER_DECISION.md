@@ -35,7 +35,8 @@ Nepoužijeme provider endpoint, ktorý by vystavoval faktúru a prideľoval jej
 2. ERP vygeneruje Peppol BIS Billing 3.0 UBL XML zo snapshotu.
 3. XML sa najprv odošle connectorom s `validateOnly=true`.
 4. Po úspešnej validácii ho outbox odošle s `dispatch=now`, `autoRepair=false`
-   a stabilným `Idempotency-Key` odvodeným od ID faktúry a hash-u XML.
+   a stabilným `Idempotency-Key` odvodeným od ID faktúry a hash-u XML. Validácia
+   a odoslanie majú odlišné stabilné kľúče, pretože majú rozdielne telá requestu.
 5. Stav sa aktualizuje webhookom; polling slúži ako poistka.
 6. Prijaté doklady sa načítajú z autoritatívneho zoznamu providera a pôvodné
    UBL XML sa nemenne archivuje s hashom.
