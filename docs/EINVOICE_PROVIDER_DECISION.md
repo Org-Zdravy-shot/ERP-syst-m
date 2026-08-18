@@ -60,13 +60,15 @@ obsah dokladu. Ak validátor navrhne opravu, ERP ju zobrazí na kontrolu.
 - [x] fail-closed konfigurácia sandbox/live;
 - [x] connector klient pre vlastné UBL, idempotenciu a validačný režim;
 - [x] čítanie stavov, stránkovanie prijatých dokladov a stiahnutie XML;
+- [x] overenie dostupnosti príjemcu podľa DIČ (`9915` sandbox, `0245` produkcia);
 - [x] overenie webhook podpisu vrátane rotácie secretu a replay ochrany;
 - [ ] sandbox účet, testovací API kľúč, organizácia a Peppol TEST enroll;
 - [x] deterministický generátor Peppol BIS Billing 3.0 UBL pre slovenskú
   faktúru a dobropis (centy, DPH skupiny, jednotky, XML escaping, hash);
 - [ ] overenie generovaného UBL proti slovenskému FS overlayu v sandboxe;
-- [ ] DB evidencia prenosov, prijatých dokladov a webhook deduplikácie;
-- [ ] outbox, webhook route, administračná obrazovka a end-to-end sandbox test;
+- [x] DB evidencia prenosov, prijatých dokladov a webhook deduplikácie;
+- [x] podpísaný verejný webhook route s idempotentným spracovaním stavov;
+- [ ] outbox, administračná obrazovka a end-to-end sandbox test;
 - [ ] produkčná zmluva, autorizácia poskytovateľa vo Finančnej správe a live gate.
 
 ## Údaje, ktoré bude musieť dodať vlastník účtu

@@ -102,6 +102,43 @@ describe("EFakturaApiClient — connector", () => {
 });
 
 describe("EFakturaApiClient — stavy a prijaté doklady", () => {
+  it("overí Peppol príjemcu a zachová neistotu pri výpadku lookupu", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      json(200, {
+        data: {
+          peppol_id: "9915:2123456789",
+          found: false,
+          lookup_unavailable: true,
+          sml_state: "unknown",
+        },
+      }),
+    );
+    const client = new EFakturaApiClient(config, fetchMock as unknown as typeof fetch);
+
+    const result = await client.lookupRecipient("9915:2123456789");
+
+    expect(result).toEqual({
+      peppolId: "9915:2123456789",
+      found: false,
+      lookupUnavailable: true,
+      smlState: "unknown",
+      pdState: undefined,
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.efaktura.test/v1/agent/peppol/recipient?peppolId=9915%3A2123456789",
+    );
+  });
+
+  it("odmietne neplatné Peppol ID bez sieťového volania", async () => {
+    const fetchMock = vi.fn();
+    const client = new EFakturaApiClient(config, fetchMock as unknown as typeof fetch);
+
+    await expect(client.lookupRecipient("2123456789")).rejects.toMatchObject({
+      kind: "VALIDATION",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("mapuje dočasný provider stav DEFERRED na QUEUED", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       json(200, {
