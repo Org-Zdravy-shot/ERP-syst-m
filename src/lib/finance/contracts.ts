@@ -140,7 +140,12 @@ export interface InvoiceService {
   exportAccounting(input: AccountingExportInput): Promise<AccountingExport>;
 }
 
-export type DocumentType = "INVOICE_PDF" | "CREDIT_NOTE_PDF" | "ATTACHMENT";
+export type DocumentType =
+  | "INVOICE_PDF"
+  | "CREDIT_NOTE_PDF"
+  | "ATTACHMENT"
+  | "EINVOICE_XML"
+  | "RECEIVED_EINVOICE_XML";
 
 export interface StoredDocument {
   id: string;
