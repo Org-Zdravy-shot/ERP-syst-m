@@ -10,8 +10,10 @@ relácii. Rovnaký stav je dostupný v produkčnom ERP na stránke
 
 - Git vetva: `main`, synchronizovaná s `origin/main`.
 - Posledný aplikačný commit pred týmto manuálom: `b978f20` — eFaktúra panel.
-- Posledné overené Railway nasadenie:
-  `126d9b63-6568-4a96-85e5-530474586dd7`, stav `SUCCESS`.
+- Posledné aplikačné baseline nasadenie pred manuálom:
+  `126d9b63-6568-4a96-85e5-530474586dd7`, stav `SUCCESS`. Samotný manuál bol
+  následne nasadený cez PR #50, #52 a #54; stránka `/manual` číta ID práve
+  bežiaceho Railway deploymentu dynamicky, aby po ďalšom deployi nezostarol.
 - Produkčný health check bol úspešný.
 - Posledná kompletná lokálna kontrola: **48 testovacích súborov, 210 testov**,
   typecheck a produkčný build úspešné.
