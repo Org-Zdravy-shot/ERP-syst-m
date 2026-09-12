@@ -34,6 +34,7 @@ const sandboxVariables = [
 
 export default async function ManualPage() {
   await requireFinancePermission("VIEW");
+  const deploymentId = process.env.RAILWAY_DEPLOYMENT_ID?.trim();
 
   return (
     <>
@@ -94,7 +95,10 @@ export default async function ManualPage() {
             <li>• eFaktúra PR #40–#49 sú zmergované.</li>
             <li>• Hotový je klient, UBL, recipient lookup, HMAC webhook, archív a validačný panel.</li>
             <li>• Posledná kontrola: 48 testovacích súborov, 210 testov, typecheck a build.</li>
-            <li>• Overené nasadenie: <code>126d9b63-6568-4a96-85e5-530474586dd7</code>.</li>
+            <li>
+              • Aktuálne Railway nasadenie:{" "}
+              <code>{deploymentId || "ID nie je v runtime dostupné"}</code>.
+            </li>
           </ul>
         </section>
 
