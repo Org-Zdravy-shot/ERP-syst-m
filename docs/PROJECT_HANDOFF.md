@@ -40,6 +40,12 @@ ani produkčný e-mail sa nesmú zapnúť iba preto, že sa začala nová relác
 
 ## Prvý krok po návrate — zatiaľ NESPRAVENÉ
 
+Pred ďalším aplikačným feature deployom najprv spracovať produkčný dependency
+audit v [issue #53](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/53).
+Audit z 12. septembra 2026 našiel 1 critical, 2 high a 1 moderate nález;
+odporúčaný Next.js patch je 16.3.5. Aktualizáciu spraviť samostatným PR s plnou
+regresiou, nie cez slepé `npm audit fix --force`.
+
 Vlastník účtu ešte **nespravil onboarding eFaktura.sk sandboxu**. Aktuálna
 úloha je [GitHub issue #44](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/44).
 
@@ -86,6 +92,8 @@ Následný krok vývoja:
 - Railway infra: migrovať deprecated `railway.toml` na nový Infrastructure as
   Code formát najneskôr do 1. decembra 2026 —
   [issue #51](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/51);
+- závislosti: odstrániť produkčné npm audit nálezy v samostatnom bezpečnostnom
+  PR — [issue #53](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/53);
 - po splnení externých brán dokončiť spoločný E2E scenár a produkčný cutover.
 
 ## Bezpečný štart novej relácie
