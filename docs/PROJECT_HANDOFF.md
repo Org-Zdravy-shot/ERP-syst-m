@@ -83,6 +83,9 @@ Následný krok vývoja:
   [issue #29](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/29);
 - Tatra Premium API: onboarding, consent/tokeny a sandbox; dovtedy zostáva
   `TATRA_PREMIUM_ENABLED=false` a používa sa kontrolovaný import výpisu;
+- Railway infra: migrovať deprecated `railway.toml` na nový Infrastructure as
+  Code formát najneskôr do 1. decembra 2026 —
+  [issue #51](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/51);
 - po splnení externých brán dokončiť spoločný E2E scenár a produkčný cutover.
 
 ## Bezpečný štart novej relácie
