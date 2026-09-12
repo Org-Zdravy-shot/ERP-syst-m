@@ -10,6 +10,11 @@ Interný ERP pre Zdravý shot. Na projekte pracujú **dvaja ľudia paralelne, ka
 > **Aktívny modul dodávateľov:** dátový model, používateľské profily, vratné
 > obaly, nákupné objednávky a doobjednávanie sú rozpísané v
 > [`docs/SUPPLIER_MODULE_PLAN.md`](docs/SUPPLIER_MODULE_PLAN.md).
+>
+> **Odovzdávací bod po reštarte/aktualizácii počítača:** presný posledný stav,
+> bezpečnostné brány a prvý nasledujúci krok sú v
+> [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md) a v produkčnom ERP na
+> stránke `/manual`.
 
 ## Stav
 

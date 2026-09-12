@@ -67,6 +67,12 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M20 20l-4.7-4.7" />
     </>
   ),
+  manual: (
+    <>
+      <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z" />
+      <path d="M5 19a2 2 0 0 1 2-2h13M9 6h7M9 10h7" />
+    </>
+  ),
 };
 
 const NAV_ITEMS = [
@@ -79,6 +85,7 @@ const NAV_ITEMS = [
   { href: "/financie", label: "Financie", icon: "financie" },
   { href: "/klienti", label: "Klienti", icon: "klienti" },
   { href: "/konkurencia", label: "Konkurencia", icon: "konkurencia" },
+  { href: "/manual", label: "Manuál", icon: "manual" },
 ];
 
 export function Sidebar({
@@ -109,7 +116,11 @@ export function Sidebar({
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 px-3 pt-5">
-        {NAV_ITEMS.filter((item) => item.href !== "/financie" || canViewFinance).map((item) => {
+        {NAV_ITEMS.filter(
+          (item) =>
+            (item.href !== "/financie" && item.href !== "/manual") ||
+            canViewFinance,
+        ).map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link
