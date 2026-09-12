@@ -64,6 +64,28 @@ export default async function ManualPage() {
         </a>
       </section>
 
+      <section className="mb-6 rounded-[14px] border border-red-200 bg-red-50 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge color="red">Pred ďalším deployom</Badge>
+          <h2 className="font-semibold text-red-950">
+            Aktualizovať produkčné závislosti podľa npm audit
+          </h2>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-red-900">
+          Audit z 12. septembra našiel 1 critical, 2 high a 1 moderate nález
+          v Next.js/Nodemailer/sharp a tranzitívnej závislosti. Riešiť samostatným
+          patch PR s plnou regresiou; nepoužiť naslepo audit fix force.
+        </p>
+        <a
+          href="https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/53"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-block text-sm font-semibold text-red-900 underline"
+        >
+          Otvoriť bezpečnostnú úlohu #53 ↗
+        </a>
+      </section>
+
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className={`${card} p-5`}>
           <h2 className="font-semibold text-stone-950">Kde sme skončili</h2>
