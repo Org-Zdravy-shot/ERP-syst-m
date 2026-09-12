@@ -123,7 +123,7 @@ export default async function ManualPage() {
 
       <section className={`${card} mt-6 p-5`}>
         <h2 className="font-semibold text-stone-950">Ďalšie otvorené bloky</h2>
-        <div className="mt-3 grid gap-4 text-sm leading-6 text-stone-600 md:grid-cols-3">
+        <div className="mt-3 grid gap-4 text-sm leading-6 text-stone-600 md:grid-cols-2 xl:grid-cols-4">
           <div>
             <h3 className="font-semibold text-stone-800">DPH</h3>
             <p>Účtovník musí písomne potvrdiť dátum registrácie, KN zatriedenie a sadzbu každého produktu. Október a 23 % nie sú potvrdené.</p>
@@ -138,6 +138,14 @@ export default async function ManualPage() {
           <div>
             <h3 className="font-semibold text-stone-800">Tatra banka</h3>
             <p>Premium API potrebuje onboarding, consent, tokeny a sandbox. Dovtedy zostáva vypnuté a používa sa import výpisu.</p>
+          </div>
+          <div>
+            <h3 className="font-semibold text-stone-800">Railway do 1. 12. 2026</h3>
+            <p>
+              Migrovať deprecated <code>railway.toml</code> na nový IaC formát
+              podľa{" "}
+              <a className="underline" href="https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/51" target="_blank" rel="noreferrer">issue #51</a>.
+            </p>
           </div>
         </div>
       </section>
