@@ -118,7 +118,7 @@ export function Sidebar({
       <nav className="flex flex-1 flex-col gap-0.5 px-3 pt-5">
         {NAV_ITEMS.filter(
           (item) =>
-            (item.href !== "/financie" && item.href !== "/manual") ||
+            (item.href !== "/financie" && item.href !== "/manual" && item.href !== "/plan") ||
             canViewFinance,
         ).map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
