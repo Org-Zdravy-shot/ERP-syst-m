@@ -23,8 +23,8 @@
     "bysquare": "^4.0.0",
     "fflate": "^0.8.3",
     "iron-session": "^8.0.4",
-    "next": "16.2.11",
-    "nodemailer": "^9.0.3",
+    "next": "16.4.2",
+    "nodemailer": "10.1.7",
     "pdf-lib": "^1.17.1",
     "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
@@ -49,7 +49,9 @@
     "deepmerge-ts": "8.0.1",
     "nanoid": "3.3.18",
     "postcss": "8.5.26",
-    "sharp": "0.35.3"
+    "sharp": "0.35.5",
+    "baseline-browser-mapping": "2.11.29",
+    "source-map-js": "1.2.2"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
