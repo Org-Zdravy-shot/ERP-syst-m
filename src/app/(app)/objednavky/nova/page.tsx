@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
+import { btnSecondary } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { OrderForm, type OrderFormInitial } from "../OrderForm";
 import { createOrder } from "../_actions";
@@ -48,7 +50,9 @@ export default async function NovaObjednavkaPage({
 
   return (
     <>
-      <PageHeader title="Nová objednávka" subtitle="Vytvorenie objednávky s položkami" />
+      <PageHeader title="Nová objednávka" subtitle="Vytvorenie objednávky s položkami">
+        <Link href="/produkty/nova" className={btnSecondary}>+ Pridať produkt do katalógu</Link>
+      </PageHeader>
       {inboxInfo && (
         <div className="mb-4 max-w-3xl rounded-[10px] bg-blue-50 px-4 py-3 text-sm text-blue-900">
           Vytvárate objednávku zo správy v inboxe: <strong>{inboxInfo.subject ?? "(bez predmetu)"}</strong>
