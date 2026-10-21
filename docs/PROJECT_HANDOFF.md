@@ -1,6 +1,6 @@
 # ERP Zdravý Shot — odovzdávací bod a pokračovanie
 
-Aktualizované: **12. septembra 2026**
+Pôvodný odovzdávací stav: **12. septembra 2026**. Bezpečnostný audit doplnený **21. októbra 2026**.
 
 Tento dokument je prvý zdroj po reštarte počítača alebo novej vývojovej
 relácii. Rovnaký stav je dostupný v produkčnom ERP na stránke
@@ -40,13 +40,9 @@ Overené 12. septembra 2026 bez vypísania tajných hodnôt:
 Tieto vypnuté brány sú zámerné. Produkčné faktúry, živá eFaktúra, Tatra API
 ani produkčný e-mail sa nesmú zapnúť iba preto, že sa začala nová relácia.
 
-## Prvý krok po návrate — zatiaľ NESPRAVENÉ
+## Bezpečnostný audit pred feature nasadením
 
-Pred ďalším aplikačným feature deployom najprv spracovať produkčný dependency
-audit v [issue #53](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/53).
-Audit z 12. septembra 2026 našiel 1 critical, 2 high a 1 moderate nález;
-odporúčaný Next.js patch je 16.3.5. Aktualizáciu spraviť samostatným PR s plnou
-regresiou, nie cez slepé `npm audit fix --force`.
+Produkčné závislosti boli opravené v samostatnom [PR #58](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/58), zlúčenom 21. októbra 2026. Po oprave `npm audit --omit=dev` našiel 0 produkčných nálezov; prešli testy, typecheck a build. Pred každým ďalším nasadením audit zopakovať.
 
 Vlastník účtu ešte **nespravil onboarding eFaktura.sk sandboxu**. Aktuálna
 úloha je [GitHub issue #44](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/44).
@@ -94,8 +90,7 @@ Následný krok vývoja:
 - Railway infra: migrovať deprecated `railway.toml` na nový Infrastructure as
   Code formát najneskôr do 1. decembra 2026 —
   [issue #51](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/51);
-- závislosti: odstrániť produkčné npm audit nálezy v samostatnom bezpečnostnom
-  PR — [issue #53](https://github.com/Org-Zdravy-shot/ERP-syst-m/issues/53);
+- závislosti: priebežne opakovať produkčný npm audit po aktualizáciách;
 - po splnení externých brán dokončiť spoločný E2E scenár a produkčný cutover.
 
 ## Bezpečný štart novej relácie

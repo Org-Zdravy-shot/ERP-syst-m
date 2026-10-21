@@ -40,6 +40,12 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h8a2 2 0 0 0 2-1.6L21 8H6" />
     </>
   ),
+  produkty: (
+    <>
+      <path d="M3 8l9-5 9 5-9 5-9-5Z" />
+      <path d="M3 8v8l9 5 9-5V8M12 13v8" />
+    </>
+  ),
   plan: (
     <>
       <circle cx="12" cy="12" r="8" />
@@ -81,6 +87,7 @@ const NAV_ITEMS = [
   { href: "/sklad", label: "Sklad", icon: "sklad" },
   { href: "/dodavatelia", label: "Dodávatelia", icon: "dodavatelia" },
   { href: "/objednavky", label: "Objednávky", icon: "objednavky" },
+  { href: "/produkty", label: "Produkty", icon: "produkty" },
   { href: "/plan", label: "Plnenie plánu", icon: "plan" },
   { href: "/financie", label: "Financie", icon: "financie" },
   { href: "/klienti", label: "Klienti", icon: "klienti" },
