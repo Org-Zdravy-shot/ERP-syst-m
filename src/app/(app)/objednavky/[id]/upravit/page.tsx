@@ -20,6 +20,7 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
         name: true,
         type: true,
         productPrices: { select: { productId: true, unitPriceCents: true } },
+        priceRules: { select: { productId: true, effectiveFrom: true, version: true, kind: true, unitPriceCents: true, discountBps: true } },
       },
       orderBy: { name: "asc" },
     }),
@@ -30,6 +31,10 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
     }),
   ]);
   if (!order || !EDITABLE_ORDER_STATUSES.includes(order.status)) notFound();
+  const clientsForForm = clients.map((client) => ({
+    ...client,
+    priceRules: client.priceRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10) })),
+  }));
 
   const action = updateOrder.bind(null, order.id);
   return (
@@ -37,7 +42,7 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
       <PageHeader title={`Upraviť ${order.orderNumber}`} subtitle="Úprava údajov a položiek objednávky" />
       <OrderForm
         action={action}
-        clients={clients}
+        clients={clientsForForm}
         products={products}
         initial={{
           clientId: order.clientId,

@@ -25,4 +25,27 @@ describe("resolveUnitPriceCents", () => {
   it("vráti null, ak B2B cena nie je nastavená", () => {
     expect(resolveUnitPriceCents("B2B", { ...product, priceB2bCents: null }, [])).toBeNull();
   });
+
+  it("platná verzia má prednosť a budúca cena ešte neplatí", () => {
+    const rules = [
+      { productId: product.id, effectiveFrom: "2026-10-22", version: 1, kind: "FIXED", unitPriceCents: 650, discountBps: null },
+      { productId: product.id, effectiveFrom: "2026-11-01", version: 2, kind: "FIXED", unitPriceCents: 600, discountBps: null },
+    ];
+    expect(resolveUnitPriceCents("B2B", product, [], rules, "2026-10-31")).toBe(650);
+    expect(resolveUnitPriceCents("B2B", product, [], rules, "2026-11-01")).toBe(600);
+  });
+
+  it("zľavu počíta z dohodnutej základnej B2B ceny v celých centoch", () => {
+    const rules = [{ productId: product.id, effectiveFrom: "2026-10-22", version: 1, kind: "DISCOUNT", unitPriceCents: null, discountBps: 1250 }];
+    expect(resolveUnitPriceCents("B2B", product, [{ productId: product.id, unitPriceCents: 725 }], rules, "2026-10-22")).toBe(634);
+    expect(resolveUnitPriceCents("B2B", { ...product, priceB2bCents: null }, [], rules, "2026-10-22")).toBeNull();
+  });
+
+  it("nová verzia v ten istý deň a DEFAULT vrátia základný cenník", () => {
+    const rules = [
+      { productId: product.id, effectiveFrom: "2026-10-22", version: 1, kind: "FIXED", unitPriceCents: 650, discountBps: null },
+      { productId: product.id, effectiveFrom: "2026-10-22", version: 2, kind: "DEFAULT", unitPriceCents: null, discountBps: null },
+    ];
+    expect(resolveUnitPriceCents("B2B", product, [], rules, "2026-10-22")).toBe(800);
+  });
 });

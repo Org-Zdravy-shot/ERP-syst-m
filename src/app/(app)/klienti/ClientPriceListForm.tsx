@@ -31,9 +31,9 @@ export function ClientPriceListForm({
   return (
     <form action={formAction} className="rounded-[14px] border border-stone-200 bg-white">
       <div className="border-b border-stone-100 px-5 py-3">
-        <h2 className="font-semibold text-stone-900">Individuálny B2B cenník</h2>
+        <h2 className="font-semibold text-stone-900">Základné individuálne B2B ceny</h2>
         <p className="mt-1 text-xs text-stone-500">
-          Prázdna cena znamená „nenastavená“ — v objednávke ju bude treba zadať ručne.
+          Verzie cien vyššie majú prednosť. Prázdna cena znamená „nenastavená“; zľava potrebuje základnú B2B cenu produktu alebo klienta.
         </p>
       </div>
       <div className="overflow-x-auto">
