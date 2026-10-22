@@ -84,6 +84,7 @@ export default async function ObjednavkyPage({
     include: {
       client: { select: { name: true } },
       items: { include: { product: { select: { name: true, isActive: true } } } },
+      charges: true,
       invoices: { select: { id: true } },
     },
     orderBy: ["dnes", "meska", "expedicia"].includes(view)
@@ -117,6 +118,9 @@ export default async function ObjednavkyPage({
           className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
         >
           🔁 Predplatné
+        </Link>
+        <Link href="/objednavky/synchronizacia" className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">
+          ↻ WooCommerce
         </Link>
         <Link
           href="/objednavky/nova"
@@ -191,7 +195,7 @@ export default async function ObjednavkyPage({
               </tr>
             )}
             {orders.map((order) => {
-              const totals = computeTotals(order.items);
+              const totals = computeTotals([...order.items, ...order.charges.map((charge) => ({ quantity: 1, ...charge }))]);
               const required = new Map<string, number>();
               for (const item of order.items) required.set(item.productId, (required.get(item.productId) ?? 0) + item.quantity);
               const alerts = [
@@ -217,7 +221,7 @@ export default async function ObjednavkyPage({
                   <td className="px-4 py-3">
                     <Badge color={ORDER_STATUS_COLORS[order.status]}>{orderStatusLabels[order.status] ?? order.status}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-right text-stone-600">{order.items.length}</td>
+                  <td className="px-4 py-3 text-right text-stone-600">{order.items.length + order.charges.length}</td>
                   <td className="px-4 py-3 text-right font-medium text-stone-900">{formatCents(totals.totalGrossCents)}</td>
                   <td className="px-4 py-3 text-stone-600">{order.invoices.length > 0 ? "✓" : "—"}</td>
                   <td className="px-4 py-3 text-xs text-amber-800">{alerts.length ? alerts.join(" · ") : "—"}</td>

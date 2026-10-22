@@ -24,6 +24,7 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
     include: {
       client: true,
       items: { include: { product: true } },
+      charges: true,
       invoices: true,
       subscription: true,
       inboxMessage: true,
@@ -32,7 +33,7 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
   });
   if (!order) notFound();
 
-  const totals = computeTotals(order.items);
+  const totals = computeTotals([...order.items, ...order.charges.map((charge) => ({ quantity: 1, ...charge }))]);
   const allowedStatuses = ORDER_STATUS_TRANSITIONS[order.status] ?? [];
   const isEditable = EDITABLE_ORDER_STATUSES.includes(order.status);
 
@@ -173,6 +174,13 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
                     </td>
                   </tr>
                 ))}
+                {order.charges.map((charge) => <tr key={charge.id} className="border-b border-stone-50 last:border-0">
+                  <td className="px-5 py-2.5 font-medium text-stone-900">{charge.description}</td>
+                  <td className="px-5 py-2.5 text-right text-stone-600">1</td>
+                  <td className="px-5 py-2.5 text-right text-stone-600">{formatCents(charge.unitPriceCents)}</td>
+                  <td className="px-5 py-2.5 text-right text-stone-600">{charge.vatRate} %</td>
+                  <td className="px-5 py-2.5 text-right font-medium text-stone-900">{formatCents(charge.unitPriceCents)}</td>
+                </tr>)}
               </tbody>
               <tfoot>
                 <tr className="border-t border-stone-200 text-sm">
