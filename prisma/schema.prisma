@@ -758,6 +758,7 @@ model Invoice {
   emailDeliveries          EmailDelivery[]
   eInvoiceTransmissions    EInvoiceTransmission[]
   receivedEInvoiceDocument EInvoiceReceivedDocument? @relation("ReceivedEInvoiceImport")
+  ekasaSales               EkasaSale[]
 
   @@unique([source, externalId])
   @@index([direction, documentStatus, issueDate])
@@ -1116,11 +1117,14 @@ model EkasaSale {
   quantity        Float    @default(1)
   totalGrossCents Int
   vatRate         Int? // null = zdroj sadzbu DPH neposkytol; nikdy ju nehádame
+  matchedInvoiceId String?
+  matchedInvoice   Invoice? @relation(fields: [matchedInvoiceId], references: [id], onDelete: SetNull)
   importBatch     String // názov súboru + čas importu (dedup / audit)
   createdAt       DateTime @default(now())
 
   @@index([receiptNumber, saleDate])
   @@index([source, saleDate])
+  @@index([matchedInvoiceId])
 }
 
 // ---------- Plnenie plánu ----------
