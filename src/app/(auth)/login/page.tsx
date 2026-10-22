@@ -76,7 +76,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-xs text-stone-400">
-          100% Prírodné · Ručná výroba · Bez pasterizácie
+          100 % prírodné · Ručná výroba · Zdravý Shot
         </p>
       </div>
     </main>
