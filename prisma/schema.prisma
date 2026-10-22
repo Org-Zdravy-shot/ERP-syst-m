@@ -1142,3 +1142,22 @@ model MonthlyPlan {
 
   @@unique([year, month])
 }
+
+// Vlastné plánovacie obdobia; mesačné plány zostávajú pre historické dáta.
+model PeriodPlan {
+  id                       String   @id @default(cuid())
+  name                     String
+  startDate                DateTime @db.Date
+  endDate                  DateTime @db.Date
+  targetTurnoverGrossCents Int      @default(0)
+  targetRevenueNetCents    Int      @default(0)
+  targetCostsNetCents      Int      @default(0)
+  targetCashInCents        Int      @default(0)
+  targetCashOutCents       Int      @default(0)
+  targetProductionUnits    Int      @default(0)
+  note                     String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([startDate, endDate])
+}
