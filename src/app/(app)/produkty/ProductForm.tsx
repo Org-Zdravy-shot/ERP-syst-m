@@ -20,13 +20,23 @@ function euros(cents: number | null) {
   return cents === null ? "" : (cents / 100).toFixed(2).replace(".", ",");
 }
 
-export function ProductForm({ action, product }: {
+export function ProductForm({ action, product, orderReturn }: {
   action: (previous: ProductFormState, formData: FormData) => Promise<ProductFormState>;
   product?: ProductValues;
+  orderReturn?: { klient?: string; inbox?: string };
 }) {
   const [state, formAction, pending] = useActionState(action, {});
+  const orderParams = new URLSearchParams();
+  if (orderReturn?.klient) orderParams.set("klient", orderReturn.klient);
+  if (orderReturn?.inbox) orderParams.set("inbox", orderReturn.inbox);
+  const orderHref = `/objednavky/nova${orderParams.size ? `?${orderParams.toString()}` : ""}`;
   return (
     <form action={formAction} className={`${card} max-w-2xl space-y-5 p-6`}>
+      {orderReturn && <>
+        <input type="hidden" name="returnToOrder" value="1" />
+        <input type="hidden" name="returnKlient" value={orderReturn.klient ?? ""} />
+        <input type="hidden" name="returnInbox" value={orderReturn.inbox ?? ""} />
+      </>}
       {state.error && <p role="alert" className={errorBox}>{state.error}</p>}
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
@@ -71,7 +81,9 @@ export function ProductForm({ action, product }: {
       <p className="text-xs text-stone-500">Založenie produktu nevytvára receptúru, šaržu ani skladové zásoby. Expedícia vyžaduje dostatok kusov na sklade.</p>
       <div className="flex gap-2">
         <button className={btnPrimary} type="submit" disabled={pending}>{pending ? "Ukladá sa…" : product ? "Uložiť zmeny" : "Vytvoriť produkt"}</button>
-        <Link href="/produkty" className={btnSecondary}>Späť na produkty</Link>
+        <Link href={orderReturn ? orderHref : "/produkty"} className={btnSecondary}>
+          {orderReturn ? "Späť na objednávku" : "Späť na produkty"}
+        </Link>
       </div>
     </form>
   );

@@ -81,6 +81,14 @@ export async function createProduct(_prev: ProductFormState, formData: FormData)
   revalidatePath("/produkty");
   revalidatePath("/objednavky/nova");
   revalidatePath("/objednavky/predplatne");
+  if (formData.get("returnToOrder") === "1") {
+    const params = new URLSearchParams({ produkt: product.id });
+    const klient = String(formData.get("returnKlient") ?? "").trim();
+    const inbox = String(formData.get("returnInbox") ?? "").trim();
+    if (klient && klient.length <= 100) params.set("klient", klient);
+    if (inbox && inbox.length <= 100) params.set("inbox", inbox);
+    redirect(`/objednavky/nova?${params.toString()}`);
+  }
   redirect(`/produkty/${product.id}/upravit?ulozene=1`);
 }
 
