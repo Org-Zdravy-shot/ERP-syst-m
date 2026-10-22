@@ -29,7 +29,7 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
     prisma.client.findUnique({
       where: { id },
       include: {
-        orders: { include: { items: true }, orderBy: { orderDate: "desc" } },
+        orders: { include: { items: true, charges: true }, orderBy: { orderDate: "desc" } },
         invoices: { orderBy: { issueDate: "desc" } },
         subscriptions: { include: { items: { include: { product: true } } }, orderBy: { createdAt: "desc" } },
         productPrices: true,
@@ -205,7 +205,7 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
                   <tr><td colSpan={5} className="px-5 py-8 text-center text-stone-400">Žiadne objednávky.</td></tr>
                 )}
                 {client.orders.map((order) => {
-                  const totals = computeTotals(order.items);
+                  const totals = computeTotals([...order.items, ...order.charges.map((charge) => ({ quantity: 1, ...charge }))]);
                   return (
                     <tr key={order.id} className="border-b border-stone-50 last:border-0 hover:bg-stone-50">
                       <td className="px-5 py-2.5">

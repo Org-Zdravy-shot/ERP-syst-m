@@ -28,7 +28,7 @@ export async function issueInvoiceFromOrder(
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { client: true, items: { include: { product: true } } },
+      include: { client: true, items: { include: { product: true } }, charges: true },
     });
     if (!order) throw new Error("Objednávka neexistuje.");
     if (order.status === "ZRUSENA") throw new Error("Zo zrušenej objednávky nemožno vytvoriť faktúru.");
@@ -44,7 +44,7 @@ export async function issueInvoiceFromOrder(
       dueDate: new Date(now.getTime() + 14 * 24 * 3600 * 1000),
       deliveryDate: order.deliveryDate ?? undefined,
       currency: "EUR",
-      items: order.items.map((item) => ({
+      items: [...order.items.map((item) => ({
         productId: item.productId,
         productSku: item.product.sku,
         description: `${item.product.name} (${item.product.sku})`,
@@ -52,7 +52,13 @@ export async function issueInvoiceFromOrder(
         unit: item.product.unit,
         unitPriceCents: item.unitPriceCents,
         vatRate: item.vatRate,
-      })),
+      })), ...order.charges.map((charge) => ({
+        description: charge.description,
+        quantity: 1,
+        unit: "ks",
+        unitPriceCents: charge.unitPriceCents,
+        vatRate: charge.vatRate,
+      }))],
       actorId: user.userId,
     });
     invoiceId = created.id;

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATHS = new Set([
   "/api/health",
   "/api/financie/einvoice/webhook",
+  "/api/woocommerce/orders",
 ]);
 
 // Rýchla kontrola prítomnosti session cookie — skutočné overenie robí
