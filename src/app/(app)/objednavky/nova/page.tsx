@@ -5,6 +5,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { OrderForm, type OrderFormInitial } from "../OrderForm";
 import { createOrder } from "../_actions";
 
+const priceRuleSelect = {
+  productId: true, effectiveFrom: true, version: true, kind: true,
+  unitPriceCents: true, discountBps: true,
+} as const;
+
 export default async function NovaObjednavkaPage({
   searchParams,
 }: {
@@ -20,6 +25,7 @@ export default async function NovaObjednavkaPage({
         name: true,
         type: true,
         productPrices: { select: { productId: true, unitPriceCents: true } },
+        priceRules: { select: priceRuleSelect },
       },
       orderBy: { name: "asc" },
     }),
@@ -29,6 +35,10 @@ export default async function NovaObjednavkaPage({
       orderBy: { name: "asc" },
     }),
   ]);
+  const clientsForForm = clients.map((client) => ({
+    ...client,
+    priceRules: client.priceRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10) })),
+  }));
 
   const initial: OrderFormInitial = { clientId: klient };
   let inboxMessageId: string | undefined;
@@ -61,7 +71,7 @@ export default async function NovaObjednavkaPage({
       )}
       <OrderForm
         action={createOrder}
-        clients={clients}
+        clients={clientsForForm}
         products={products}
         initial={initial}
         inboxMessageId={inboxMessageId}

@@ -13,7 +13,7 @@ export function SubscriptionForm({
   products,
 }: {
   action: (state: OrderFormState, data: FormData) => Promise<OrderFormState>;
-  clients: OrderFormClient[];
+  clients: Pick<OrderFormClient, "id" | "name" | "type">[];
   products: OrderFormProduct[];
 }) {
   const [state, formAction, pending] = useActionState(action, {});

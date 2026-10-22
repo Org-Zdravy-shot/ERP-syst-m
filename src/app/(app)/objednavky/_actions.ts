@@ -296,7 +296,7 @@ export async function generateSubscriptionOrders(_prevState: OrderFormState, _fo
   const due = await prisma.subscription.findMany({
     where: { isActive: true, nextRunDate: { lte: now } },
     include: {
-      client: { include: { productPrices: true } },
+      client: { include: { productPrices: true, priceRules: true } },
       items: { include: { product: true } },
     },
   });
@@ -305,7 +305,11 @@ export async function generateSubscriptionOrders(_prevState: OrderFormState, _fo
 
   for (const sub of due) {
     for (const item of sub.items) {
-      const unitPriceCents = resolveUnitPriceCents(sub.client.type, item.product, sub.client.productPrices);
+      const unitPriceCents = resolveUnitPriceCents(
+        sub.client.type, item.product, sub.client.productPrices,
+        sub.client.priceRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10) })),
+        sub.nextRunDate.toISOString().slice(0, 10),
+      );
       if (unitPriceCents === null) {
         return {
           error: `Klient ${sub.client.name} nemá nastavenú B2B cenu produktu ${item.product.name}. Objednávky sa nevygenerovali.`,
@@ -332,6 +336,8 @@ export async function generateSubscriptionOrders(_prevState: OrderFormState, _fo
                 sub.client.type,
                 item.product,
                 sub.client.productPrices,
+                sub.client.priceRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10) })),
+                sub.nextRunDate.toISOString().slice(0, 10),
               );
               if (unitPriceCents === null) throw new Error("B2B cena nie je nastavená.");
               return {

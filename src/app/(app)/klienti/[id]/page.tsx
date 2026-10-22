@@ -13,8 +13,10 @@ import {
 import { formatCents, formatDate } from "@/lib/format";
 import { computeTotals, INVOICE_SOURCE_LABELS } from "@/lib/invoicing";
 import { invoiceDocumentStatusLabels, orderStatusLabels, orderChannelLabels } from "@/lib/zod-schemas";
-import { saveClientProductPrices, toggleClientActive } from "../_actions";
+import { createClientPriceRule, saveClientProductPrices, toggleClientActive } from "../_actions";
 import { ClientPriceListForm } from "../ClientPriceListForm";
+import { ClientPriceRuleForm } from "../ClientPriceRuleForm";
+import { resolveUnitPriceCents, slovakDateKey } from "@/app/(app)/objednavky/pricing";
 import { SUBSCRIPTION_FREQUENCY_LABELS } from "@/app/(app)/objednavky/konstanty";
 
 export default async function KlientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,11 +33,12 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
         invoices: { orderBy: { issueDate: "desc" } },
         subscriptions: { include: { items: { include: { product: true } } }, orderBy: { createdAt: "desc" } },
         productPrices: true,
+        priceRules: { orderBy: [{ effectiveFrom: "desc" }, { version: "desc" }] },
       },
     }),
     prisma.product.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, sku: true, priceB2cCents: true },
+      select: { id: true, name: true, sku: true, priceB2cCents: true, priceB2bCents: true },
       orderBy: [{ name: "asc" }, { volumeMl: "asc" }],
     }),
   ]);
@@ -43,7 +46,10 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
 
   const toggleAction = toggleClientActive.bind(null, client.id);
   const savePricesAction = saveClientProductPrices.bind(null, client.id);
+  const createRuleAction = createClientPriceRule.bind(null, client.id);
   const clientPrices = new Map(client.productPrices.map((price) => [price.productId, price.unitPriceCents]));
+  const priceRules = client.priceRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10) }));
+  const today = slovakDateKey();
   const totalRevenueCents = client.invoices
     .filter((i) => i.direction === "VYDANA" && i.documentStatus === "ISSUED")
     .reduce((sum, i) => sum + i.totalGrossCents * (i.documentType === "CREDIT_NOTE" ? -1 : 1), 0);
@@ -112,12 +118,15 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
 
           {client.type === "B2B" && canViewFinance && !canConfigureFinance && (
             <section className="rounded-[14px] border border-stone-200 bg-white p-5">
-              <h2 className="mb-3 font-semibold text-stone-900">Individuálny B2B cenník</h2>
+              <h2 className="mb-3 font-semibold text-stone-900">Aktuálny B2B cenník</h2>
               <dl className="divide-y divide-stone-100">
                 {products.map((product) => (
                   <div key={product.id}>
                     {infoRow(product.name, (
-                      clientPrices.has(product.id) ? formatCents(clientPrices.get(product.id)!) : "Nenastavená"
+                      (() => {
+                        const cents = resolveUnitPriceCents(client.type, product, client.productPrices, priceRules, today);
+                        return cents === null ? "Nenastavená" : formatCents(cents);
+                      })()
                     ))}
                   </div>
                 ))}
@@ -151,13 +160,30 @@ export default async function KlientDetailPage({ params }: { params: Promise<{ i
 
         <div className="space-y-6 lg:col-span-2">
           {client.type === "B2B" && canConfigureFinance && (
-            <ClientPriceListForm
-              action={savePricesAction}
-              products={products.map((product) => ({
-                ...product,
-                unitPriceCents: clientPrices.get(product.id) ?? null,
-              }))}
-            />
+            <>
+              <ClientPriceRuleForm action={createRuleAction} products={products} today={today} />
+              <section className="rounded-[14px] border border-stone-200 bg-white">
+                <h2 className="border-b border-stone-100 px-5 py-3 font-semibold">Verzie cien a zliav</h2>
+                {client.priceRules.length === 0 ? <p className="px-5 py-4 text-sm text-stone-500">Zatiaľ bez verzií; platia základné ceny nižšie.</p> :
+                  <div className="overflow-x-auto"><table className="w-full text-sm">
+                    <thead><tr className="border-b border-stone-100 text-left text-xs uppercase text-stone-500">
+                      <th className="px-5 py-2">Produkt</th><th className="px-5 py-2">Od</th><th className="px-5 py-2">Verzia</th><th className="px-5 py-2">Pravidlo</th><th className="px-5 py-2">Poznámka</th>
+                    </tr></thead><tbody>{client.priceRules.map((rule) => <tr key={rule.id} className="border-b border-stone-50">
+                      <td className="px-5 py-2">{products.find((product) => product.id === rule.productId)?.name ?? "Neaktívny produkt"}</td>
+                      <td className="px-5 py-2">{formatDate(rule.effectiveFrom)}</td>
+                      <td className="px-5 py-2">{rule.version}</td>
+                      <td className="px-5 py-2">{rule.kind === "FIXED" ? `Pevná ${formatCents(rule.unitPriceCents ?? 0)}` : rule.kind === "DISCOUNT" ? `Zľava ${((rule.discountBps ?? 0) / 100).toLocaleString("sk-SK")} %` : "Základný cenník"}</td>
+                      <td className="px-5 py-2 text-stone-500">{rule.note ?? "—"}</td>
+                    </tr>)}</tbody></table></div>}
+              </section>
+              <ClientPriceListForm
+                action={savePricesAction}
+                products={products.map((product) => ({
+                  ...product,
+                  unitPriceCents: clientPrices.get(product.id) ?? null,
+                }))}
+              />
+            </>
           )}
 
           <section className="rounded-[14px] border border-stone-200 bg-white">

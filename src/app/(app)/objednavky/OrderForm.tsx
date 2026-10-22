@@ -5,13 +5,14 @@ import Link from "next/link";
 import { formatCents, parseEurToCents } from "@/lib/format";
 import { orderChannelLabels } from "@/lib/zod-schemas";
 import type { OrderFormState } from "./_actions";
-import { resolveUnitPriceCents } from "./pricing";
+import { resolveUnitPriceCents, slovakDateKey, type ClientPriceRuleInput } from "./pricing";
 
 export interface OrderFormClient {
   id: string;
   name: string;
   type: string;
   productPrices: Array<{ productId: string; unitPriceCents: number }>;
+  priceRules: ClientPriceRuleInput[];
 }
 
 export interface OrderFormProduct {
@@ -65,6 +66,7 @@ export function OrderForm({
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
+  const [pricingDate, setPricingDate] = useState(initial?.deliveryDate || slovakDateKey());
   const [rows, setRows] = useState<ItemRow[]>(
     initial?.items?.length
       ? initial.items.map((item) => ({
@@ -89,7 +91,7 @@ export function OrderForm({
       return;
     }
     const priceCents = client
-      ? resolveUnitPriceCents(client.type, product, client.productPrices)
+      ? resolveUnitPriceCents(client.type, product, client.productPrices, client.priceRules, pricingDate)
       : null;
     updateRow(index, {
       productId,
@@ -104,8 +106,19 @@ export function OrderForm({
     setRows((previous) => previous.map((row) => {
       const product = products.find((candidate) => candidate.id === row.productId);
       if (!product || !nextClient) return { ...row, priceEur: "" };
-      const priceCents = resolveUnitPriceCents(nextClient.type, product, nextClient.productPrices);
+      const priceCents = resolveUnitPriceCents(nextClient.type, product, nextClient.productPrices, nextClient.priceRules, pricingDate);
       return { ...row, priceEur: priceCents === null ? "" : centsToEurInput(priceCents) };
+    }));
+  }
+
+  function onDeliveryDateChange(date: string) {
+    const nextDate = date || slovakDateKey();
+    setPricingDate(nextDate);
+    setRows((previous) => previous.map((row) => {
+      const product = products.find((candidate) => candidate.id === row.productId);
+      if (!product || !client) return row;
+      const price = resolveUnitPriceCents(client.type, product, client.productPrices, client.priceRules, nextDate);
+      return { ...row, priceEur: price === null ? "" : centsToEurInput(price) };
     }));
   }
 
@@ -186,7 +199,7 @@ export function OrderForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
           <label htmlFor="deliveryDate" className={labelClass}>Dátum dodania</label>
-          <input id="deliveryDate" name="deliveryDate" type="date" defaultValue={initial?.deliveryDate ?? ""} className={inputClass} />
+          <input id="deliveryDate" name="deliveryDate" type="date" defaultValue={initial?.deliveryDate ?? ""} onChange={(event) => onDeliveryDateChange(event.target.value)} className={inputClass} />
         </div>
         <div className="sm:col-span-2">
           <label htmlFor="note" className={labelClass}>Poznámka</label>
@@ -223,7 +236,7 @@ export function OrderForm({
                 const cents = rowCents(row);
                 const selectedProduct = products.find((product) => product.id === row.productId);
                 const missingB2bPrice = !!client && client.type === "B2B" && !!selectedProduct &&
-                  resolveUnitPriceCents(client.type, selectedProduct, client.productPrices) === null;
+                  resolveUnitPriceCents(client.type, selectedProduct, client.productPrices, client.priceRules, pricingDate) === null;
                 return (
                   <tr key={index} className="border-b border-stone-100 last:border-0">
                     <td className="px-3 py-2">
