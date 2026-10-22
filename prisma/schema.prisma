@@ -633,6 +633,7 @@ model Order {
   updatedAt      DateTime      @updatedAt
 
   items     OrderItem[]
+  charges   OrderCharge[]
   invoices  Invoice[]
   movements StockMovement[]
   wooSync   WooOrderSync?
@@ -647,6 +648,20 @@ model OrderItem {
   quantity       Int
   unitPriceCents Int // snapshot ceny v čase objednávky
   vatRate        Int     @default(20)
+}
+
+// Doprava a poplatky sú súčasťou sumy objednávky a faktúry, nie skladový produkt.
+model OrderCharge {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind           String   // "SHIPPING" | "FEE"
+  description    String
+  unitPriceCents Int
+  vatRate        Int
+  createdAt      DateTime @default(now())
+
+  @@index([orderId])
 }
 
 model Subscription {
