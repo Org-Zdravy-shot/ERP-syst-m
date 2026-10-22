@@ -32,4 +32,10 @@ describe("allocateProductStock", () => {
       { batchId: "lot", expiryDate: new Date("2026-11-01"), quantity: 10 },
     ], -4, 7, today)).toThrow(InsufficientProductStockError);
   });
+
+  it("podporuje aj čiastočný ručný výdaj produktu", () => {
+    expect(allocateProductStock([
+      { batchId: "lot", expiryDate: new Date("2026-11-01"), quantity: 2.5 },
+    ], 0, 1.25, today)).toEqual([{ batchId: "lot", quantity: 1.25 }]);
+  });
 });

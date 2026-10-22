@@ -22,7 +22,7 @@ export function allocateProductStock(
   demand: number,
   earliestValidExpiry: Date,
 ): StockAllocation[] {
-  if (!Number.isSafeInteger(demand) || demand <= 0) throw new Error("Množstvo musí byť kladný počet kusov.");
+  if (!Number.isFinite(demand) || demand <= 0) throw new Error("Množstvo musí byť kladné číslo.");
 
   const validBatches = batches
     .filter((batch) => batch.quantity > 0 && batch.expiryDate >= earliestValidExpiry)
