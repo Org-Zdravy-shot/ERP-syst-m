@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 
 export interface MonthlyActuals {
-  revenueCents: number; // vydané faktúry (bez storna) + eKasa predaje
+  revenueCents: number; // vydané doklady + eKasa bez priradenej faktúry
   productionUnits: number; // kusy z hotových šarží
 }
 
@@ -11,7 +11,8 @@ function monthKey(date: Date): string {
 
 /**
  * Skutočnosť po mesiacoch — počíta sa vždy live, nič sa nekešuje.
- * Tržby = finalizované vydané faktúry mínus dobropisy podľa issueDate + eKasa podľa saleDate.
+ * Evidované predaje = finalizované vydané faktúry mínus dobropisy podľa issueDate
+ * + eKasa bez priradenej faktúry podľa saleDate. Nepárovaný rovnaký predaj môže zostať duplicitný.
  * Výroba = producedQty hotových (DONE) šarží podľa productionDate.
  */
 export async function getMonthlyActualsMap(): Promise<Map<string, MonthlyActuals>> {
@@ -20,7 +21,7 @@ export async function getMonthlyActualsMap(): Promise<Map<string, MonthlyActuals
       where: { direction: "VYDANA", documentStatus: "ISSUED" },
       select: { issueDate: true, documentType: true, totalGrossCents: true },
     }),
-    prisma.ekasaSale.findMany({ select: { saleDate: true, totalGrossCents: true } }),
+    prisma.ekasaSale.findMany({ where: { matchedInvoiceId: null }, select: { saleDate: true, totalGrossCents: true } }),
     prisma.productionBatch.findMany({
       where: { status: "DONE" },
       select: { productionDate: true, producedQty: true },
