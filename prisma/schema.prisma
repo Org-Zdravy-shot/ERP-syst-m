@@ -567,6 +567,21 @@ model ProductionBatch {
   movements StockMovement[]
 }
 
+// Jedno WooCommerce ID zodpovedá najviac jednej ERP objednávke.
+// Neúspešné mapovanie zostáva viditeľné bez vytvorenia neúplnej objednávky.
+model WooOrderSync {
+  id              String    @id @default(cuid())
+  externalOrderId String    @unique
+  orderId         String?   @unique
+  order           Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  lastModifiedAt  DateTime?
+  lastPayloadHash String?
+  state           String    @default("NEEDS_REVIEW") // "IMPORTED" | "NEEDS_REVIEW" | "IGNORED"
+  issue           String?
+  lastSeenAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+}
+
 // ---------- Sklad: pohybový ledger ----------
 // Presne jedno z materialId/productId je vyplnené (stráži app kód).
 // Stav zásob = SUM(quantity) — quantity je signed (+príjem / −výdaj).
@@ -620,6 +635,7 @@ model Order {
   items     OrderItem[]
   invoices  Invoice[]
   movements StockMovement[]
+  wooSync   WooOrderSync?
 }
 
 model OrderItem {
