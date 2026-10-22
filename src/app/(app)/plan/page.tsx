@@ -30,7 +30,7 @@ export default async function PlanPage() {
     <>
       <PageHeader
         title="Plnenie plánu"
-        subtitle="Mesačné ciele vs. skutočnosť (faktúry + eKasa, hotové šarže) — počítané live"
+        subtitle="Mesačné ciele vs. evidované predaje (vydané doklady + nespárovaná eKasa) a hotové šarže"
       />
 
       <PlanForm defaultYear={now.getFullYear()} defaultMonth={now.getMonth() + 1} />

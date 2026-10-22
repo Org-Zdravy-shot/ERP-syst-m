@@ -77,9 +77,9 @@ export default async function DashboardPage() {
       <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {canViewFinance && (
           <KpiCard
-            label="Tržby tento mesiac"
+            label="Evidované predaje tento mesiac"
             value={formatCents(actuals.revenueCents)}
-            hint="vydané faktúry + eKasa"
+            hint="vydané faktúry + nespárovaná eKasa"
           />
         )}
         <KpiCard label="Otvorené objednávky" value={String(openOrdersCount)} hint="nové, potvrdené, vo výrobe" />

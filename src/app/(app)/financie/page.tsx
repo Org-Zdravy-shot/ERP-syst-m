@@ -21,7 +21,7 @@ export default async function FinanciePage() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [issuedDocuments, receivedDocuments, outstandingInvoices, ekasaThisMonth, products] =
+  const [issuedDocuments, receivedDocuments, outstandingInvoices, ekasaThisMonth, matchedEkasaThisMonth, cashIn, cashOut, products] =
     await Promise.all([
       prisma.invoice.findMany({
         where: { direction: "VYDANA", documentStatus: "ISSUED", issueDate: { gte: monthStart } },
@@ -40,9 +40,15 @@ export default async function FinanciePage() {
         },
       }),
       prisma.ekasaSale.aggregate({
-        where: { saleDate: { gte: monthStart } },
+        where: { saleDate: { gte: monthStart }, matchedInvoiceId: null },
         _sum: { totalGrossCents: true },
       }),
+      prisma.ekasaSale.aggregate({
+        where: { saleDate: { gte: monthStart }, matchedInvoiceId: { not: null } },
+        _sum: { totalGrossCents: true },
+      }),
+      prisma.payment.aggregate({ where: { direction: "INCOMING", paidAt: { gte: monthStart } }, _sum: { amountCents: true } }),
+      prisma.payment.aggregate({ where: { direction: "OUTGOING", paidAt: { gte: monthStart } }, _sum: { amountCents: true } }),
       prisma.product.findMany({
         where: { isActive: true },
         orderBy: { name: "asc" },
@@ -103,12 +109,17 @@ export default async function FinanciePage() {
         </Link>
       </PageHeader>
 
-      <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <p className="mb-4 rounded-[10px] bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Operatívny prehľad podľa dátumu dokladov. Párovaná eKasa sa k faktúre nepripočíta druhýkrát; nepárované rovnaké predaje môžu stále nadhodnotiť súčet. Prijaté doklady nie sú úplné náklady a peňažné toky vychádzajú len z evidovaných platieb.
+      </p>
+      <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
-          label="Tržby tento mesiac"
+          label="Evidované predaje s DPH"
           value={formatCents(revenueThisMonth)}
-          hint={`${issuedDocuments.length} dokladov + eKasa`}
+          hint={`Vydané doklady + nespárovaná eKasa; spárované ${formatCents(matchedEkasaThisMonth._sum.totalGrossCents ?? 0)} vylúčené`}
         />
+        <KpiCard label="Vydané doklady s DPH" value={formatCents(issuedThisMonthCents)} hint={`${issuedDocuments.length} dokladov vrátane dobropisov`} />
+        <KpiCard label="eKasa bez párovania" value={formatCents(ekasaThisMonth._sum.totalGrossCents ?? 0)} hint="Môže obsahovať rovnaký predaj ako faktúra" />
         <KpiCard
           label="Neuhradené faktúry"
           value={formatCents(unpaidCents)}
@@ -120,10 +131,12 @@ export default async function FinanciePage() {
           hint={overdue > 0 ? "faktúr treba urgovať" : "všetko v termíne"}
         />
         <KpiCard
-          label="Náklady tento mesiac"
+          label="Prijaté doklady s DPH"
           value={formatCents(receivedThisMonthCents)}
-          hint={`${receivedDocuments.length} prijatých dokladov`}
+          hint={`${receivedDocuments.length} prijatých dokladov; nie úplné náklady`}
         />
+        <KpiCard label="Prijaté platby" value={formatCents(cashIn._sum.amountCents ?? 0)} hint="Z evidovaných platieb, nie z vystavených dokladov" />
+        <KpiCard label="Odoslané platby" value={formatCents(cashOut._sum.amountCents ?? 0)} hint="Z evidovaných platieb" />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
