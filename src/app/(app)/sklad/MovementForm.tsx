@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createStockMovement, type MovementFormState } from "./_actions";
 import { errorBox, input, labelSmall } from "@/components/ui";
 
@@ -10,7 +10,8 @@ interface Item {
   unit: string;
 }
 
-export function MovementForm({ materials, products }: { materials: Item[]; products: Item[] }) {
+export function MovementForm({ materials, products, batches }: { materials: Item[]; products: Item[]; batches: Array<{ id: string; productId: string; batchNumber: string; expiryDate: string }> }) {
+  const [itemRef, setItemRef] = useState("");
   const [state, formAction, pending] = useActionState<MovementFormState, FormData>(
     createStockMovement,
     {},
@@ -32,7 +33,7 @@ export function MovementForm({ materials, products }: { materials: Item[]; produ
 
       <div className="lg:col-span-2">
         <label className={labelSmall}>Položka</label>
-        <select name="itemRef" required className={input} defaultValue="">
+        <select name="itemRef" required className={input} value={itemRef} onChange={(event) => setItemRef(event.target.value)}>
           <option value="" disabled>
             — vyberte —
           </option>
@@ -52,6 +53,17 @@ export function MovementForm({ materials, products }: { materials: Item[]; produ
           </optgroup>
         </select>
       </div>
+
+      {itemRef.startsWith("p:") && <div className="sm:col-span-2 lg:col-span-6">
+        <label className={labelSmall}>Šarža produktu (voliteľné)</label>
+        <select name="batchId" className={input} defaultValue="" key={itemRef}>
+          <option value="">Automaticky podľa exspirácie pri výdaji / neurčená pri príjme</option>
+          {batches.filter((batch) => batch.productId === itemRef.slice(2)).map((batch) => (
+            <option key={batch.id} value={batch.id}>{batch.batchNumber} · exspirácia {batch.expiryDate}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-stone-500">Pri korekcii exspirovanej šarže ju vyberte výslovne. Príjem bez šarže zostane v sklade nepriradený.</p>
+      </div>}
 
       <div>
         <label className={labelSmall}>Množstvo</label>

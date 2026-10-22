@@ -27,7 +27,7 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
       invoices: true,
       subscription: true,
       inboxMessage: true,
-      movements: { include: { product: true }, orderBy: { createdAt: "asc" } },
+      movements: { include: { product: true, batch: { select: { batchNumber: true, expiryDate: true } } }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!order) notFound();
@@ -200,6 +200,7 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
                     <th className="px-5 py-2">Dátum</th>
                     <th className="px-5 py-2">Produkt</th>
                     <th className="px-5 py-2 text-right">Množstvo</th>
+                    <th className="px-5 py-2">Šarža / exspirácia</th>
                     <th className="px-5 py-2">Poznámka</th>
                   </tr>
                 </thead>
@@ -210,6 +211,9 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
                       <td className="px-5 py-2.5 text-stone-900">{movement.product?.name ?? "—"}</td>
                       <td className={`px-5 py-2.5 text-right font-medium ${movement.quantity < 0 ? "text-red-700" : "text-stone-950"}`}>
                         {movement.quantity > 0 ? "+" : ""}{movement.quantity} ks
+                      </td>
+                      <td className="px-5 py-2.5 text-stone-600">
+                        {movement.batch ? `${movement.batch.batchNumber} · ${formatDate(movement.batch.expiryDate)}` : "Neurčená"}
                       </td>
                       <td className="px-5 py-2.5 text-stone-600">{movement.note ?? "—"}</td>
                     </tr>

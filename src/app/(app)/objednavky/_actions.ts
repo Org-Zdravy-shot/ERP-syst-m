@@ -9,6 +9,7 @@ import { nextNumber } from "@/lib/invoicing";
 import { orderChannelSchema, orderStatusSchema, subscriptionFrequencySchema, orderStatusLabels } from "@/lib/zod-schemas";
 import { ORDER_STATUS_TRANSITIONS, EDITABLE_ORDER_STATUSES } from "./konstanty";
 import { resolveUnitPriceCents } from "./pricing";
+import { allocateProductStock, InsufficientProductStockError } from "@/lib/stock-allocation";
 
 export interface OrderFormState {
   error?: string;
@@ -131,10 +132,12 @@ export async function setOrderStatus(orderId: string, _prevState: OrderFormState
   const statusParsed = orderStatusSchema.safeParse(String(formData.get("status") ?? ""));
   if (!statusParsed.success) return { error: "Neplatný stav." };
   const newStatus = statusParsed.data;
-  await requireUser();
+  const user = await requireUser();
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Zamkne objednávku aj pri dvoch súbežných kliknutiach z rôznych zariadení.
+      await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
       const order = await tx.order.findUnique({
         where: { id: orderId },
         include: { items: { include: { product: true } } },
@@ -147,33 +150,67 @@ export async function setOrderStatus(orderId: string, _prevState: OrderFormState
       }
 
       if (newStatus === "EXPEDOVANA") {
+        const demand = new Map<string, { name: string; quantity: number }>();
         for (const item of order.items) {
-          const sum = await tx.stockMovement.aggregate({
-            where: { productId: item.productId },
-            _sum: { quantity: true },
-          });
-          const available = sum._sum.quantity ?? 0;
-          if (available < item.quantity) {
-            throw new Error(
-              `Nedostatok zásob: ${item.product.name} — na sklade ${available} ks, potrebných ${item.quantity} ks.`,
-            );
-          }
+          const current = demand.get(item.productId);
+          demand.set(item.productId, { name: item.product.name, quantity: (current?.quantity ?? 0) + item.quantity });
         }
-        for (const item of order.items) {
-          await tx.stockMovement.create({
-            data: {
-              type: "PREDAJ",
-              productId: item.productId,
-              quantity: -item.quantity,
-              orderId: order.id,
-              note: `Expedícia ${order.orderNumber}`,
-            },
-          });
+        const productIds = [...demand.keys()].sort();
+        // Všetky výdaje produktu používajú rovnaký zámok v pevnom poradí.
+        for (const productId of productIds) {
+          await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${productId} FOR UPDATE`;
+        }
+        const [balances, batches] = await Promise.all([
+          tx.stockMovement.groupBy({
+            by: ["productId", "batchId"],
+            where: { productId: { in: productIds } },
+            _sum: { quantity: true },
+          }),
+          tx.productionBatch.findMany({
+            where: { productId: { in: productIds }, status: "DONE" },
+            select: { id: true, productId: true, expiryDate: true },
+          }),
+        ]);
+        const now = new Date();
+        const dateParts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Europe/Bratislava", year: "numeric", month: "2-digit", day: "2-digit",
+        }).formatToParts(now);
+        const dayPart = (type: string) => Number(dateParts.find((part) => part.type === type)?.value);
+        const earliestValidExpiry = new Date(Date.UTC(dayPart("year"), dayPart("month") - 1, dayPart("day")));
+
+        for (const productId of productIds) {
+          const itemDemand = demand.get(productId)!;
+          const batchPools = batches.map((batch) => ({
+            batchId: batch.id,
+            productId: batch.productId,
+            expiryDate: batch.expiryDate,
+            quantity: balances.find((row) => row.productId === productId && row.batchId === batch.id)?._sum.quantity ?? 0,
+          })).filter((batch) => batch.productId === productId);
+          const unassigned = balances.find((row) => row.productId === productId && row.batchId === null)?._sum.quantity ?? 0;
+          let allocations;
+          try {
+            allocations = allocateProductStock(batchPools, unassigned, itemDemand.quantity, earliestValidExpiry);
+          } catch (error) {
+            if (error instanceof InsufficientProductStockError) {
+              throw new Error(`Nedostatok použiteľných zásob: ${itemDemand.name} — k dispozícii ${error.available} ks, potrebných ${itemDemand.quantity} ks. Skontrolujte aj exspiráciu.`);
+            }
+            throw error;
+          }
+          for (const allocation of allocations) {
+            await tx.stockMovement.create({
+              data: {
+                type: "PREDAJ", productId, quantity: -allocation.quantity,
+                batchId: allocation.batchId, orderId: order.id,
+                note: allocation.batchId ? `Expedícia ${order.orderNumber}` : `Expedícia ${order.orderNumber} · šarža neurčená`,
+                createdById: user.userId,
+              },
+            });
+          }
         }
       }
 
       await tx.order.update({ where: { id: orderId }, data: { status: newStatus } });
-    });
+    }, { timeout: 15_000 });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Zmena stavu zlyhala." };
   }

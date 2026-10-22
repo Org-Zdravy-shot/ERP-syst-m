@@ -61,6 +61,7 @@ export async function completeBatch(_prev: BatchFormState, formData: FormData): 
 
   try {
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "ProductionBatch" WHERE id = ${batchId} FOR UPDATE`;
       const batch = await tx.productionBatch.findUnique({
         where: { id: batchId },
         include: {
@@ -76,6 +77,10 @@ export async function completeBatch(_prev: BatchFormState, formData: FormData): 
       }
 
       const scale = batch.producedQty / recipe.batchSize;
+
+      for (const materialId of [...new Set(recipe.items.map((item) => item.materialId))].sort()) {
+        await tx.$queryRaw`SELECT id FROM "Material" WHERE id = ${materialId} FOR UPDATE`;
+      }
 
       // Kontrola zásob všetkých surovín pred prvým zápisom
       for (const item of recipe.items) {
@@ -113,7 +118,7 @@ export async function completeBatch(_prev: BatchFormState, formData: FormData): 
         },
       });
       await tx.productionBatch.update({ where: { id: batchId }, data: { status: "DONE" } });
-    });
+    }, { timeout: 15_000 });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Šaržu sa nepodarilo dokončiť." };
   }
