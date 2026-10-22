@@ -63,7 +63,9 @@ export default async function VyrobaPage() {
               const status = STATUS_BADGES[batch.status] ?? STATUS_BADGES.PLANNED;
               return (
                 <tr key={batch.id} className={tr}>
-                  <td className="px-[18px] py-[11px] font-medium text-stone-950">{batch.batchNumber}</td>
+                  <td className="px-[18px] py-[11px] font-medium text-stone-950">
+                    <Link href={`/vyroba/sarze/${batch.id}`} className="hover:underline">{batch.batchNumber}</Link>
+                  </td>
                   <td className="px-[18px] py-[11px] text-stone-700">{batch.product.name}</td>
                   <td className="px-[18px] py-[11px] text-right tabular-nums">{batch.producedQty}</td>
                   <td className="whitespace-nowrap px-[18px] py-[11px] text-stone-500">

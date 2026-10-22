@@ -8,7 +8,7 @@ import { MovementForm } from "../MovementForm";
 import { btnSecondary, card, table, thead, th, thRight, tr, tdMuted } from "@/components/ui";
 
 export default async function PohybyPage() {
-  const [movements, materials, products] = await Promise.all([
+  const [movements, materials, products, batches] = await Promise.all([
     prisma.stockMovement.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -29,6 +29,11 @@ export default async function PohybyPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true, unit: true },
     }),
+    prisma.productionBatch.findMany({
+      where: { status: "DONE" },
+      orderBy: [{ expiryDate: "asc" }, { batchNumber: "asc" }],
+      select: { id: true, productId: true, batchNumber: true, expiryDate: true },
+    }),
   ]);
 
   return (
@@ -39,7 +44,9 @@ export default async function PohybyPage() {
         </Link>
       </PageHeader>
 
-      <MovementForm materials={materials} products={products} />
+      <MovementForm materials={materials} products={products} batches={batches.map((batch) => ({
+        ...batch, expiryDate: batch.expiryDate.toLocaleDateString("sk-SK"),
+      }))} />
 
       <div className={`${card} overflow-x-auto`}>
         <table className={table}>
