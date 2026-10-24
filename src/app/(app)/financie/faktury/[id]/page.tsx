@@ -323,7 +323,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                     <td className="px-5 py-2.5 text-right text-stone-600">
                       {formatQty(item.quantity, item.unit)}
                     </td>
-                    <td className="px-5 py-2.5 text-right text-stone-600">{formatCents(item.unitPriceCents)}</td>
+                    <td className="px-5 py-2.5 text-right text-stone-600">{item.unitPriceExact ? `${item.unitPriceExact.toString().replace(".", ",")} €` : formatCents(item.unitPriceCents)}</td>
                     <td className="px-5 py-2.5 text-right text-stone-600">{item.vatRate} %</td>
                     <td className="px-5 py-2.5 text-right font-medium text-stone-900">
                       {formatCents(item.totalNetCents ?? Math.round(item.quantity * item.unitPriceCents))}

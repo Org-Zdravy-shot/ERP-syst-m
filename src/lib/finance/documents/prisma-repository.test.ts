@@ -103,6 +103,15 @@ test("faktúra prenesie číslo objednávky kupujúceho ako BuyerReference", asy
   expect(data?.buyerReference).toBe("OBJ2026-0042");
 });
 
+test("PDF podklad prečíta presnú cenu položky", async () => {
+  const record = databaseInvoice();
+  const items = record.items as Array<Record<string, unknown>>;
+  items[0].unitPriceExact = { toString: () => "1.8270" };
+  mocks.findUnique.mockResolvedValue(record);
+  const data = await new PrismaDocumentRepository().getInvoicePdfData("invoice-test-1");
+  expect(data?.lines[0].unitPriceExact).toBe("1.8270");
+});
+
 test("dobropis bez čísla pôvodnej faktúry sa odmietne", async () => {
   mocks.findUnique.mockResolvedValue(
     databaseInvoice({ documentType: "CREDIT_NOTE", originalInvoice: null }),

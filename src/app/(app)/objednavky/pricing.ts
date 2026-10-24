@@ -51,3 +51,17 @@ export function resolveUnitPriceCents(
   }
   return null;
 }
+
+export function resolvePriceWithSource(
+  clientType: string,
+  product: PriceableProduct,
+  clientPrices: readonly ClientPriceOverride[],
+  rules: readonly ClientPriceRuleInput[] = [],
+  effectiveDate = slovakDateKey(),
+): { cents: number | null; source: "CLIENT" | "B2B" | "B2C" } {
+  const cents = resolveUnitPriceCents(clientType, product, clientPrices, rules, effectiveDate);
+  if (clientType === "B2C") return { cents, source: "B2C" };
+  const active = rules.filter((rule) => rule.productId === product.id && rule.effectiveFrom <= effectiveDate)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom) || b.version - a.version)[0];
+  return { cents, source: active && active.kind !== "DEFAULT" || clientPrices.some((price) => price.productId === product.id) ? "CLIENT" : "B2B" };
+}

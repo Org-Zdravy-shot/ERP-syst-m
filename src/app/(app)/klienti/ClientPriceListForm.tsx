@@ -41,7 +41,7 @@ export function ClientPriceListForm({
           <thead>
             <tr className="border-b border-stone-100 text-left text-xs font-semibold uppercase tracking-wide text-stone-500">
               <th className="px-5 py-2">Produkt</th>
-              <th className="px-5 py-2 text-right">B2C referencia</th>
+              <th className="px-5 py-2 text-right">B2C bez DPH v objednávke</th>
               <th className="px-5 py-2 text-right">B2B bez DPH</th>
             </tr>
           </thead>

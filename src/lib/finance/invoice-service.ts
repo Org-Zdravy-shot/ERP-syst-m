@@ -272,6 +272,7 @@ export class PrismaInvoiceService implements InvoiceService {
               quantity: line.quantity,
               unit: line.unit,
               unitPriceCents: line.unitPriceCents,
+              unitPriceExact: line.unitPriceExact ?? null,
               vatRate: line.vatRate,
               totalNetCents: line.totalNetCents,
               totalVatCents: line.totalVatCents,
@@ -419,6 +420,7 @@ export class PrismaInvoiceService implements InvoiceService {
           quantity: item.quantity,
           unit: item.unit,
           unitPriceCents: item.unitPriceCents,
+          unitPriceExact: item.unitPriceExact?.toString(),
           vatRate,
           taxCategory,
         });
@@ -571,6 +573,7 @@ export class PrismaInvoiceService implements InvoiceService {
       quantity: item.quantity,
       unit: item.unit,
       unitPriceCents: item.unitPriceCents,
+      unitPriceExact: item.unitPriceExact?.toString(),
       vatRate: item.vatRate,
       taxCategory: item.taxCategory === "EXEMPT" ? "EXEMPT" as const : "STANDARD" as const,
     }));

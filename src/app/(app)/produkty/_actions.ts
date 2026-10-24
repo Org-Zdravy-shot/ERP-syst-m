@@ -17,7 +17,7 @@ const productSchema = z.object({
   priceB2cCents: z.number().int().nonnegative(),
   priceB2bCents: z.number().int().nonnegative().nullable(),
   vatRate: z.number().int().min(0).max(100),
-  shelfLifeDays: z.number().int().positive(),
+  shelfLifeDays: z.number().int().positive().nullable(),
   isActive: z.boolean(),
 });
 
@@ -51,7 +51,7 @@ function parseProduct(formData: FormData) {
       priceB2cCents: money(String(formData.get("priceB2c") ?? "").trim(), "Predajná cena"),
       priceB2bCents: money(String(formData.get("priceB2b") ?? "").trim(), "Predvolená B2B cena", true),
       vatRate: Number(vatRaw),
-      shelfLifeDays: positiveInteger(String(formData.get("shelfLifeDays") ?? "").trim(), "Trvanlivosť"),
+      shelfLifeDays: positiveInteger(String(formData.get("shelfLifeDays") ?? "").trim(), "Trvanlivosť", true),
       isActive: formData.get("isActive") === "on",
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje produktu." };

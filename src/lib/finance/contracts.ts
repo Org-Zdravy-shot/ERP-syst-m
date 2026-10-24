@@ -41,6 +41,7 @@ export interface InvoiceLineInput {
   quantity: number;
   unit: string;
   unitPriceCents: number;
+  unitPriceExact?: string;
   vatRate: number;
   taxCategory?: "STANDARD" | "EXEMPT";
 }

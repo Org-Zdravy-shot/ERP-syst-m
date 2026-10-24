@@ -525,7 +525,7 @@ function drawTableRow(
   );
   drawRightText(
     page,
-    money(line.unitPriceCents),
+    line.unitPriceExact ? `${line.unitPriceExact.replace(".", ",")} €` : money(line.unitPriceCents),
     435,
     valueY,
     fonts.regular,

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { formatDocumentNumber, type DocumentNumberKind } from "./finance/domain";
+import { lineNetCents } from "./precise-price";
 
 type Tx = Prisma.TransactionClient;
 
@@ -23,6 +24,7 @@ export async function nextNumber(tx: Tx, kind: DocumentNumberKind, year: number)
 export interface LineInput {
   quantity: number;
   unitPriceCents: number;
+  unitPriceExact?: string | { toString(): string } | null;
   vatRate: number; // 20 = 20 %
 }
 
@@ -37,7 +39,7 @@ export function computeTotals(lines: LineInput[]): Totals {
   let totalNetCents = 0;
   let totalVatCents = 0;
   for (const line of lines) {
-    const net = Math.round(line.quantity * line.unitPriceCents);
+    const net = line.unitPriceExact ? lineNetCents(line.quantity, String(line.unitPriceExact)) : Math.round(line.quantity * line.unitPriceCents);
     const vat = Math.round((net * line.vatRate) / 100);
     totalNetCents += net;
     totalVatCents += vat;

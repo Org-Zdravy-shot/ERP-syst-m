@@ -1,10 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import Link from "next/link";
-import { btnSecondary } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { OrderForm, type OrderFormInitial } from "../OrderForm";
 import { createOrder } from "../_actions";
-import { resolveUnitPriceCents, slovakDateKey } from "../pricing";
 
 const priceRuleSelect = {
   productId: true, effectiveFrom: true, version: true, kind: true,
@@ -60,22 +57,10 @@ export default async function NovaObjednavkaPage({
   }
 
   const newProduct = products.find((item) => item.id === produkt);
-  if (newProduct) {
-    const client = clientsForForm.find((item) => item.id === initial.clientId);
-    const unitPriceCents = client
-      ? resolveUnitPriceCents(client.type, newProduct, client.productPrices, client.priceRules, slovakDateKey()) ?? 0
-      : 0;
-    initial.items = [{ productId: newProduct.id, quantity: 1, unitPriceCents, vatRate: newProduct.vatRate }];
-  }
-  const productParams = new URLSearchParams({ zObjednavky: "1" });
-  if (klient) productParams.set("klient", klient);
-  if (inbox) productParams.set("inbox", inbox);
 
   return (
     <>
-      <PageHeader title="Nová objednávka" subtitle="Vytvorenie objednávky s položkami">
-        <Link href={`/produkty/nova?${productParams.toString()}`} className={btnSecondary}>+ Pridať produkt do katalógu</Link>
-      </PageHeader>
+      <PageHeader title="Nová objednávka" subtitle="Vytvorenie objednávky s položkami" />
       {newProduct && (
         <p className="mb-4 max-w-3xl rounded-[10px] bg-green-50 px-4 py-3 text-sm text-green-900">
           Produkt {newProduct.name} je pridaný do novej objednávky. Vyberte klienta a skontrolujte cenu.
@@ -95,6 +80,8 @@ export default async function NovaObjednavkaPage({
         inboxMessageId={inboxMessageId}
         submitLabel="Vytvoriť objednávku"
         cancelHref={inboxMessageId ? "/objednavky/inbox" : "/objednavky"}
+        draftKey="order:new"
+        newProductId={newProduct?.id}
       />
     </>
   );
