@@ -13,9 +13,12 @@ import { setOrderStatus } from "../_actions";
 import { issueInvoiceFromOrder } from "../../financie/_actions";
 import { StatusActions } from "./StatusActions";
 import { IssueInvoiceButton } from "./IssueInvoiceButton";
+import { DraftCleanup } from "./DraftCleanup";
+import { formatUnitPrice, lineNetCents } from "@/lib/precise-price";
 
-export default async function ObjednavkaDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ObjednavkaDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ulozene?: string }> }) {
   const { id } = await params;
+  const { ulozene } = await searchParams;
   const session = await getSession();
   const canViewFinance = hasFinancePermission(session.role, "VIEW");
 
@@ -46,6 +49,7 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
 
   return (
     <>
+      {ulozene === "1" && <><DraftCleanup orderId={order.id} submissionKey={order.submissionKey} /><p role="status" className="mb-4 rounded-[10px] bg-green-50 px-4 py-3 text-sm text-green-900">Objednávka {order.orderNumber} je uložená.</p></>}
       <PageHeader title={order.orderNumber} subtitle={`Objednávka · ${orderChannelLabels[order.channel] ?? order.channel}`}>
         {isEditable && (
           <Link
@@ -79,6 +83,11 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
               )}
               {infoRow("Dátum objednávky", formatDate(order.orderDate))}
               {infoRow("Dátum dodania", formatDate(order.deliveryDate))}
+              {infoRow("Najneskorší termín", formatDate(order.latestDeliveryDate))}
+              {infoRow("Dodacia adresa", [order.deliveryStreet, order.deliveryZip, order.deliveryCity, order.deliveryCountry].filter(Boolean).join(", ") || "Fakturačná adresa")}
+              {infoRow("Kontakt pri dodaní", order.deliveryContact ?? "—")}
+              {infoRow("Úhrada", ({ UNKNOWN: "Nezaznamenané", UNAGREED: "Nedohodnuté", INVOICE: "Faktúra", CARD_ON_DELIVERY: "Karta pri dodaní", BANK_TRANSFER: "Bankový prevod", CASH: "Hotovosť" } as Record<string, string>)[order.paymentMethod] ?? order.paymentMethod)}
+              {infoRow("Splatnosť faktúry", order.paymentTermDays == null ? "Predvolene 14 dní" : `${order.paymentTermDays} dní`)}
               {order.externalId && infoRow("Externé ID", order.externalId)}
               {order.subscription &&
                 infoRow(
@@ -167,10 +176,10 @@ export default async function ObjednavkaDetailPage({ params }: { params: Promise
                       {item.product.name} <span className="text-xs text-stone-400">({item.product.sku})</span>
                     </td>
                     <td className="px-5 py-2.5 text-right text-stone-600">{item.quantity} ks</td>
-                    <td className="px-5 py-2.5 text-right text-stone-600">{formatCents(item.unitPriceCents)}</td>
+                    <td className="px-5 py-2.5 text-right text-stone-600">{item.unitPriceExact ? `${formatUnitPrice(item.unitPriceExact.toString())} €` : formatCents(item.unitPriceCents)}<div className="text-xs text-stone-400">{({ CLIENT: "Cenník klienta", B2B: "Základná B2B", B2C: "Katalógová B2C", MANUAL: "Ručná cena" } as Record<string, string>)[item.priceSource ?? ""] ?? "Historická cena"}</div>{item.minimumExpiryDate && <div className="text-xs text-stone-500">Min. exspirácia {formatDate(item.minimumExpiryDate)}</div>}</td>
                     <td className="px-5 py-2.5 text-right text-stone-600">{item.vatRate} %</td>
                     <td className="px-5 py-2.5 text-right font-medium text-stone-900">
-                      {formatCents(Math.round(item.quantity * item.unitPriceCents))}
+                      {formatCents(item.unitPriceExact ? lineNetCents(item.quantity, item.unitPriceExact.toString()) : Math.round(item.quantity * item.unitPriceCents))}
                     </td>
                   </tr>
                 ))}

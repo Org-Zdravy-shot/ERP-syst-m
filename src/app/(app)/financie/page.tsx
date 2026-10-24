@@ -150,7 +150,7 @@ export default async function FinanciePage() {
                   <th className="px-[18px] py-2 text-right font-medium">Náklad/ks</th>
                   <th className="px-[18px] py-2 text-right font-medium">Predvolená B2B</th>
                   <th className="px-[18px] py-2 text-right font-medium">Marža B2B</th>
-                  <th className="px-[18px] py-2 text-right font-medium">Cena B2C</th>
+                  <th className="px-[18px] py-2 text-right font-medium">Cena B2C bez DPH v objednávke</th>
                   <th className="px-[18px] py-2 text-right font-medium">Marža B2C</th>
                 </tr>
               </thead>

@@ -48,11 +48,26 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
           clientId: order.clientId,
           channel: order.channel,
           deliveryDate: toDateInput(order.deliveryDate),
+          latestDeliveryDate: toDateInput(order.latestDeliveryDate),
+          deliveryStreet: order.deliveryStreet ?? "",
+          deliveryCity: order.deliveryCity ?? "",
+          deliveryZip: order.deliveryZip ?? "",
+          deliveryCountry: order.deliveryCountry ?? "",
+          deliveryContact: order.deliveryContact ?? "",
+          paymentMethod: order.paymentMethod,
+          paymentTermDays: order.paymentTermDays,
           note: order.note ?? "",
-          items: order.items,
+          items: order.items.map((item) => ({
+            productId: item.productId, quantity: item.quantity,
+            unitPriceCents: item.unitPriceCents,
+            unitPriceExact: item.unitPriceExact?.toString(),
+            vatRate: item.vatRate, priceSource: item.priceSource,
+            minimumExpiryDate: toDateInput(item.minimumExpiryDate),
+          })),
         }}
         submitLabel="Uložiť zmeny"
         cancelHref={`/objednavky/${order.id}`}
+        draftKey={`order:edit:${order.id}`}
       />
     </>
   );

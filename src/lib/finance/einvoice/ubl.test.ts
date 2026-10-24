@@ -93,6 +93,14 @@ function invoice(overrides: Partial<PeppolUblInput> = {}): PeppolUblInput {
 }
 
 describe("Peppol BIS Billing 3.0 UBL", () => {
+  it("prenáša presnú jednotkovú cenu z objednávky aj do elektronickej faktúry", () => {
+    const result = renderPeppolBisUbl(invoice({
+      lines: [{ ...lines[0], quantity: 150, unitPriceCents: 183, unitPriceExact: "1.8270", totalNetCents: 27_405, totalVatCents: 6_303, totalGrossCents: 33_708 }],
+      totalNetCents: 27_405, totalVatCents: 6_303, totalGrossCents: 33_708,
+    }));
+    expect(result.xml).toContain('<cbc:PriceAmount currencyID="EUR">1.8270</cbc:PriceAmount>');
+    expect(result.xml).toContain('<cbc:LineExtensionAmount currencyID="EUR">274.05</cbc:LineExtensionAmount>');
+  });
   it("vygeneruje deterministickú vydanú faktúru z nemenného snapshotu", () => {
     const first = renderPeppolBisUbl(invoice());
     const second = renderPeppolBisUbl(invoice());

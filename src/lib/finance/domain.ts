@@ -5,6 +5,7 @@ import type {
   InvoiceLineCalculation,
   InvoicePaymentStatus,
 } from "./contracts";
+import { lineNetCents } from "@/lib/precise-price";
 
 export type FinanceDomainErrorCode =
   | "INVALID_CURRENCY"
@@ -69,7 +70,7 @@ export function calculateInvoice(input: CalculateInvoiceInput): InvoiceCalculati
       throw new FinanceDomainError("INVALID_LINE", `Oslobodený riadok ${index + 1} musí mať nulovú DPH.`);
     }
 
-    const totalNet = Math.round(line.quantity * line.unitPriceCents);
+    const totalNet = line.unitPriceExact ? lineNetCents(line.quantity, line.unitPriceExact) : Math.round(line.quantity * line.unitPriceCents);
     assertSafeCents(totalNet, `Základ na riadku ${index + 1}`);
     const totalVat = Math.round((totalNet * line.vatRate) / 100);
     assertSafeCents(totalVat, `DPH na riadku ${index + 1}`);

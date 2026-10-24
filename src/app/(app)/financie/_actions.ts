@@ -41,7 +41,7 @@ export async function issueInvoiceFromOrder(
       clientId: order.clientId,
       orderId: order.id,
       issueDate: now,
-      dueDate: new Date(now.getTime() + 14 * 24 * 3600 * 1000),
+      dueDate: new Date(now.getTime() + (order.paymentTermDays ?? 14) * 24 * 3600 * 1000),
       deliveryDate: order.deliveryDate ?? undefined,
       currency: "EUR",
       items: [...order.items.map((item) => ({
@@ -51,6 +51,7 @@ export async function issueInvoiceFromOrder(
         quantity: item.quantity,
         unit: item.product.unit,
         unitPriceCents: item.unitPriceCents,
+        unitPriceExact: item.unitPriceExact?.toString(),
         vatRate: item.vatRate,
       })), ...order.charges.map((charge) => ({
         description: charge.description,

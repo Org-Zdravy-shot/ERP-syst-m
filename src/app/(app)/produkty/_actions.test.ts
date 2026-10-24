@@ -44,6 +44,11 @@ test("nový aktívny produkt uloží ceny v centoch a sprístupní katalóg obje
   expect(mocks.redirect).toHaveBeenCalledWith("/produkty/product-1/upravit?ulozene=1");
 });
 
+test("predajný produkt možno vytvoriť bez potvrdenej trvanlivosti", async () => {
+  await createProduct({}, form({ shelfLifeDays: "" }));
+  expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ shelfLifeDays: null }) }));
+});
+
 test("neplatný objem alebo cena produkt neuložia", async () => {
   expect((await createProduct({}, form({ volumeMl: "0" }))).error).toMatch(/Objem/);
   expect((await createProduct({}, form({ priceB2c: "-1,00" }))).error).toMatch(/Predajná cena/);

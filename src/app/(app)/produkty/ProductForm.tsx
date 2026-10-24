@@ -12,7 +12,7 @@ export interface ProductValues {
   priceB2cCents: number;
   priceB2bCents: number | null;
   vatRate: number;
-  shelfLifeDays: number;
+  shelfLifeDays: number | null;
   isActive: boolean;
 }
 
@@ -54,11 +54,12 @@ export function ProductForm({ action, product, orderReturn }: {
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
-          <label className={label} htmlFor="priceB2c">Predajná cena za kus (€) *</label>
+          <label className={label} htmlFor="priceB2c">B2C cena za kus bez DPH v objednávke (€) *</label>
           <input className={input} id="priceB2c" name="priceB2c" inputMode="decimal" required defaultValue={euros(product?.priceB2cCents ?? null)} placeholder="3,50" />
+          <p className="mt-1 text-xs text-stone-500">ERP z tejto ceny v objednávke dopočíta DPH. Význam starších uložených hodnôt treba overiť pred ich úpravou.</p>
         </div>
         <div>
-          <label className={label} htmlFor="priceB2b">Predvolená B2B cena (€)</label>
+          <label className={label} htmlFor="priceB2b">Predvolená B2B cena bez DPH (€)</label>
           <input className={input} id="priceB2b" name="priceB2b" inputMode="decimal" defaultValue={euros(product?.priceB2bCents ?? null)} placeholder="Voliteľné" />
           <p className="mt-1 text-xs text-stone-500">Cena konkrétneho klienta má prednosť.</p>
         </div>
@@ -70,8 +71,9 @@ export function ProductForm({ action, product, orderReturn }: {
           <p className="mt-1 text-xs text-stone-500">Zadajte sadzbu platnú pre tento produkt.</p>
         </div>
         <div>
-          <label className={label} htmlFor="shelfLifeDays">Trvanlivosť v dňoch *</label>
-          <input className={input} id="shelfLifeDays" name="shelfLifeDays" type="number" min="1" step="1" required defaultValue={product?.shelfLifeDays ?? 30} />
+          <label className={label} htmlFor="shelfLifeDays">Všeobecná trvanlivosť v dňoch</label>
+          <input className={input} id="shelfLifeDays" name="shelfLifeDays" type="number" min="1" step="1" defaultValue={product?.shelfLifeDays ?? ""} />
+          <p className="mt-1 text-xs text-stone-500">Voliteľná pre predaj. Exspirácia sa eviduje pri konkrétnej šarži.</p>
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm text-stone-700">
