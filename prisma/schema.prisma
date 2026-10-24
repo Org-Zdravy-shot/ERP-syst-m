@@ -436,7 +436,7 @@ model Product {
   vatRate                Int      @default(20)
   minStock               Float    @default(0)
   targetStock            Float?
-  shelfLifeDays          Int      @default(30)
+  shelfLifeDays          Int?
   isActive               Boolean  @default(true)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -623,6 +623,15 @@ model Order {
   status         String        @default("NOVA") // "NOVA" | "POTVRDENA" | "VO_VYROBE" | "EXPEDOVANA" | "DORUCENA" | "ZRUSENA"
   orderDate      DateTime      @default(now())
   deliveryDate   DateTime?
+  latestDeliveryDate DateTime?
+  deliveryStreet String?
+  deliveryCity String?
+  deliveryZip String?
+  deliveryCountry String?
+  deliveryContact String?
+  paymentMethod String @default("UNKNOWN") // legacy "UNKNOWN"; new orders "UNAGREED" | "INVOICE" | "CARD_ON_DELIVERY" | "BANK_TRANSFER" | "CASH"
+  paymentTermDays Int?
+  submissionKey String? @unique
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
   inboxMessageId String?       @unique
@@ -647,6 +656,9 @@ model OrderItem {
   product        Product @relation(fields: [productId], references: [id])
   quantity       Int
   unitPriceCents Int // snapshot ceny v čase objednávky
+  unitPriceExact Decimal? @db.Decimal(18, 4) // presná cena bez DPH; null pri historických položkách
+  priceSource String? // "CLIENT" | "B2B" | "B2C" | "MANUAL"
+  minimumExpiryDate DateTime?
   vatRate        Int     @default(20)
 }
 
@@ -778,6 +790,7 @@ model InvoiceItem {
   quantity        Float
   unit            String   @default("ks")
   unitPriceCents  Int
+  unitPriceExact  Decimal? @db.Decimal(18, 4)
   vatRate         Int      @default(20)
   totalNetCents   Int?
   totalVatCents   Int?
