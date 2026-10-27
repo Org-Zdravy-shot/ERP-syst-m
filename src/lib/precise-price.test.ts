@@ -16,6 +16,15 @@ describe("presná jednotková cena", () => {
     expect(invoice.lines[0].unitPriceExact).toBe("1.8270");
   });
 
+  it("pripočíta dopravu 20 € k základu Gleistein bez zaokrúhlenia ceny za kus", () => {
+    const total = computeTotals([
+      { quantity: 150, unitPriceCents: 183, unitPriceExact: "1.8270", vatRate: 23 },
+      { quantity: 1, unitPriceCents: 2000, vatRate: 0 },
+    ]);
+    expect(total.totalNetCents).toBe(29_405);
+    expect(total.totalVatCents).toBe(6_303); // DPH dopravy zostáva na overenie.
+  });
+
   it.each([["1,80", "1.8000"], ["1.82", "1.8200"], ["1.8250", "1.8250"], ["1.8275", "1.8275"]])("zachová cenu %s", (input, expected) => {
     expect(parseUnitPrice(input)).toBe(expected);
     expect(formatUnitPrice(expected)).toBe(input.replace(".", ",").replace(/0+$/, "").replace(/,$/, ""));

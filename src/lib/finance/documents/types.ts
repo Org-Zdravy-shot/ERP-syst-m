@@ -45,6 +45,7 @@ export interface GeneratedDocumentInput {
 export interface InvoiceAttachmentTarget {
   id: string;
   direction: "VYDANA" | "PRIJATA";
+  source?: string;
 }
 
 export interface UploadedAttachmentInput

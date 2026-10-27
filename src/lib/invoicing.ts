@@ -21,6 +21,20 @@ export async function nextNumber(tx: Tx, kind: DocumentNumberKind, year: number)
   return formatDocumentNumber(kind, year, counter.lastNumber);
 }
 
+/** Nové rady sú oddelené podľa subjektu; pôvodné čísla zostávajú bez zmeny. */
+export async function nextEntityNumber(tx: Tx, kind: "OBJ" | "VYDANA", year: number, entity: "SOLE_TRADER" | "KURGI"): Promise<string> {
+  const marker = entity === "SOLE_TRADER" ? "Z" : "K";
+  const counterId = `${kind}-${marker}-${year}`;
+  const counter = await tx.docCounter.upsert({
+    where: { id: counterId },
+    create: { id: counterId, lastNumber: 1 },
+    update: { lastNumber: { increment: 1 } },
+  });
+  return kind === "OBJ"
+    ? `OBJ${marker}${year}-${String(counter.lastNumber).padStart(4, "0")}`
+    : `FA${marker}${year}${String(counter.lastNumber).padStart(3, "0")}`;
+}
+
 export interface LineInput {
   quantity: number;
   unitPriceCents: number;
@@ -48,7 +62,7 @@ export function computeTotals(lines: LineInput[]): Totals {
 }
 
 export const INVOICE_STATUSES = ["VYSTAVENA", "UHRADENA", "PO_SPLATNOSTI", "STORNO"] as const;
-export const INVOICE_SOURCES = ["INTERNA", "WEB", "SUPERFAKTURA", "OMEGA"] as const;
+export const INVOICE_SOURCES = ["INTERNA", "WEB", "SUPERFAKTURA", "OMEGA", "HISTORICAL"] as const;
 export type InvoiceSource = (typeof INVOICE_SOURCES)[number];
 
 export const INVOICE_STATUS_LABELS: Record<string, string> = {
@@ -63,4 +77,5 @@ export const INVOICE_SOURCE_LABELS: Record<string, string> = {
   WEB: "Web",
   SUPERFAKTURA: "SuperFaktúra",
   OMEGA: "Omega",
+  HISTORICAL: "Historický originál",
 };

@@ -154,9 +154,9 @@ export class DefaultDocumentService implements DocumentService {
       input.invoiceId,
     );
     if (!invoice) throw new DocumentNotFoundError("Faktúra sa nenašla.");
-    if (invoice.direction !== "PRIJATA") {
+    if (invoice.direction !== "PRIJATA" && invoice.source !== "HISTORICAL") {
       throw new DocumentUploadError(
-        "Všeobecné prílohy je možné nahrávať iba k prijatým faktúram.",
+        "Prílohy možno nahrať k prijatým faktúram a historickým originálom.",
         422,
       );
     }

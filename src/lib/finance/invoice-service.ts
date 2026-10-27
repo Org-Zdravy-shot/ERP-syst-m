@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { nextNumber } from "@/lib/invoicing";
+import { nextNumber, nextEntityNumber } from "@/lib/invoicing";
 import { financePartySnapshotSchema } from "@/lib/zod-schemas";
 import type {
   AccountingExport,
@@ -241,6 +241,7 @@ export class PrismaInvoiceService implements InvoiceService {
       const created = await tx.invoice.create({
         data: {
           direction: input.direction,
+          legalEntity: input.legalEntity ?? null,
           documentType: input.documentType ?? "INVOICE",
           documentStatus: "DRAFT",
           source: input.source ?? "INTERNA",
@@ -311,16 +312,19 @@ export class PrismaInvoiceService implements InvoiceService {
         },
       });
       if (!invoice) throw new FinanceDomainError("INVOICE_NOT_FOUND", "Faktúra neexistuje.");
+      if (invoice.source === "HISTORICAL") throw new FinanceDomainError("INVALID_TRANSITION", "Historický originál sa v ERP nevystavuje ani nefinalizuje.");
       if (invoice.documentStatus !== "DRAFT" || invoice.invoiceNumber) {
         throw new FinanceDomainError("INVOICE_IMMUTABLE", "Finalizovať možno iba koncept bez prideleného čísla.");
       }
       if (invoice.items.length === 0) {
         throw new FinanceDomainError("INVALID_LINE", "Faktúra nemá žiadne položky.");
       }
+      if (invoice.legalEntity !== "SOLE_TRADER" && invoice.legalEntity !== "KURGI") throw new FinanceDomainError("ISSUING_GATE_BLOCKED", "Pred finalizáciou treba dokladu priradiť overený právny subjekt.");
 
       const taxDate = invoice.deliveryDate ?? invoice.issueDate;
       const company = await tx.companyProfile.findFirst({
         where: {
+          legalEntity: invoice.legalEntity,
           isActive: true,
           validFrom: { lte: taxDate },
           OR: [{ validTo: null }, { validTo: { gte: taxDate } }],
@@ -347,12 +351,6 @@ export class PrismaInvoiceService implements InvoiceService {
       if (!company) blockers.push("Pre dátum dodania neexistuje platný firemný profil.");
       const taxProfile = company?.taxProfiles[0];
       let primaryAccount = company?.bankAccounts[0];
-      if (company && !primaryAccount) {
-        primaryAccount = await tx.bankAccount.findFirst({
-          where: { isActive: true, isPrimary: true, currency: "EUR" },
-          orderBy: { updatedAt: "desc" },
-        }) ?? undefined;
-      }
       if (!taxProfile) blockers.push("Pre dátum dodania neexistuje platný daňový profil.");
       if (invoice.direction === "VYDANA") {
         if (!invoice.deliveryDate) blockers.push("Vydaná faktúra musí mať dátum dodania.");
@@ -363,7 +361,25 @@ export class PrismaInvoiceService implements InvoiceService {
           blockers.push("Platiteľ DPH nemá potvrdený dátum registrácie.");
         }
         if (!primaryAccount) blockers.push("Chýba primárny EUR bankový účet spoločnosti.");
-        if (process.env.NODE_ENV === "production" && invoice.issueDate.getFullYear() === 2026) {
+        if (invoice.orderId) {
+          const linkedOrder = await tx.order.findUnique({ where: { id: invoice.orderId }, include: { items: true, charges: true } });
+          if (!linkedOrder) blockers.push("Prepojená objednávka neexistuje.");
+          const charges = linkedOrder?.charges.filter((charge) => charge.includedInSellerTotal) ?? [];
+          if (charges.some((charge) => charge.taxTreatment === "UNVERIFIED" || charge.taxTreatment === "FOREIGN")) blockers.push("Daňový režim dopravy alebo služby nie je overený.");
+          if (taxProfile?.vatStatus === "PAYER" && charges.some((charge) => charge.taxTreatment === "NON_PAYER")) blockers.push("Doprava alebo služba je označená ako neplatiteľská, ale daňový profil subjektu je platiteľ.");
+          if (linkedOrder) {
+            const expected = [
+              ...linkedOrder.items.map((item) => `P|${item.productId}|${item.quantity}|${item.unitPriceExact?.toString() ?? item.unitPriceCents}|${item.vatRate}`),
+              ...charges.map((charge) => `C|${charge.description}|1|${charge.unitPriceCents}|${charge.vatRate}`),
+            ].sort();
+            const actual = invoice.items.map((item) => item.productId
+              ? `P|${item.productId}|${item.quantity}|${item.unitPriceExact?.toString() ?? item.unitPriceCents}|${item.vatRate}`
+              : `C|${item.description}|${item.quantity}|${item.unitPriceCents}|${item.vatRate}`,
+            ).sort();
+            if (JSON.stringify(expected) !== JSON.stringify(actual)) blockers.push("Koncept sa nezhoduje s aktuálnou objednávkou. Zrušte ho a vytvorte nový, aby sa preniesli presné ceny a doprava.");
+          }
+        }
+        if (process.env.NODE_ENV === "production" && invoice.issueDate.getFullYear() === 2026 && !invoice.legalEntity) {
           const counter = await tx.docCounter.findUnique({ where: { id: "VYDANA-2026" } });
           if (!counter || counter.lastNumber < 8) {
             blockers.push("Číselný rad 2026 nie je pripravený; prvé nové číslo musí byť 2026009.");
@@ -474,11 +490,9 @@ export class PrismaInvoiceService implements InvoiceService {
         });
       }
 
-      const invoiceNumber = await nextNumber(
-        tx,
-        invoice.direction === "VYDANA" ? "VYDANA" : "PRIJATA",
-        invoice.issueDate.getFullYear(),
-      );
+      const invoiceNumber = invoice.direction === "VYDANA"
+        ? await nextEntityNumber(tx, "VYDANA", invoice.issueDate.getFullYear(), invoice.legalEntity)
+        : await nextNumber(tx, "PRIJATA", invoice.issueDate.getFullYear());
       const finalizedAt = new Date();
       assertDocumentTransition("DRAFT", "ISSUED");
       const updated = await tx.invoice.update({
@@ -586,6 +600,7 @@ export class PrismaInvoiceService implements InvoiceService {
 
     return this.createDraft({
       direction: asDirection(original.direction),
+      legalEntity: original.legalEntity as "SOLE_TRADER" | "KURGI" | undefined,
       documentType: "CREDIT_NOTE",
       source: "INTERNA",
       clientId: original.clientId ?? undefined,
@@ -647,6 +662,7 @@ export class PrismaInvoiceService implements InvoiceService {
     const invoices = await prisma.invoice.findMany({
       where: {
         ...(input.direction ? { direction: input.direction } : {}),
+        ...(input.legalEntity !== undefined ? { legalEntity: input.legalEntity } : {}),
         ...(input.source ? { source: input.source } : {}),
         documentStatus: input.includeCancelled ? { in: ["ISSUED", "CANCELLED"] } : "ISSUED",
         ...(input.dateFrom || input.dateTo
@@ -688,6 +704,15 @@ export class PrismaInvoiceService implements InvoiceService {
       "Stav úhrady",
       "Zdroj",
       "Externé číslo",
+      "Právny subjekt",
+      "Krajina dane",
+      "Sadzba originálu bps",
+      "Overenie originálu",
+      "Potvrdenie úhrady mimo ERP",
+      "Mena daňových súm",
+      "Pôvodný daňový základ minor",
+      "Pôvodná daň minor",
+      "Pôvodný daňový súčet minor",
     ];
     let totalGrossCents = 0;
     const rows = invoices.map((invoice) => {
@@ -695,7 +720,7 @@ export class PrismaInvoiceService implements InvoiceService {
       const allocated = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
       const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocated);
       const sign = invoice.documentType === "CREDIT_NOTE" ? -1 : 1;
-      totalGrossCents += invoice.totalGrossCents * sign;
+      if (invoice.currency === "EUR") totalGrossCents += invoice.totalGrossCents * sign;
       return [
         invoice.invoiceNumber,
         invoice.documentType,
@@ -705,15 +730,24 @@ export class PrismaInvoiceService implements InvoiceService {
         date(invoice.issueDate),
         date(invoice.deliveryDate),
         date(invoice.dueDate),
-        invoice.totalNetCents * sign,
-        invoice.totalVatCents * sign,
+        invoice.source === "HISTORICAL" && invoice.taxCurrency !== invoice.currency ? "" : invoice.totalNetCents * sign,
+        invoice.source === "HISTORICAL" && invoice.taxCurrency !== invoice.currency ? "" : invoice.totalVatCents * sign,
         invoice.totalGrossCents * sign,
         invoice.currency,
         invoice.variableSymbol,
         invoice.documentStatus,
-        paymentStatus,
+        invoice.source === "HISTORICAL" ? invoice.paymentConfirmation ?? "UNVERIFIED" : paymentStatus,
         invoice.source,
         invoice.externalNumber,
+        invoice.legalEntity,
+        invoice.taxCountry,
+        invoice.foreignVatRateBps,
+        invoice.verificationStatus,
+        invoice.paymentConfirmation,
+        invoice.taxCurrency,
+        invoice.taxBaseMinor,
+        invoice.taxAmountMinor,
+        invoice.taxTotalMinor,
       ].map(csvField).join(";");
     });
     const content = new TextEncoder().encode(`\uFEFF${[header.join(";"), ...rows].join("\r\n")}`);
