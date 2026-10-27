@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Badge, ORDER_STATUS_COLORS } from "@/components/Badge";
 import { formatCents, formatDate } from "@/lib/format";
 import { computeTotals } from "@/lib/invoicing";
-import { orderStatusLabels, orderChannelLabels } from "@/lib/zod-schemas";
+import { orderStatusLabels, orderChannelLabels, legalEntityLabels } from "@/lib/zod-schemas";
 import { bratislavaDateTimeToIso } from "@/lib/datetime";
 
 const PAGE_SIZE = 25;
@@ -25,11 +25,12 @@ function todayBounds() {
   };
 }
 
-function orderHref(view: string, search: string, page = 1) {
+function orderHref(view: string, search: string, page = 1, entity?: string) {
   const params = new URLSearchParams();
   if (view in orderStatusLabels) params.set("stav", view);
   else if (view !== "vsetky") params.set("pohlad", view);
   if (search) params.set("hladat", search);
+  if (entity) params.set("subjekt", entity);
   if (page > 1) params.set("strana", String(page));
   const query = params.toString();
   return `/objednavky${query ? `?${query}` : ""}`;
@@ -38,9 +39,10 @@ function orderHref(view: string, search: string, page = 1) {
 export default async function ObjednavkyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ stav?: string; pohlad?: string; hladat?: string; strana?: string }>;
+  searchParams: Promise<{ stav?: string; pohlad?: string; hladat?: string; strana?: string; subjekt?: string }>;
 }) {
-  const { stav, pohlad, hladat, strana } = await searchParams;
+  const { stav, pohlad, hladat, strana, subjekt } = await searchParams;
+  const entity = subjekt === "UNASSIGNED" || (subjekt && subjekt in legalEntityLabels) ? subjekt : undefined;
   const statusFilter = stav && stav in orderStatusLabels ? stav : undefined;
   const view = statusFilter ?? (["dnes", "meska", "nove", "expedicia"].includes(pohlad ?? "") ? pohlad! : "vsetky");
   const search = (hladat ?? "").trim().slice(0, 100);
@@ -60,7 +62,7 @@ export default async function ObjednavkyPage({
             ? { status: { in: ["POTVRDENA", "VO_VYROBE"] } }
             : {};
   const where: Prisma.OrderWhereInput = {
-    AND: [viewWhere, search ? {
+    AND: [viewWhere, entity ? { legalEntity: entity === "UNASSIGNED" ? null : entity } : {}, search ? {
       OR: [
         { orderNumber: { contains: search, mode: "insensitive" } },
         { client: { name: { contains: search, mode: "insensitive" } } },
@@ -129,6 +131,7 @@ export default async function ObjednavkyPage({
           + Nová objednávka
         </Link>
       </PageHeader>
+      <div className="mb-4 flex flex-wrap gap-2 text-sm"><Link href={orderHref(view, search)} className={`rounded-full border px-3 py-1 ${!entity ? "bg-stone-900 text-white" : "bg-white"}`}>Všetky subjekty</Link>{Object.entries(legalEntityLabels).map(([key, title]) => <Link key={key} href={orderHref(view, search, 1, key)} className={`rounded-full border px-3 py-1 ${entity === key ? "bg-stone-900 text-white" : "bg-white"}`}>{title}</Link>)}<Link href={orderHref(view, search, 1, "UNASSIGNED")} className={`rounded-full border px-3 py-1 ${entity === "UNASSIGNED" ? "bg-stone-900 text-white" : "bg-white"}`}>Nepriradené</Link></div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
@@ -137,7 +140,7 @@ export default async function ObjednavkyPage({
           { key: "nove", label: "Potvrdiť", count: newOrders },
           { key: "expedicia", label: "Pripraviť / expedovať", count: toShip },
         ].map((item) => (
-          <Link key={item.key} href={orderHref(item.key, search)} className={`rounded-[14px] border p-4 ${view === item.key ? "border-stone-950 bg-stone-950 text-white" : "border-stone-200 bg-white text-stone-900 hover:border-stone-400"}`}>
+          <Link key={item.key} href={orderHref(item.key, search, 1, entity)} className={`rounded-[14px] border p-4 ${view === item.key ? "border-stone-950 bg-stone-950 text-white" : "border-stone-200 bg-white text-stone-900 hover:border-stone-400"}`}>
             <span className="block text-xs">{item.label}</span>
             <strong className="mt-1 block text-2xl">{item.count}</strong>
           </Link>
@@ -146,13 +149,14 @@ export default async function ObjednavkyPage({
 
       <form method="get" className="mb-4 flex max-w-xl gap-2">
         {view !== "vsetky" && <input type="hidden" name={statusFilter ? "stav" : "pohlad"} value={view} />}
+        {entity && <input type="hidden" name="subjekt" value={entity} />}
         <input name="hladat" defaultValue={search} maxLength={100} placeholder="Číslo, klient alebo produkt" aria-label="Hľadať objednávky" className="min-w-0 flex-1 rounded-[10px] border border-stone-300 px-3 py-2 text-sm" />
         <button className="rounded-[10px] bg-stone-950 px-4 py-2 text-sm font-medium text-white">Hľadať</button>
       </form>
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
-          href={orderHref("vsetky", search)}
+          href={orderHref("vsetky", search, 1, entity)}
           className={`rounded-full px-3 py-1 text-sm transition ${
             view === "vsetky" ? "bg-stone-950 font-medium text-white" : "bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-50"
           }`}
@@ -162,7 +166,7 @@ export default async function ObjednavkyPage({
         {Object.entries(orderStatusLabels).map(([value, label]) => (
           <Link
             key={value}
-            href={`/objednavky?stav=${value}${search ? `&hladat=${encodeURIComponent(search)}` : ""}`}
+            href={orderHref(value, search, 1, entity)}
             className={`rounded-full px-3 py-1 text-sm transition ${
               view === value ? "bg-stone-950 font-medium text-white" : "bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-50"
             }`}
@@ -195,7 +199,7 @@ export default async function ObjednavkyPage({
               </tr>
             )}
             {orders.map((order) => {
-              const totals = computeTotals([...order.items, ...order.charges.map((charge) => ({ quantity: 1, ...charge }))]);
+              const totals = computeTotals([...order.items, ...order.charges.filter((charge) => charge.includedInSellerTotal).map((charge) => ({ quantity: 1, ...charge }))]);
               const required = new Map<string, number>();
               for (const item of order.items) required.set(item.productId, (required.get(item.productId) ?? 0) + item.quantity);
               const alerts = [
@@ -209,6 +213,7 @@ export default async function ObjednavkyPage({
                     <Link href={`/objednavky/${order.id}`} className="font-medium text-stone-950 hover:underline">
                       {order.orderNumber}
                     </Link>
+                    <div className="text-xs text-stone-500">{legalEntityLabels[order.legalEntity ?? ""] ?? "Nepriradený"}{order.externalId && ` · ${order.externalId}`}</div>
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/klienti/${order.clientId}`} className="text-stone-700 hover:underline">
@@ -220,6 +225,8 @@ export default async function ObjednavkyPage({
                   <td className="px-4 py-3 text-stone-600">{orderChannelLabels[order.channel] ?? order.channel}</td>
                   <td className="px-4 py-3">
                     <Badge color={ORDER_STATUS_COLORS[order.status]}>{orderStatusLabels[order.status] ?? order.status}</Badge>
+                    {order.shipmentStatus === "SHIPPED_EXTERNALLY" && <div className="mt-1 text-xs text-stone-600">Odoslané mimo ERP</div>}
+                    {order.shipmentStatus === "DELIVERED_EXTERNALLY" && <div className="mt-1 text-xs text-stone-600">Doručené mimo ERP</div>}
                   </td>
                   <td className="px-4 py-3 text-right text-stone-600">{order.items.length + order.charges.length}</td>
                   <td className="px-4 py-3 text-right font-medium text-stone-900">{formatCents(totals.totalGrossCents)}</td>
@@ -234,8 +241,8 @@ export default async function ObjednavkyPage({
       <div className="mt-4 flex items-center justify-between text-sm text-stone-600">
         <span>{total} objednávok · strana {currentPage} z {pages}</span>
         <div className="flex gap-2">
-          {currentPage > 1 && <Link className="rounded border border-stone-300 px-3 py-1" href={orderHref(view, search, currentPage - 1)}>← Predchádzajúca</Link>}
-          {currentPage < pages && <Link className="rounded border border-stone-300 px-3 py-1" href={orderHref(view, search, currentPage + 1)}>Ďalšia →</Link>}
+          {currentPage > 1 && <Link className="rounded border border-stone-300 px-3 py-1" href={orderHref(view, search, currentPage - 1, entity)}>← Predchádzajúca</Link>}
+          {currentPage < pages && <Link className="rounded border border-stone-300 px-3 py-1" href={orderHref(view, search, currentPage + 1, entity)}>Ďalšia →</Link>}
         </div>
       </div>
     </>

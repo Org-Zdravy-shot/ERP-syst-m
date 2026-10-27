@@ -9,10 +9,11 @@ function toDateInput(date: Date | null): string {
   return date ? date.toISOString().slice(0, 10) : "";
 }
 
-export default async function UpravitObjednavkuPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function UpravitObjednavkuPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ produkt?: string }> }) {
   const { id } = await params;
+  const { produkt } = await searchParams;
   const [order, clients, products] = await Promise.all([
-    prisma.order.findUnique({ where: { id }, include: { items: true } }),
+    prisma.order.findUnique({ where: { id }, include: { items: true, charges: true, invoices: { where: { direction: "VYDANA", documentStatus: { not: "CANCELLED" } }, select: { id: true } } } }),
     prisma.client.findMany({
       where: { isActive: true },
       select: {
@@ -30,7 +31,7 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
       orderBy: { name: "asc" },
     }),
   ]);
-  if (!order || !EDITABLE_ORDER_STATUSES.includes(order.status)) notFound();
+  if (!order || !EDITABLE_ORDER_STATUSES.includes(order.status) || order.invoices.length > 0) notFound();
   const clientsForForm = clients.map((client) => ({
     ...client,
     priceRules: client.priceRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10) })),
@@ -46,7 +47,18 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
         products={products}
         initial={{
           clientId: order.clientId,
+          legalEntity: order.legalEntity,
           channel: order.channel,
+          orderDate: toDateInput(order.orderDate),
+          externalId: order.externalId ?? "",
+          platformPaymentStatus: order.platformPaymentStatus,
+          customerPaidAt: toDateInput(order.customerPaidAt),
+          platformSettledAt: toDateInput(order.platformSettledAt),
+          platformSettlementCents: order.platformSettlementCents,
+          platformCommissionCents: order.platformCommissionCents,
+          shipmentStatus: order.shipmentStatus,
+          shippedAt: toDateInput(order.shippedAt),
+          deliveredAt: toDateInput(order.deliveredAt),
           deliveryDate: toDateInput(order.deliveryDate),
           latestDeliveryDate: toDateInput(order.latestDeliveryDate),
           deliveryStreet: order.deliveryStreet ?? "",
@@ -64,10 +76,12 @@ export default async function UpravitObjednavkuPage({ params }: { params: Promis
             vatRate: item.vatRate, priceSource: item.priceSource,
             minimumExpiryDate: toDateInput(item.minimumExpiryDate),
           })),
+          charges: order.charges,
         }}
         submitLabel="Uložiť zmeny"
         cancelHref={`/objednavky/${order.id}`}
         draftKey={`order:edit:${order.id}`}
+        newProductId={products.some((product) => product.id === produkt) ? produkt : undefined}
       />
     </>
   );

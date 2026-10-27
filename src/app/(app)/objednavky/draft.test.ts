@@ -29,3 +29,10 @@ test("opätovné otvorenie uloženej položky Gleistein zachová 1,827 €", () 
   expect(storedOrderPriceInput({ unitPriceCents: 183, unitPriceExact: { toString: () => "1.8270" } })).toBe("1,827");
   expect(storedOrderPriceInput({ unitPriceCents: 183, unitPriceExact: null })).toBe("1,83");
 });
+
+test("koncept Zľavomat zachová subjekt, pôvodný dátum, platbu, odoslanie a dopravu pri návrate", () => {
+  const initial = { clientId: "", legalEntity: "", orderDate: "", externalId: "", platformPaymentStatus: "", shipmentStatus: "", shippedAt: "", submissionKey: "", charges: [], rows: [{ productId: "" }] };
+  const saved = { ...initial, clientId: "customer", legalEntity: "SOLE_TRADER", orderDate: "2026-10-26", externalId: "33404506", platformPaymentStatus: "CUSTOMER_PAID", shipmentStatus: "SHIPPED_EXTERNALLY", shippedAt: "2026-10-27", submissionKey: "stable", charges: [{ recipient: "PLATFORM", priceEur: "2,99" }], rows: [{ productId: "shot" }] };
+  const reopened = restoreOrderDraft(initial, JSON.stringify(saved), undefined, (productId) => ({ productId }));
+  expect(reopened).toEqual(saved);
+});

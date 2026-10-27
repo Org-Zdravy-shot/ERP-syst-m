@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Badge, ORDER_STATUS_COLORS, INVOICE_DOCUMENT_STATUS_COLORS } from "@/components/Badge";
 import { formatCents, formatDate, formatDateTime } from "@/lib/format";
 import { computeTotals } from "@/lib/invoicing";
-import { invoiceDocumentStatusLabels, orderStatusLabels, orderChannelLabels } from "@/lib/zod-schemas";
+import { invoiceDocumentStatusLabels, orderStatusLabels, orderChannelLabels, legalEntityLabels } from "@/lib/zod-schemas";
 import { ORDER_STATUS_TRANSITIONS, EDITABLE_ORDER_STATUSES, SUBSCRIPTION_FREQUENCY_LABELS } from "../konstanty";
 import { setOrderStatus } from "../_actions";
 import { issueInvoiceFromOrder } from "../../financie/_actions";
@@ -36,9 +36,10 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
   });
   if (!order) notFound();
 
-  const totals = computeTotals([...order.items, ...order.charges.map((charge) => ({ quantity: 1, ...charge }))]);
+  const totals = computeTotals([...order.items, ...order.charges.filter((charge) => charge.includedInSellerTotal).map((charge) => ({ quantity: 1, ...charge }))]);
+  const taxReviewNeeded = order.charges.some((charge) => charge.includedInSellerTotal && ["UNVERIFIED", "FOREIGN"].includes(charge.taxTreatment));
   const allowedStatuses = ORDER_STATUS_TRANSITIONS[order.status] ?? [];
-  const isEditable = EDITABLE_ORDER_STATUSES.includes(order.status);
+  const isEditable = EDITABLE_ORDER_STATUSES.includes(order.status) && !order.invoices.some((invoice) => invoice.direction === "VYDANA" && invoice.documentStatus !== "CANCELLED");
 
   const infoRow = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-4 py-1.5">
@@ -82,6 +83,15 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
                 </Link>,
               )}
               {infoRow("Dátum objednávky", formatDate(order.orderDate))}
+              {infoRow("Právny subjekt", order.legalEntity ? legalEntityLabels[order.legalEntity] : "Neoverený / nepriradený")}
+              {order.platformPaymentStatus && infoRow("Platba platforme", order.platformPaymentStatus === "CUSTOMER_PAID" ? "Zákazník zaplatil platforme" : order.platformPaymentStatus)}
+              {order.customerPaidAt && infoRow("Dátum platby platforme", formatDate(order.customerPaidAt))}
+              {order.platformSettledAt && infoRow("Vyúčtovanie platformy", formatDate(order.platformSettledAt))}
+              {order.platformSettlementCents != null && infoRow("Vyúčtovaná suma", formatCents(order.platformSettlementCents))}
+              {order.platformCommissionCents != null && infoRow("Provízia platformy", formatCents(order.platformCommissionCents))}
+              {order.shipmentStatus && infoRow("Historické odoslanie", order.shipmentStatus === "SHIPPED_EXTERNALLY" ? "Odoslané mimo ERP (bez skladového pohybu)" : order.shipmentStatus)}
+              {order.shippedAt && infoRow("Dátum odoslania", formatDate(order.shippedAt))}
+              {order.deliveredAt && infoRow("Dátum doručenia", formatDate(order.deliveredAt))}
               {infoRow("Dátum dodania", formatDate(order.deliveryDate))}
               {infoRow("Najneskorší termín", formatDate(order.latestDeliveryDate))}
               {infoRow("Dodacia adresa", [order.deliveryStreet, order.deliveryZip, order.deliveryCity, order.deliveryCountry].filter(Boolean).join(", ") || "Fakturačná adresa")}
@@ -184,7 +194,7 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
                   </tr>
                 ))}
                 {order.charges.map((charge) => <tr key={charge.id} className="border-b border-stone-50 last:border-0">
-                  <td className="px-5 py-2.5 font-medium text-stone-900">{charge.description}</td>
+                  <td className="px-5 py-2.5 font-medium text-stone-900">{charge.description}<div className="text-xs text-stone-500">Príjemca: {charge.recipient === "SELLER" ? "predajca" : charge.recipient === "PLATFORM" ? "platforma" : charge.recipient === "CARRIER" ? "dopravca" : "neoverený"}{!charge.includedInSellerTotal && " · mimo súčtu predajcu"} · {charge.taxTreatment}</div></td>
                   <td className="px-5 py-2.5 text-right text-stone-600">1</td>
                   <td className="px-5 py-2.5 text-right text-stone-600">{formatCents(charge.unitPriceCents)}</td>
                   <td className="px-5 py-2.5 text-right text-stone-600">{charge.vatRate} %</td>
@@ -197,11 +207,11 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
                   <td className="px-5 py-2 text-right font-medium text-stone-900">{formatCents(totals.totalNetCents)}</td>
                 </tr>
                 <tr className="text-sm">
-                  <td colSpan={4} className="px-5 py-1 text-right text-stone-500">DPH</td>
+                  <td colSpan={4} className="px-5 py-1 text-right text-stone-500">DPH{taxReviewNeeded && " (daň dopravy neoverená)"}</td>
                   <td className="px-5 py-1 text-right font-medium text-stone-900">{formatCents(totals.totalVatCents)}</td>
                 </tr>
                 <tr className="text-sm">
-                  <td colSpan={4} className="px-5 py-2 text-right font-semibold text-stone-900">Spolu s DPH</td>
+                  <td colSpan={4} className="px-5 py-2 text-right font-semibold text-stone-900">{taxReviewNeeded ? "Predbežné spolu" : "Spolu s DPH"}</td>
                   <td className="px-5 py-2 text-right text-base font-bold text-stone-950">{formatCents(totals.totalGrossCents)}</td>
                 </tr>
               </tfoot>

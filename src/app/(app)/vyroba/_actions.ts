@@ -33,7 +33,7 @@ export async function createBatch(_prev: BatchFormState, formData: FormData): Pr
 
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) return { error: "Produkt neexistuje." };
-  if (!expiryDateRaw && product.shelfLifeDays === null) return { error: "Zadajte exspiráciu šarže alebo potvrďte trvanlivosť produktu." };
+  if (!expiryDateRaw && (!product.shelfLifeConfirmedAt || product.shelfLifeDays === null)) return { error: "Zadajte exspiráciu šarže; trvanlivosť produktu zatiaľ nie je potvrdená." };
 
   const expiryDate = expiryDateRaw
     ? new Date(expiryDateRaw)

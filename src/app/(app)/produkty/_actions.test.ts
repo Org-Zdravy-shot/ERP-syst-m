@@ -37,7 +37,7 @@ test("nový aktívny produkt uloží ceny v centoch a sprístupní katalóg obje
     data: {
       sku: "ZS-PAS-KLA-060", name: "Pasterizovaný shot 60 ml", volumeMl: 60,
       priceB2cCents: 350, priceB2bCents: 270, vatRate: 0,
-      shelfLifeDays: 90, isActive: true, unit: "ks",
+      shelfLifeDays: 90, shelfLifeConfirmedAt: null, isActive: true, unit: "ks",
     }, select: { id: true },
   });
   expect(mocks.revalidatePath).toHaveBeenCalledWith("/objednavky/nova");

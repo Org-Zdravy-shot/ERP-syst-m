@@ -4,7 +4,8 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatCents } from "@/lib/format";
 import { lineNetCents, parseUnitPrice } from "@/lib/precise-price";
-import { orderChannelLabels } from "@/lib/zod-schemas";
+import { orderChannelLabels, legalEntityLabels } from "@/lib/zod-schemas";
+import { parseEurToCents } from "@/lib/format";
 import type { OrderFormState } from "./_actions";
 import { resolvePriceWithSource, slovakDateKey, type ClientPriceRuleInput } from "./pricing";
 import { repriceDraftRows, restoreOrderDraft, storedOrderPriceInput } from "./draft";
@@ -34,9 +35,15 @@ interface ItemRow {
   minimumExpiryDate: string;
   manual?: boolean;
 }
+interface ChargeRow { kind: "SHIPPING" | "FEE"; description: string; priceEur: string; vatRate: number; recipient: "SELLER" | "PLATFORM" | "CARRIER" | "UNKNOWN"; taxTreatment: "STANDARD" | "NON_PAYER" | "FOREIGN" | "UNVERIFIED" }
 export interface OrderFormInitial {
   clientId?: string;
+  legalEntity?: string | null;
   channel?: string;
+  orderDate?: string; externalId?: string;
+  platformPaymentStatus?: string | null; customerPaidAt?: string; platformSettledAt?: string;
+  platformSettlementCents?: number | null; platformCommissionCents?: number | null;
+  shipmentStatus?: string | null; shippedAt?: string; deliveredAt?: string;
   deliveryDate?: string;
   latestDeliveryDate?: string;
   deliveryStreet?: string;
@@ -48,14 +55,20 @@ export interface OrderFormInitial {
   paymentTermDays?: number | null;
   note?: string;
   items?: Array<{ productId: string; quantity: number; unitPriceCents: number; unitPriceExact?: string | { toString(): string } | null; vatRate: number; priceSource?: string | null; minimumExpiryDate?: string | Date | null }>;
+  charges?: Array<{ kind: string; description: string; unitPriceCents: number; vatRate: number; recipient: string; taxTreatment: string }>;
 }
 interface Draft {
-  clientId: string; channel: string; deliveryDate: string; latestDeliveryDate: string;
+  clientId: string; legalEntity: string; channel: string; orderDate: string; externalId: string;
+  platformPaymentStatus: string; customerPaidAt: string; platformSettledAt: string;
+  platformSettlementEur: string; platformCommissionEur: string;
+  shipmentStatus: string; shippedAt: string; deliveredAt: string;
+  deliveryDate: string; latestDeliveryDate: string;
   deliveryStreet: string; deliveryCity: string; deliveryZip: string; deliveryCountry: string;
   deliveryContact: string; paymentMethod: string; paymentTermDays: string; note: string;
-  rows: ItemRow[]; submissionKey: string;
+  rows: ItemRow[]; charges: ChargeRow[]; submissionKey: string;
 }
 const blankRow = (): ItemRow => ({ productId: "", quantity: "1", priceEur: "", vatRate: 20, priceSource: "MANUAL", minimumExpiryDate: "", manual: false });
+const blankCharge = (): ChargeRow => ({ kind: "SHIPPING", description: "Doprava", priceEur: "", vatRate: 0, recipient: "SELLER", taxTreatment: "UNVERIFIED" });
 const inputClass = "w-full rounded-[10px] border border-stone-300 px-3 py-2 text-sm focus:border-stone-950 focus:outline-none focus:ring-[3px] focus:ring-brand/35";
 const labelClass = "mb-1 block text-sm font-medium text-stone-700";
 const sourceLabels: Record<PriceSource, string> = { CLIENT: "Cenník klienta", B2B: "Základná B2B cena", B2C: "Katalógová B2C cena", MANUAL: "Ručná cena iba pre túto objednávku" };
@@ -70,7 +83,12 @@ export function OrderForm({ action, clients, products, initial, inboxMessageId, 
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const [draft, setDraft] = useState<Draft>(() => ({
-    clientId: initial?.clientId ?? "", channel: initial?.channel ?? "MANUAL",
+    clientId: initial?.clientId ?? "", legalEntity: initial?.legalEntity ?? "", channel: initial?.channel ?? "MANUAL",
+    orderDate: initial?.orderDate ?? "", externalId: initial?.externalId ?? "",
+    platformPaymentStatus: initial?.platformPaymentStatus ?? "", customerPaidAt: initial?.customerPaidAt ?? "", platformSettledAt: initial?.platformSettledAt ?? "",
+    platformSettlementEur: initial?.platformSettlementCents == null ? "" : centsToInput(initial.platformSettlementCents),
+    platformCommissionEur: initial?.platformCommissionCents == null ? "" : centsToInput(initial.platformCommissionCents),
+    shipmentStatus: initial?.shipmentStatus ?? "", shippedAt: initial?.shippedAt ?? "", deliveredAt: initial?.deliveredAt ?? "",
     deliveryDate: initial?.deliveryDate ?? "", latestDeliveryDate: initial?.latestDeliveryDate ?? "",
     deliveryStreet: initial?.deliveryStreet ?? "", deliveryCity: initial?.deliveryCity ?? "",
     deliveryZip: initial?.deliveryZip ?? "", deliveryCountry: initial?.deliveryCountry ?? "",
@@ -82,7 +100,9 @@ export function OrderForm({ action, clients, products, initial, inboxMessageId, 
       vatRate: item.vatRate, priceSource: (item.priceSource as PriceSource) ?? "MANUAL",
       minimumExpiryDate: dateInput(item.minimumExpiryDate),
       manual: item.priceSource === "MANUAL" || !item.priceSource,
-    })) : [blankRow()], submissionKey: "",
+    })) : [blankRow()],
+    charges: initial?.charges?.map((charge) => ({ kind: charge.kind as ChargeRow["kind"], description: charge.description, priceEur: centsToInput(charge.unitPriceCents), vatRate: charge.vatRate, recipient: charge.recipient as ChargeRow["recipient"], taxTreatment: charge.taxTreatment as ChargeRow["taxTreatment"] })) ?? [],
+    submissionKey: "",
   }));
   const [ready, setReady] = useState(false);
   const [review, setReview] = useState(false);
@@ -118,17 +138,21 @@ export function OrderForm({ action, clients, products, initial, inboxMessageId, 
   const setField = (field: keyof Draft, value: string) => { setDraft((old) => ({ ...old, [field]: value })); setReview(false); };
   const setRows = (fn: (rows: ItemRow[]) => ItemRow[]) => { setDraft((old) => ({ ...old, rows: fn(old.rows) })); setReview(false); };
   const updateRow = (index: number, patch: Partial<ItemRow>) => setRows((rows) => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
+  const updateCharge = (index: number, patch: Partial<ChargeRow>) => { setDraft((old) => ({ ...old, charges: old.charges.map((charge, i) => i === index ? { ...charge, ...patch } : charge) })); setReview(false); };
   const resolve = (clientId: string, productId: string, date: string) => {
     const client = clients.find((candidate) => candidate.id === clientId);
     const product = products.find((candidate) => candidate.id === productId);
     return client && product ? resolvePriceWithSource(client.type, product, client.productPrices, client.priceRules, date || slovakDateKey()) : null;
   };
-  const reprice = (clientId: string, date: string) => setDraft((old) => ({ ...old, clientId, deliveryDate: date,
-    rows: repriceDraftRows(old.rows, (productId) => {
-      const price = resolve(clientId, productId, date);
-      return price ? { priceEur: price.cents == null ? "" : centsToInput(price.cents), priceSource: price.source } : null;
-    }),
-  }));
+  const reprice = (clientId: string, date: string) => {
+    setDraft((old) => ({ ...old, clientId, deliveryDate: date,
+      rows: repriceDraftRows(old.rows, (productId) => {
+        const price = resolve(clientId, productId, date);
+        return price ? { priceEur: price.cents == null ? "" : centsToInput(price.cents), priceSource: price.source } : null;
+      }),
+    }));
+    setReview(false);
+  };
   const changeProduct = (index: number, productId: string) => {
     const product = products.find((candidate) => candidate.id === productId);
     const price = resolve(draft.clientId, productId, draft.deliveryDate);
@@ -150,14 +174,29 @@ export function OrderForm({ action, clients, products, initial, inboxMessageId, 
     try { parseUnitPrice(row.priceEur); return ""; } catch (error) { return error instanceof Error ? error.message : "Neplatná cena."; }
   });
   const totals = draft.rows.reduce((sum, row) => { const value = line(row); return value ? { net: sum.net + value.net, vat: sum.vat + value.vat } : sum; }, { net: 0, vat: 0 });
+  const chargeErrors = draft.charges.map((charge) => {
+    if (!charge.description.trim()) return "Zadajte popis služby.";
+    try { if (parseEurToCents(charge.priceEur) < 0) return "Cena musí byť nezáporná."; }
+    catch { return "Zadajte platnú cenu s najviac 2 desatinnými miestami."; }
+    return "";
+  });
+  const chargeTotals = draft.charges.reduce((sum, charge, index) => {
+    if (chargeErrors[index] || charge.recipient !== "SELLER") return sum;
+    const net = parseEurToCents(charge.priceEur);
+    return { net: sum.net + net, vat: sum.vat + Math.floor((net * charge.vatRate + 50) / 100) };
+  }, { net: 0, vat: 0 });
+  totals.net += chargeTotals.net; totals.vat += chargeTotals.vat;
+  const taxReviewNeeded = draft.charges.some((charge) => charge.recipient === "SELLER" && ["UNVERIFIED", "FOREIGN"].includes(charge.taxTreatment));
   const itemsJson = JSON.stringify(draft.rows.map((row) => ({
     productId: row.productId, quantity: Number(row.quantity), unitPriceExact: row.priceEur,
     vatRate: row.vatRate, priceSource: row.priceSource, minimumExpiryDate: row.minimumExpiryDate || undefined,
   })));
+  const chargesJson = JSON.stringify(draft.charges.map((charge) => ({ ...charge })));
   const productParams = new URLSearchParams({ zObjednavky: "1" });
+  if (draftKey.startsWith("order:edit:")) productParams.set("objednavka", draftKey.slice("order:edit:".length));
   if (draft.clientId) productParams.set("klient", draft.clientId);
   if (inboxMessageId) productParams.set("inbox", inboxMessageId);
-  const canReview = draft.clientId && errors.every((error) => !error) && draft.rows.length > 0;
+  const canReview = draft.clientId && errors.every((error) => !error) && chargeErrors.every((error) => !error) && draft.rows.length + draft.charges.length > 0;
 
   return <form action={formAction} onSubmit={(event) => {
     if (!review || !canReview) { event.preventDefault(); setReview(true); return; }
@@ -165,6 +204,7 @@ export function OrderForm({ action, clients, products, initial, inboxMessageId, 
     submitted.current = true;
   }} className="max-w-4xl space-y-5 rounded-[14px] border border-stone-200 bg-white p-6">
     <input type="hidden" name="items" value={itemsJson} />
+    <input type="hidden" name="charges" value={chargesJson} />
     <input type="hidden" name="submissionKey" value={draft.submissionKey} />
     {inboxMessageId && <input type="hidden" name="inboxMessageId" value={inboxMessageId} />}
     <div className="flex items-center justify-between gap-3 text-xs text-stone-500"><span>Rozpracovaný formulár sa priebežne ukladá v tomto prehliadači. Pri zmene klienta alebo dátumu sa obnovia iba ceny z cenníka; ručné ceny zostanú.</span><button type="button" className="shrink-0 text-red-700 underline" onClick={() => { if (window.confirm("Zahodiť rozpracovaný koncept objednávky?")) { submitted.current = true; localStorage.removeItem(draftKey); window.location.reload(); } }}>Zahodiť koncept</button></div>
@@ -174,7 +214,9 @@ export function OrderForm({ action, clients, products, initial, inboxMessageId, 
           <option value="">— vyberte klienta —</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name} ({client.type})</option>)}
         </select></div>
       <div><label htmlFor="channel" className={labelClass}>Kanál</label><select id="channel" name="channel" value={draft.channel} onChange={(e) => setField("channel", e.target.value)} className={inputClass}>{Object.entries(orderChannelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+      <div><label htmlFor="legalEntity" className={labelClass}>Právny subjekt</label><select id="legalEntity" name="legalEntity" value={draft.legalEntity} onChange={(e) => setField("legalEntity", e.target.value)} className={inputClass}><option value="">Neoverený / nepriradený</option>{Object.entries(legalEntityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
     </div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="orderDate" className={labelClass}>Pôvodný dátum objednávky</label><input id="orderDate" name="orderDate" type="date" value={draft.orderDate} onChange={(e) => setField("orderDate", e.target.value)} className={inputClass} /></div><div><label htmlFor="externalId" className={labelClass}>Externé číslo objednávky</label><input id="externalId" name="externalId" value={draft.externalId} onChange={(e) => setField("externalId", e.target.value)} className={inputClass} /></div></div>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div><label htmlFor="deliveryDate" className={labelClass}>Preferovaný dátum dodania</label><input id="deliveryDate" name="deliveryDate" type="date" value={draft.deliveryDate} onChange={(e) => reprice(draft.clientId, e.target.value)} className={inputClass} /></div>
       <div><label htmlFor="latestDeliveryDate" className={labelClass}>Najneskorší termín dodania</label><input id="latestDeliveryDate" name="latestDeliveryDate" type="date" min={draft.deliveryDate || undefined} value={draft.latestDeliveryDate} onChange={(e) => setField("latestDeliveryDate", e.target.value)} className={inputClass} /></div>
@@ -188,22 +230,42 @@ export function OrderForm({ action, clients, products, initial, inboxMessageId, 
       <div><label htmlFor="paymentTermDays" className={labelClass}>Splatnosť faktúry (dni)</label><input id="paymentTermDays" name="paymentTermDays" type="number" min="0" max="365" step="1" value={draft.paymentTermDays} onChange={(e) => setField("paymentTermDays", e.target.value)} placeholder="Predvolene 14" className={inputClass} /></div>
       <div><label htmlFor="note" className={labelClass}>Poznámka</label><input id="note" name="note" value={draft.note} onChange={(e) => setField("note", e.target.value)} className={inputClass} /></div>
     </div>
+    <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-3"><legend className="mb-2 text-sm font-semibold">Platforma a historické odoslanie</legend>
+      <div><label className={labelClass}>Platba zákazníka na platforme</label><select name="platformPaymentStatus" value={draft.platformPaymentStatus} onChange={(e) => setField("platformPaymentStatus", e.target.value)} className={inputClass}><option value="">Nezaznamenané</option><option value="CUSTOMER_PAID">Zákazník zaplatil platforme</option><option value="UNCONFIRMED">Neoverené</option><option value="NOT_APPLICABLE">Netýka sa</option></select></div>
+      {([["customerPaidAt", "Zaplatené platforme"], ["platformSettledAt", "Vyúčtované predajcovi"], ["shippedAt", "Odoslané"], ["deliveredAt", "Doručené"]] as const).map(([field, label]) => <div key={field}><label className={labelClass}>{label}</label><input name={field} type="date" value={draft[field]} onChange={(e) => setField(field, e.target.value)} className={inputClass} /></div>)}
+      {([["platformSettlementEur", "Vyúčtovanie platformy (€)"], ["platformCommissionEur", "Provízia platformy (€)"]] as const).map(([field, label]) => <div key={field}><label className={labelClass}>{label}</label><input name={field} inputMode="decimal" value={draft[field]} onChange={(e) => setField(field, e.target.value)} className={inputClass} /></div>)}
+      <div><label className={labelClass}>Historický stav odoslania (bez skladu)</label><select name="shipmentStatus" value={draft.shipmentStatus} onChange={(e) => setField("shipmentStatus", e.target.value)} className={inputClass}><option value="">Nezaznamenané</option><option value="NOT_SHIPPED">Neodoslané</option><option value="SHIPPED_EXTERNALLY">Odoslané mimo ERP</option><option value="DELIVERED_EXTERNALLY">Doručené mimo ERP</option></select></div>
+    </fieldset>
     <div>
-      <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-stone-700">Položky *</span><div className="flex gap-2"><Link href={`/produkty/nova?${productParams.toString()}`} onClick={() => localStorage.setItem(draftKey, JSON.stringify(currentDraft.current))} className="rounded-[10px] border border-stone-300 px-3 py-1 text-sm">+ Nový produkt</Link><button type="button" onClick={() => setRows((rows) => [...rows, blankRow()])} className="rounded-[10px] border border-stone-300 px-3 py-1 text-sm">+ Položka</button></div></div>
+      <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-stone-700">Produkty</span><div className="flex gap-2"><Link href={`/produkty/nova?${productParams.toString()}`} onClick={() => localStorage.setItem(draftKey, JSON.stringify(currentDraft.current))} className="rounded-[10px] border border-stone-300 px-3 py-1 text-sm">+ Nový produkt</Link><button type="button" onClick={() => setRows((rows) => [...rows, blankRow()])} className="rounded-[10px] border border-stone-300 px-3 py-1 text-sm">+ Položka</button></div></div>
       <div className="space-y-3">{draft.rows.map((row, index) => { const result = line(row); return <div key={index} className="grid grid-cols-1 gap-2 rounded-[10px] border border-stone-200 p-3 sm:grid-cols-12">
         <div className="sm:col-span-4"><label className={labelClass}>Produkt</label><select value={row.productId} onChange={(e) => changeProduct(index, e.target.value)} className={inputClass}><option value="">— vyberte produkt —</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} ({product.sku})</option>)}</select></div>
         <div className="sm:col-span-2"><label className={labelClass}>Množstvo</label><input type="number" min="1" step="1" value={row.quantity} onChange={(e) => updateRow(index, { quantity: e.target.value })} className={inputClass} /></div>
         <div className="sm:col-span-3"><label className={labelClass}>Cena/ks bez DPH (€)</label><input inputMode="decimal" value={row.priceEur} onChange={(e) => updateRow(index, { priceEur: e.target.value, priceSource: "MANUAL", manual: true })} placeholder="1,827" aria-invalid={!!errors[index]} className={inputClass} /><p className="mt-1 text-xs text-stone-500">{sourceLabels[row.priceSource]}</p>{errors[index] && <p className="mt-1 text-xs text-red-700" role="alert">{errors[index]}</p>}{state.priceErrorIndex === index && state.error && <p className="mt-1 text-xs text-red-700" role="alert">{state.error}</p>}</div>
         <div className="sm:col-span-1"><label className={labelClass}>DPH %</label><input type="number" min="0" max="100" step="1" value={row.vatRate} onChange={(e) => updateRow(index, { vatRate: Number(e.target.value) })} className={inputClass} /></div>
-        <div className="sm:col-span-2 text-right"><span className={labelClass}>Základ</span><strong>{result ? formatCents(result.net) : "—"}</strong><button type="button" onClick={() => setRows((rows) => rows.filter((_, i) => i !== index))} disabled={draft.rows.length === 1} className="mt-1 block w-full text-xs text-red-700 disabled:opacity-30">Odstrániť</button></div>
+        <div className="sm:col-span-2 text-right"><span className={labelClass}>Základ</span><strong>{result ? formatCents(result.net) : "—"}</strong><button type="button" onClick={() => setRows((rows) => rows.filter((_, i) => i !== index))} disabled={draft.rows.length === 1 && draft.charges.length === 0} className="mt-1 block w-full text-xs text-red-700 disabled:opacity-30">Odstrániť</button></div>
         <div className="sm:col-span-5"><label className={labelClass}>Požadovaná minimálna exspirácia pri dodaní</label><input type="date" value={row.minimumExpiryDate} onChange={(e) => updateRow(index, { minimumExpiryDate: e.target.value })} className={inputClass} /></div>
         {row.manual && row.productId && <button type="button" className="self-end text-left text-xs text-stone-700 underline sm:col-span-4" onClick={() => { const price = resolve(draft.clientId, row.productId, draft.deliveryDate); if (price) updateRow(index, { priceEur: price.cents == null ? "" : centsToInput(price.cents), priceSource: price.source, manual: false }); }}>Obnoviť cenu z cenníka</button>}
       </div>; })}</div>
-      <dl className="mt-3 ml-auto w-64 space-y-1 text-sm"><div className="flex justify-between"><dt>Spolu bez DPH</dt><dd>{formatCents(totals.net)}</dd></div><div className="flex justify-between"><dt>DPH</dt><dd>{formatCents(totals.vat)}</dd></div><div className="flex justify-between border-t pt-1 font-semibold"><dt>Spolu s DPH</dt><dd>{formatCents(totals.net + totals.vat)}</dd></div></dl>
+      <div className="mt-5"><div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold">Doprava a služby</h2><button type="button" className="rounded-[10px] border border-stone-300 px-3 py-1 text-sm" onClick={() => { setDraft((old) => ({ ...old, charges: [...old.charges, blankCharge()] })); setReview(false); }}>+ Doprava alebo služba</button></div>
+        {draft.charges.map((charge, index) => <div key={index} className="mb-3 grid grid-cols-1 gap-2 rounded-[10px] border border-stone-200 p-3 sm:grid-cols-3">
+          <div><label className={labelClass}>Druh</label><select value={charge.kind} onChange={(e) => updateCharge(index, { kind: e.target.value as ChargeRow["kind"] })} className={inputClass}><option value="SHIPPING">Doprava</option><option value="FEE">Služba / poplatok</option></select></div>
+          <div><label className={labelClass}>Popis</label><input value={charge.description} onChange={(e) => updateCharge(index, { description: e.target.value })} className={inputClass} /></div>
+          <div><label className={labelClass}>Cena bez DPH (€)</label><input inputMode="decimal" value={charge.priceEur} onChange={(e) => updateCharge(index, { priceEur: e.target.value })} className={inputClass} /></div>
+          <div><label className={labelClass}>Príjemca platby</label><select value={charge.recipient} onChange={(e) => updateCharge(index, { recipient: e.target.value as ChargeRow["recipient"] })} className={inputClass}><option value="SELLER">Predajca (do súčtu)</option><option value="PLATFORM">Platforma (mimo príjmu)</option><option value="CARRIER">Dopravca (mimo príjmu)</option><option value="UNKNOWN">Neoverené (mimo príjmu)</option></select></div>
+          <div><label className={labelClass}>Daňový režim</label><select value={charge.taxTreatment} onChange={(e) => updateCharge(index, { taxTreatment: e.target.value as ChargeRow["taxTreatment"], vatRate: e.target.value === "NON_PAYER" ? 0 : charge.vatRate })} className={inputClass}><option value="UNVERIFIED">Neoverený</option><option value="STANDARD">Tuzemský zdaniteľný</option><option value="NON_PAYER">Neplatiteľ DPH</option><option value="FOREIGN">Zahraničný</option></select></div>
+          <div><label className={labelClass}>Sadzba DPH %</label><input type="number" min="0" max="100" step="1" value={charge.vatRate} onChange={(e) => updateCharge(index, { vatRate: Number(e.target.value) })} className={inputClass} /></div>
+          {chargeErrors[index] && <p role="alert" className="text-sm text-red-700 sm:col-span-2">{chargeErrors[index]}</p>}
+          <button type="button" className="text-left text-xs text-red-700" onClick={() => { setDraft((old) => ({ ...old, charges: old.charges.filter((_, i) => i !== index) })); setReview(false); }}>Odstrániť</button>
+        </div>)}
+      </div>
+      <dl className="mt-3 ml-auto w-64 space-y-1 text-sm"><div className="flex justify-between"><dt>Spolu bez DPH</dt><dd>{formatCents(totals.net)}</dd></div><div className="flex justify-between"><dt>DPH</dt><dd>{formatCents(totals.vat)}{taxReviewNeeded && " + neoverená daň dopravy"}</dd></div><div className="flex justify-between border-t pt-1 font-semibold"><dt>{taxReviewNeeded ? "Predbežné spolu" : "Spolu s DPH"}</dt><dd>{formatCents(totals.net + totals.vat)}</dd></div></dl>
     </div>
-    {review && <section className="rounded-[10px] border border-amber-300 bg-amber-50 p-4 text-sm"><h2 className="font-semibold">Kontrola pred uložením</h2><p>Klient: {clients.find((client) => client.id === draft.clientId)?.name ?? "Nevybraný"} · Kanál: {orderChannelLabels[draft.channel as keyof typeof orderChannelLabels] ?? draft.channel}</p>
+    {review && <section className="rounded-[10px] border border-amber-300 bg-amber-50 p-4 text-sm"><h2 className="font-semibold">Kontrola pred uložením</h2><p>Klient: {clients.find((client) => client.id === draft.clientId)?.name ?? "Nevybraný"} · Subjekt: {legalEntityLabels[draft.legalEntity] ?? "Nepriradený"} · Kanál: {orderChannelLabels[draft.channel] ?? draft.channel} · dátum: {draft.orderDate || "dnes"} · externé číslo: {draft.externalId || "—"}</p>
       {draft.rows.map((row, index) => <p key={index}>{products.find((product) => product.id === row.productId)?.name ?? "Nevybraný produkt"} · {row.quantity} ks × {row.priceEur} € bez DPH · DPH {row.vatRate} % · {sourceLabels[row.priceSource]} · základ {formatCents(line(row)?.net ?? 0)}{row.minimumExpiryDate && ` · min. exspirácia ${row.minimumExpiryDate}`}</p>)}
-      <p>Preferované dodanie: {draft.deliveryDate || "—"} · najneskôr: {draft.latestDeliveryDate || "—"} · kontakt: {draft.deliveryContact || "—"}</p><p>Dodacia adresa: {[draft.deliveryStreet, draft.deliveryZip, draft.deliveryCity, draft.deliveryCountry].filter(Boolean).join(", ") || "Fakturačná adresa"}</p><p>Úhrada: {paymentLabels[draft.paymentMethod]} · splatnosť: {draft.paymentTermDays === "" ? "14" : draft.paymentTermDays} dní · poznámka: {draft.note || "—"}</p><p className="mt-2 font-semibold">Základ {formatCents(totals.net)} · DPH {formatCents(totals.vat)} · spolu {formatCents(totals.net + totals.vat)}</p></section>}
+      {draft.charges.map((charge, index) => <p key={`charge-${index}`}>{charge.description} · {charge.priceEur} € bez DPH · DPH {charge.vatRate} % · príjemca: {charge.recipient === "SELLER" ? "predajca" : charge.recipient === "PLATFORM" ? "platforma" : charge.recipient === "CARRIER" ? "dopravca" : "neoverený"}{charge.recipient !== "SELLER" && " · mimo súčtu predajcu"}</p>)}
+      {taxReviewNeeded && <p className="font-medium text-amber-900">Daň dopravy alebo služby nie je overená; faktúru nemožno finalizovať, kým sa režim nepotvrdí.</p>}
+      <p>Preferované dodanie: {draft.deliveryDate || "—"} · najneskôr: {draft.latestDeliveryDate || "—"} · kontakt: {draft.deliveryContact || "—"}</p><p>Dodacia adresa: {[draft.deliveryStreet, draft.deliveryZip, draft.deliveryCity, draft.deliveryCountry].filter(Boolean).join(", ") || "Fakturačná adresa"}</p><p>Úhrada: {paymentLabels[draft.paymentMethod]} · splatnosť: {draft.paymentTermDays === "" ? "14" : draft.paymentTermDays} dní · platba platforme: {draft.platformPaymentStatus || "—"} · vyúčtovanie: {draft.platformSettlementEur || "—"} € · provízia: {draft.platformCommissionEur || "—"} € · historické odoslanie: {draft.shipmentStatus || "—"} {draft.shippedAt} · poznámka: {draft.note || "—"}</p><p className="mt-2 font-semibold">Základ {formatCents(totals.net)} · DPH {formatCents(totals.vat)} · spolu {formatCents(totals.net + totals.vat)}</p></section>}
     {state.error && state.priceErrorIndex === undefined && <p role="alert" className="rounded-[10px] bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
     <div className="flex gap-3"><button type="submit" disabled={pending || !ready || !canReview} className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-stone-950 disabled:opacity-50">{pending ? "Ukladám…" : review ? submitLabel : "Skontrolovať objednávku"}</button><Link href={cancelHref} className="rounded-[10px] border border-stone-300 px-4 py-2 text-sm">Späť</Link></div>
   </form>;

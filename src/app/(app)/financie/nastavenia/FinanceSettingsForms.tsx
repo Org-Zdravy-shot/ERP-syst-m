@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { saveFinanceProfile, saveProductVatRates, type InvoiceFormState } from "../_actions";
 import { btnPrimary, errorBox, input, label } from "@/components/ui";
+import { legalEntityLabels } from "@/lib/zod-schemas";
 
 interface ProfileDefaults {
   legalName: string;
@@ -58,6 +59,7 @@ export function FinanceSettingsForms({
           Uloženie vytvorí novú časovo platnú verziu. Staré faktúry zostanú na svojich snapshotoch.
         </p>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div><label className={label}>Právny subjekt *</label><select name="legalEntity" required defaultValue="" className={input}><option value="" disabled>— vyberte overený subjekt —</option>{Object.entries(legalEntityLabels).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select></div>
           <div>
             <label className={label}>Platnosť od</label>
             <input name="validFrom" type="date" required defaultValue={suggestedValidFrom} className={input} />

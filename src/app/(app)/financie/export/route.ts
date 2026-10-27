@@ -21,17 +21,20 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const direction = params.get("smer");
   const source = params.get("zdroj");
+  const entity = params.get("subjekt");
   const dateFrom = parseDate(params.get("od"));
   const dateTo = parseDate(params.get("do"), true);
   const includeCancelled = params.get("stornovane") === "1";
   const acceptedDirection = direction === "VYDANA" || direction === "PRIJATA" ? direction : undefined;
   const acceptedSource =
-    source === "INTERNA" || source === "WEB" || source === "SUPERFAKTURA" || source === "OMEGA"
+    source === "INTERNA" || source === "WEB" || source === "SUPERFAKTURA" || source === "OMEGA" || source === "HISTORICAL"
       ? source
       : undefined;
+  const acceptedEntity = entity === "SOLE_TRADER" || entity === "KURGI" ? entity : entity === "UNASSIGNED" ? null : undefined;
   const exported = await invoiceService.exportAccounting({
     ...(acceptedDirection ? { direction: acceptedDirection } : {}),
     ...(acceptedSource ? { source: acceptedSource } : {}),
+    ...(acceptedEntity !== undefined ? { legalEntity: acceptedEntity } : {}),
     dateFrom,
     dateTo,
     includeCancelled,
@@ -50,6 +53,7 @@ export async function GET(request: NextRequest) {
         filters: {
           direction: acceptedDirection,
           source: acceptedSource,
+          legalEntity: acceptedEntity,
           dateFrom: dateFrom?.toISOString(),
           dateTo: dateTo?.toISOString(),
           includeCancelled,

@@ -5,6 +5,7 @@ import { hasFinancePermission } from "@/lib/finance/permissions";
 import { PageHeader } from "@/components/PageHeader";
 import { formatCents } from "@/lib/format";
 import { btnPrimary, btnSecondary, card, cardHeader, table, thead, tr, td, tdRight, tdRightMuted } from "@/components/ui";
+import { legalEntityLabels } from "@/lib/zod-schemas";
 
 function KpiCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -16,7 +17,9 @@ function KpiCard({ label, value, hint }: { label: string; value: string; hint?: 
   );
 }
 
-export default async function FinanciePage() {
+export default async function FinanciePage({ searchParams }: { searchParams: Promise<{ subjekt?: string }> }) {
+  const { subjekt } = await searchParams;
+  const entity = subjekt === "UNASSIGNED" || (subjekt && subjekt in legalEntityLabels) ? subjekt : undefined;
   const session = await getSession();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -24,31 +27,31 @@ export default async function FinanciePage() {
   const [issuedDocuments, receivedDocuments, outstandingInvoices, ekasaThisMonth, matchedEkasaThisMonth, cashIn, cashOut, products] =
     await Promise.all([
       prisma.invoice.findMany({
-        where: { direction: "VYDANA", documentStatus: "ISSUED", issueDate: { gte: monthStart } },
+        where: { direction: "VYDANA", documentStatus: "ISSUED", currency: "EUR", ...(entity ? { legalEntity: entity === "UNASSIGNED" ? null : entity } : {}), issueDate: { gte: monthStart } },
         select: { documentType: true, totalGrossCents: true },
       }),
       prisma.invoice.findMany({
-        where: { direction: "PRIJATA", documentStatus: "ISSUED", issueDate: { gte: monthStart } },
+        where: { direction: "PRIJATA", documentStatus: "ISSUED", currency: "EUR", ...(entity ? { legalEntity: entity === "UNASSIGNED" ? null : entity } : {}), issueDate: { gte: monthStart } },
         select: { documentType: true, totalGrossCents: true },
       }),
       prisma.invoice.findMany({
-        where: { direction: "VYDANA", documentType: "INVOICE", documentStatus: "ISSUED" },
+        where: { direction: "VYDANA", documentType: "INVOICE", documentStatus: "ISSUED", currency: "EUR", source: { not: "HISTORICAL" }, ...(entity ? { legalEntity: entity === "UNASSIGNED" ? null : entity } : {}) },
         select: {
           totalGrossCents: true,
           dueDate: true,
           paymentAllocations: { where: { reversedAt: null }, select: { amountCents: true } },
         },
       }),
-      prisma.ekasaSale.aggregate({
+      entity ? Promise.resolve({ _sum: { totalGrossCents: 0 } }) : prisma.ekasaSale.aggregate({
         where: { saleDate: { gte: monthStart }, matchedInvoiceId: null },
         _sum: { totalGrossCents: true },
       }),
-      prisma.ekasaSale.aggregate({
+      entity ? Promise.resolve({ _sum: { totalGrossCents: 0 } }) : prisma.ekasaSale.aggregate({
         where: { saleDate: { gte: monthStart }, matchedInvoiceId: { not: null } },
         _sum: { totalGrossCents: true },
       }),
-      prisma.payment.aggregate({ where: { direction: "INCOMING", paidAt: { gte: monthStart } }, _sum: { amountCents: true } }),
-      prisma.payment.aggregate({ where: { direction: "OUTGOING", paidAt: { gte: monthStart } }, _sum: { amountCents: true } }),
+      entity ? Promise.resolve({ _sum: { amountCents: 0 } }) : prisma.payment.aggregate({ where: { direction: "INCOMING", paidAt: { gte: monthStart } }, _sum: { amountCents: true } }),
+      entity ? Promise.resolve({ _sum: { amountCents: 0 } }) : prisma.payment.aggregate({ where: { direction: "OUTGOING", paidAt: { gte: monthStart } }, _sum: { amountCents: true } }),
       prisma.product.findMany({
         where: { isActive: true },
         orderBy: { name: "asc" },
@@ -101,7 +104,7 @@ export default async function FinanciePage() {
   return (
     <>
       <PageHeader title="Financie" subtitle="Faktúry, eKasa, marže a export pre účtovníka">
-        <a href="/financie/export" className={btnSecondary} download>
+        <a href={entity ? `/financie/export?subjekt=${entity}` : "/financie/export"} className={btnSecondary} download>
           ⬇ Export CSV
         </a>
         <Link href="/financie/faktury" className={btnPrimary}>
@@ -109,17 +112,19 @@ export default async function FinanciePage() {
         </Link>
       </PageHeader>
 
+      <div className="mb-4 flex flex-wrap gap-2 text-sm"><Link href="/financie" className={`rounded-[8px] border px-3 py-1.5 ${!entity ? "bg-stone-900 text-white" : "bg-white"}`}>Všetky subjekty</Link>{Object.entries(legalEntityLabels).map(([key, title]) => <Link key={key} href={`/financie?subjekt=${key}`} className={`rounded-[8px] border px-3 py-1.5 ${entity === key ? "bg-stone-900 text-white" : "bg-white"}`}>{title}</Link>)}<Link href="/financie?subjekt=UNASSIGNED" className={`rounded-[8px] border px-3 py-1.5 ${entity === "UNASSIGNED" ? "bg-stone-900 text-white" : "bg-white"}`}>Nepriradené</Link></div>
+
       <p className="mb-4 rounded-[10px] bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Operatívny prehľad podľa dátumu dokladov. Párovaná eKasa sa k faktúre nepripočíta druhýkrát; nepárované rovnaké predaje môžu stále nadhodnotiť súčet. Prijaté doklady nie sú úplné náklady a peňažné toky vychádzajú len z evidovaných platieb.
+        {entity ? "Prehľad obsahuje iba doklady z vybraného filtra v EUR. eKasa a bankové platby zatiaľ nemajú priradený subjekt a nie sú v tomto súčte." : "Operatívny prehľad podľa dátumu dokladov. Párovaná eKasa sa k faktúre nepripočíta druhýkrát; nepárované rovnaké predaje môžu stále nadhodnotiť súčet. Prijaté doklady nie sú úplné náklady a peňažné toky vychádzajú len z evidovaných platieb."}
       </p>
       <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
           label="Evidované predaje s DPH"
           value={formatCents(revenueThisMonth)}
-          hint={`Vydané doklady + nespárovaná eKasa; spárované ${formatCents(matchedEkasaThisMonth._sum.totalGrossCents ?? 0)} vylúčené`}
+          hint={entity ? "Iba priradené vydané doklady v EUR" : `Vydané doklady + nespárovaná eKasa; spárované ${formatCents(matchedEkasaThisMonth._sum.totalGrossCents ?? 0)} vylúčené`}
         />
         <KpiCard label="Vydané doklady s DPH" value={formatCents(issuedThisMonthCents)} hint={`${issuedDocuments.length} dokladov vrátane dobropisov`} />
-        <KpiCard label="eKasa bez párovania" value={formatCents(ekasaThisMonth._sum.totalGrossCents ?? 0)} hint="Môže obsahovať rovnaký predaj ako faktúra" />
+        {!entity && <KpiCard label="eKasa bez párovania" value={formatCents(ekasaThisMonth._sum.totalGrossCents ?? 0)} hint="Môže obsahovať rovnaký predaj ako faktúra" />}
         <KpiCard
           label="Neuhradené faktúry"
           value={formatCents(unpaidCents)}
@@ -131,12 +136,12 @@ export default async function FinanciePage() {
           hint={overdue > 0 ? "faktúr treba urgovať" : "všetko v termíne"}
         />
         <KpiCard
-          label="Prijaté doklady s DPH"
+          label="Prijaté doklady spolu"
           value={formatCents(receivedThisMonthCents)}
-          hint={`${receivedDocuments.length} prijatých dokladov; nie úplné náklady`}
+          hint={`${receivedDocuments.length} prijatých dokladov v EUR; cudziu DPH nepovažovať za slovenský odpočet`}
         />
-        <KpiCard label="Prijaté platby" value={formatCents(cashIn._sum.amountCents ?? 0)} hint="Z evidovaných platieb, nie z vystavených dokladov" />
-        <KpiCard label="Odoslané platby" value={formatCents(cashOut._sum.amountCents ?? 0)} hint="Z evidovaných platieb" />
+        {!entity && <KpiCard label="Prijaté platby" value={formatCents(cashIn._sum.amountCents ?? 0)} hint="Z evidovaných platieb, nie z vystavených dokladov" />}
+        {!entity && <KpiCard label="Odoslané platby" value={formatCents(cashOut._sum.amountCents ?? 0)} hint="Z evidovaných platieb" />}
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
