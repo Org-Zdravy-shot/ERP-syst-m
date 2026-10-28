@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useActionState } from "react";
 import { createManualInvoice, type InvoiceFormState } from "../../_actions";
-import { formatCents, parseEurToCents } from "@/lib/format";
+import { formatCents } from "@/lib/format";
+import { lineNetCents, parseUnitPrice, unitPriceCents } from "@/lib/precise-price";
 import { btnPrimary, btnSmall, errorBox, input, label } from "@/components/ui";
 import Link from "next/link";
 import { legalEntityLabels } from "@/lib/zod-schemas";
@@ -25,13 +26,17 @@ interface Line {
 const EMPTY_LINE: Line = { description: "", quantity: "1", unit: "ks", vatRate: "0", unitPrice: "" };
 
 function parseQty(value: string): number {
-  const parsed = Number.parseFloat(value.replace(/\s/g, "").replace(",", "."));
-  return Number.isNaN(parsed) ? 0 : parsed;
+  const normalized = value.trim().replace(/\s/g, "").replace(",", ".");
+  if (!/^\d+(?:\.\d{1,6})?$/.test(normalized)) return 0;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function lineCents(line: Line): { netCents: number; vatRate: number } | null {
   try {
-    const netCents = Math.round(parseQty(line.quantity) * parseEurToCents(line.unitPrice));
+    const quantity = parseQty(line.quantity);
+    if (quantity <= 0) return null;
+    const netCents = lineNetCents(quantity, parseUnitPrice(line.unitPrice));
     return { netCents, vatRate: Number.parseInt(line.vatRate, 10) || 0 };
   } catch {
     return null;
@@ -66,11 +71,15 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
     const items = lines
       .map((line) => {
         try {
+          const quantity = parseQty(line.quantity);
+          const exact = parseUnitPrice(line.unitPrice);
+          if (quantity <= 0) return null;
           return {
             description: line.description.trim(),
-            quantity: parseQty(line.quantity),
+            quantity,
             unit: line.unit,
-            unitPriceCents: parseEurToCents(line.unitPrice),
+            unitPriceCents: unitPriceCents(exact),
+            unitPriceExact: exact,
             vatRate: Number.parseInt(line.vatRate, 10) || 0,
           };
         } catch {
@@ -80,6 +89,9 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
       .filter((item) => item && item.description && item.quantity > 0);
     return JSON.stringify(items);
   }, [lines]);
+  const invalidPriceRows = lines.map((line) => {
+    try { parseUnitPrice(line.unitPrice); return false; } catch { return true; }
+  });
 
   const today = new Date().toISOString().slice(0, 10);
   const in14days = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
@@ -204,7 +216,10 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
                   value={line.unitPrice}
                   onChange={(e) => updateLine(index, { unitPrice: e.target.value })}
                   className={input}
+                  aria-invalid={invalidPriceRows[index]}
+                  aria-describedby={invalidPriceRows[index] ? `invoice-price-error-${index}` : undefined}
                 />
+                {invalidPriceRows[index] && <p id={`invoice-price-error-${index}`} className="mt-1 text-xs text-red-700">Zadajte cenu s najviac 4 desatinnými miestami (čiarka alebo bodka).</p>}
               </div>
               <div className="sm:col-span-1">
                 <select
@@ -256,7 +271,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
 
       {state.error && <p className={errorBox}>{state.error}</p>}
 
-      <button type="submit" disabled={pending} className={btnPrimary}>
+      <button type="submit" disabled={pending || invalidPriceRows.some(Boolean)} className={btnPrimary}>
         {pending ? "Ukladám…" : "Uložiť koncept"}
       </button>
     </form>

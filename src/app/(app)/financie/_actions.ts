@@ -10,6 +10,7 @@ import { invoiceDirectionSchema, vatStatusSchema, legalEntitySchema } from "@/li
 import { invoiceService } from "@/lib/finance/invoice-service";
 import { requireFinancePermission } from "@/lib/finance/permissions";
 import { parseEurToCents } from "@/lib/format";
+import { parseUnitPrice, unitPriceCents } from "@/lib/precise-price";
 
 export interface InvoiceFormState {
   error?: string;
@@ -192,7 +193,13 @@ const invoiceItemSchema = z.object({
   quantity: z.number().positive("Množstvo musí byť kladné").max(1_000_000),
   unit: z.string().trim().min(1).max(20),
   unitPriceCents: z.number().int("Cena musí byť v centoch").min(0).max(100_000_000),
+  unitPriceExact: z.string().refine((value) => {
+    try { parseUnitPrice(value); return true; } catch { return false; }
+  }, "Zadajte platnú jednotkovú cenu s najviac 4 desatinnými miestami.").transform(parseUnitPrice).optional(),
   vatRate: z.number().int().min(0).max(100),
+}).refine((item) => !item.unitPriceExact || unitPriceCents(item.unitPriceExact) === item.unitPriceCents, {
+  message: "Jednotková cena nesúhlasí s presnou cenou.",
+  path: ["unitPriceExact"],
 });
 
 const manualInvoiceSchema = z

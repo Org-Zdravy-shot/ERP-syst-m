@@ -15,12 +15,17 @@ export function priceUnits(value: string): number {
 
 /** Half up to cents; the unit price is multiplied before rounding. */
 export function lineNetCents(quantity: number, exact: string): number {
-  if (!Number.isSafeInteger(quantity) || quantity < 0) throw new Error("Neplatné množstvo.");
-  const units = priceUnits(exact);
-  if (!Number.isSafeInteger(units * quantity)) throw new Error("Suma je mimo povoleného rozsahu.");
-  const result = Math.floor((units * quantity + 50) / 100);
-  if (!Number.isSafeInteger(result)) throw new Error("Suma je mimo povoleného rozsahu.");
-  return result;
+  if (!Number.isFinite(quantity) || quantity < 0) throw new Error("Neplatné množstvo.");
+  const quantityText = String(quantity);
+  const match = /^(\d+)(?:\.(\d{1,6}))?$/.exec(quantityText);
+  if (!match) throw new Error("Množstvo môže mať najviac 6 desatinných miest.");
+  const decimals = match[2]?.length ?? 0;
+  const scale = BigInt(10) ** BigInt(decimals);
+  const quantityUnits = BigInt(match[1]) * scale + BigInt(match[2] ?? 0);
+  const denominator = BigInt(100) * scale;
+  const result = (BigInt(priceUnits(exact)) * quantityUnits + denominator / BigInt(2)) / denominator;
+  if (result > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Suma je mimo povoleného rozsahu.");
+  return Number(result);
 }
 
 export function unitPriceCents(exact: string): number {
