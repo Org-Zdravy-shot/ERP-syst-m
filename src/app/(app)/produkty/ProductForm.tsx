@@ -12,7 +12,8 @@ export interface ProductValues {
   priceB2cCents: number;
   priceB2bCents: number | null;
   vatRate: number;
-  shelfLifeDays: number;
+  shelfLifeDays: number | null;
+  shelfLifeConfirmedAt?: Date | null;
   isActive: boolean;
 }
 
@@ -23,19 +24,20 @@ function euros(cents: number | null) {
 export function ProductForm({ action, product, orderReturn }: {
   action: (previous: ProductFormState, formData: FormData) => Promise<ProductFormState>;
   product?: ProductValues;
-  orderReturn?: { klient?: string; inbox?: string };
+  orderReturn?: { klient?: string; inbox?: string; objednavka?: string };
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const orderParams = new URLSearchParams();
   if (orderReturn?.klient) orderParams.set("klient", orderReturn.klient);
   if (orderReturn?.inbox) orderParams.set("inbox", orderReturn.inbox);
-  const orderHref = `/objednavky/nova${orderParams.size ? `?${orderParams.toString()}` : ""}`;
+  const orderHref = orderReturn?.objednavka ? `/objednavky/${orderReturn.objednavka}/upravit` : `/objednavky/nova${orderParams.size ? `?${orderParams.toString()}` : ""}`;
   return (
     <form action={formAction} className={`${card} max-w-2xl space-y-5 p-6`}>
       {orderReturn && <>
         <input type="hidden" name="returnToOrder" value="1" />
         <input type="hidden" name="returnKlient" value={orderReturn.klient ?? ""} />
         <input type="hidden" name="returnInbox" value={orderReturn.inbox ?? ""} />
+        <input type="hidden" name="returnOrderId" value={orderReturn.objednavka ?? ""} />
       </>}
       {state.error && <p role="alert" className={errorBox}>{state.error}</p>}
       <div className="grid gap-5 sm:grid-cols-2">
@@ -54,11 +56,12 @@ export function ProductForm({ action, product, orderReturn }: {
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
-          <label className={label} htmlFor="priceB2c">Predajná cena za kus (€) *</label>
+          <label className={label} htmlFor="priceB2c">B2C cena za kus bez DPH v objednávke (€) *</label>
           <input className={input} id="priceB2c" name="priceB2c" inputMode="decimal" required defaultValue={euros(product?.priceB2cCents ?? null)} placeholder="3,50" />
+          <p className="mt-1 text-xs text-stone-500">ERP z tejto ceny v objednávke dopočíta DPH. Význam starších uložených hodnôt treba overiť pred ich úpravou.</p>
         </div>
         <div>
-          <label className={label} htmlFor="priceB2b">Predvolená B2B cena (€)</label>
+          <label className={label} htmlFor="priceB2b">Predvolená B2B cena bez DPH (€)</label>
           <input className={input} id="priceB2b" name="priceB2b" inputMode="decimal" defaultValue={euros(product?.priceB2bCents ?? null)} placeholder="Voliteľné" />
           <p className="mt-1 text-xs text-stone-500">Cena konkrétneho klienta má prednosť.</p>
         </div>
@@ -70,8 +73,10 @@ export function ProductForm({ action, product, orderReturn }: {
           <p className="mt-1 text-xs text-stone-500">Zadajte sadzbu platnú pre tento produkt.</p>
         </div>
         <div>
-          <label className={label} htmlFor="shelfLifeDays">Trvanlivosť v dňoch *</label>
-          <input className={input} id="shelfLifeDays" name="shelfLifeDays" type="number" min="1" step="1" required defaultValue={product?.shelfLifeDays ?? 30} />
+          <label className={label} htmlFor="shelfLifeDays">Všeobecná trvanlivosť v dňoch</label>
+          <input className={input} id="shelfLifeDays" name="shelfLifeDays" type="number" min="1" step="1" defaultValue={product?.shelfLifeDays ?? ""} />
+          <p className="mt-1 text-xs text-stone-500">Voliteľná pre predaj. Exspirácia sa eviduje pri konkrétnej šarži.</p>
+          <label className="mt-2 flex items-center gap-2 text-xs text-stone-700"><input type="checkbox" name="shelfLifeConfirmed" defaultChecked={!!product?.shelfLifeConfirmedAt} /> Potvrdená všeobecná trvanlivosť od výroby</label>
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm text-stone-700">

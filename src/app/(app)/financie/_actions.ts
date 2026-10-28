@@ -6,13 +6,123 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { parseBratislavaDateTime } from "@/lib/datetime";
-import { invoiceDirectionSchema, vatStatusSchema } from "@/lib/zod-schemas";
+import { invoiceDirectionSchema, vatStatusSchema, legalEntitySchema } from "@/lib/zod-schemas";
 import { invoiceService } from "@/lib/finance/invoice-service";
 import { requireFinancePermission } from "@/lib/finance/permissions";
+import { parseEurToCents } from "@/lib/format";
 
 export interface InvoiceFormState {
   error?: string;
   success?: string;
+  duplicateWarning?: string;
+  duplicateFingerprint?: string;
+}
+
+/** Evidencia pôvodného dokladu bez vydania nového čísla alebo PDF. */
+export async function recordHistoricalInvoice(_prev: InvoiceFormState, formData: FormData): Promise<InvoiceFormState> {
+  const user = await requireFinancePermission("CREATE_DRAFT");
+  const raw = Object.fromEntries(formData);
+  const schema = z.object({
+    direction: invoiceDirectionSchema,
+    legalEntity: legalEntitySchema,
+    historicalKind: z.enum(["FINAL", "PROFORMA"]),
+    externalNumber: z.string().trim().min(1).max(100),
+    partnerName: z.string().trim().min(1).max(255),
+    taxCountry: z.string().regex(/^[A-Z]{2}$/),
+    taxCurrency: z.string().regex(/^[A-Z]{3}$/),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    variableSymbol: z.string().max(30).optional(),
+    paymentConfirmation: z.enum(["SUPPLIER_CONFIRMED", "BANK_MATCHED"]).optional(),
+    externallyPaidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    note: z.string().max(2000).optional(),
+  });
+  const parsed = schema.safeParse({
+    direction: raw.direction, legalEntity: raw.legalEntity, historicalKind: raw.historicalKind,
+    externalNumber: String(raw.externalNumber ?? ""), partnerName: String(raw.partnerName ?? ""),
+    taxCountry: String(raw.taxCountry ?? "").toUpperCase(), taxCurrency: String(raw.taxCurrency ?? "").toUpperCase(), currency: String(raw.currency ?? "").toUpperCase(),
+    issueDate: raw.issueDate, dueDate: raw.dueDate,
+    deliveryDate: raw.deliveryDate || undefined, variableSymbol: String(raw.variableSymbol ?? "").trim() || undefined,
+    paymentConfirmation: raw.paymentConfirmation || undefined, externallyPaidAt: raw.externallyPaidAt || undefined,
+    note: String(raw.note ?? "").trim() || undefined,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje dokladu." };
+  const data = parsed.data;
+  const date = (value: string) => new Date(`${value}T00:00:00.000Z`);
+  if ([data.issueDate, data.dueDate, data.deliveryDate, data.externallyPaidAt].filter(Boolean).some((value) => Number.isNaN(date(value!).getTime()) || date(value!).toISOString().slice(0, 10) !== value)) return { error: "Neplatný dátum dokladu." };
+  let taxBase: number, taxAmount: number, taxTotal: number, paymentGross: number;
+  try { taxBase = parseEurToCents(String(raw.taxBase ?? "")); taxAmount = parseEurToCents(String(raw.taxAmount ?? "")); taxTotal = parseEurToCents(String(raw.taxTotal ?? "")); paymentGross = parseEurToCents(String(raw.paymentGross ?? "")); }
+  catch { return { error: "Základ, daň a celkové sumy musia byť platné sumy v uvedených menách." }; }
+  if ([taxBase, taxAmount, taxTotal, paymentGross].some((value) => value < 0 || value > 2_147_483_647) || taxBase + taxAmount !== taxTotal) return { error: "Základ plus daň sa musí rovnať pôvodnej daňovej sume." };
+  if (data.taxCurrency === data.currency && taxTotal !== paymentGross) return { error: "Pri rovnakej mene sa daňová suma musí rovnať sume na úhradu." };
+  for (const currency of [data.taxCurrency, data.currency]) {
+    try { if (new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits !== 2) return { error: `Mena ${currency} nemá dve desatinné miesta; tento formulár ju zatiaľ nepodporuje.` }; }
+    catch { return { error: `Neplatná mena ${currency}.` }; }
+  }
+  const rateText = String(raw.vatRate ?? "").replace(",", ".");
+  if (!/^\d+(?:\.\d{1,2})?$/.test(rateText) || Number(rateText) > 100) return { error: "Neplatná sadzba dane." };
+  const rateBps = Math.round(Number(rateText) * 100);
+  const existing = await prisma.invoice.findMany({
+    where: { externalNumber: { equals: data.externalNumber, mode: "insensitive" }, direction: data.direction, supplierName: data.direction === "PRIJATA" ? { equals: data.partnerName, mode: "insensitive" } : undefined },
+    select: { id: true, supplierName: true, legalEntity: true, totalGrossCents: true, issueDate: true, historicalKind: true }, take: 5,
+  });
+  if (existing.some((invoice) => invoice.legalEntity === data.legalEntity && invoice.totalGrossCents === paymentGross && invoice.issueDate.toISOString().slice(0, 10) === data.issueDate && invoice.historicalKind === data.historicalKind)) {
+    return { error: "Takýto doklad je už v evidencii. Skontrolujte existujúci záznam." };
+  }
+  const externalId = createHash("sha256").update([data.direction, data.legalEntity, data.historicalKind, data.partnerName.toUpperCase(), data.externalNumber.toUpperCase(), data.issueDate, paymentGross, taxTotal].join("|")).digest("hex");
+  const confirmationFingerprint = createHash("sha256").update([externalId, data.taxCountry, data.taxCurrency, data.currency, taxBase, taxAmount, rateBps, data.variableSymbol ?? "", data.paymentConfirmation ?? ""].join("|")).digest("hex");
+  if (existing.length && raw.confirmDuplicate !== confirmationFingerprint) return { duplicateWarning: `Pozor: nájdených ${existing.length} dokladov s rovnakým externým číslom. Skontrolujte ich pred uložením.`, duplicateFingerprint: confirmationFingerprint };
+  let id: string;
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.create({ data: {
+      direction: data.direction, legalEntity: data.legalEntity, documentType: "INVOICE",
+      documentStatus: data.historicalKind === "FINAL" ? "ISSUED" : "DRAFT", source: "HISTORICAL",
+      externalId, externalNumber: data.externalNumber, invoiceNumber: null,
+      historicalKind: data.historicalKind, verificationStatus: "UNVERIFIED",
+      taxCountry: data.taxCountry, foreignVatRateBps: rateBps,
+      taxCurrency: data.taxCurrency, taxBaseMinor: taxBase, taxAmountMinor: taxAmount, taxTotalMinor: taxTotal,
+      paymentConfirmation: data.paymentConfirmation ?? null, externallyPaidAt: data.externallyPaidAt ? date(data.externallyPaidAt) : null,
+      currency: data.currency, supplierName: data.direction === "PRIJATA" ? data.partnerName : null,
+      issueDate: date(data.issueDate), dueDate: date(data.dueDate), deliveryDate: data.deliveryDate ? date(data.deliveryDate) : null,
+      totalNetCents: data.taxCurrency === data.currency ? taxBase : 0,
+      totalVatCents: data.taxCurrency === data.currency ? taxAmount : 0,
+      totalGrossCents: paymentGross,
+      variableSymbol: data.variableSymbol ?? null, note: data.note ?? null, createdById: user.userId,
+      issuerSnapshot: { name: data.direction === "PRIJATA" ? data.partnerName : data.legalEntity, country: data.direction === "PRIJATA" ? data.taxCountry : "SK" },
+      counterpartySnapshot: { name: data.direction === "VYDANA" ? data.partnerName : data.legalEntity, country: data.direction === "VYDANA" ? data.taxCountry : "SK" },
+      taxSnapshot: { originalTaxCountry: data.taxCountry, originalRateBps: rateBps, originalTaxCurrency: data.taxCurrency, slovakInputVatClaimed: false, reviewRequired: true },
+      }, select: { id: true } });
+      await tx.auditLog.create({ data: {
+        actorId: user.userId, actorEmail: user.email, action: "HISTORICAL_INVOICE_RECORDED",
+        entityType: "Invoice", entityId: invoice.id,
+        afterData: { externalNumber: data.externalNumber, legalEntity: data.legalEntity, taxCountry: data.taxCountry, taxCurrency: data.taxCurrency, currency: data.currency, taxBase, taxAmount, taxTotal, paymentGross, verificationStatus: "UNVERIFIED" },
+      } });
+      return invoice;
+    });
+    id = created.id;
+  } catch (error) { return { error: error instanceof Error ? error.message : "Doklad sa nepodarilo zaevidovať." }; }
+  revalidatePath("/financie/faktury");
+  redirect(`/financie/faktury/${id}`);
+}
+
+export async function verifyHistoricalInvoice(invoiceId: string, _prev: InvoiceFormState, _formData: FormData): Promise<InvoiceFormState> {
+  const user = await requireFinancePermission("CONFIGURE");
+  try {
+    await prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { source: true, verificationStatus: true } });
+      if (!invoice || invoice.source !== "HISTORICAL") throw new Error("Tento doklad nie je historický originál.");
+      if (invoice.verificationStatus === "VERIFIED") return;
+      const attachment = await tx.documentAsset.findFirst({ where: { invoiceId, type: "ATTACHMENT", archivedAt: null }, select: { id: true } });
+      if (!attachment) throw new Error("Pred potvrdením priložte originálny doklad.");
+      await tx.invoice.update({ where: { id: invoiceId }, data: { verificationStatus: "VERIFIED" } });
+      await tx.auditLog.create({ data: { actorId: user.userId, actorEmail: user.email, action: "HISTORICAL_INVOICE_VERIFIED", entityType: "Invoice", entityId: invoiceId, afterData: { verificationStatus: "VERIFIED", attachmentId: attachment.id } } });
+    });
+  } catch (error) { return { error: error instanceof Error ? error.message : "Overenie sa nepodarilo." }; }
+  revalidatePath(`/financie/faktury/${invoiceId}`);
+  return { success: "Originál bol označený ako overený. Daňový nárok tým nie je potvrdený." };
 }
 
 // ---------- Koncept faktúry z objednávky ----------
@@ -32,16 +142,18 @@ export async function issueInvoiceFromOrder(
     });
     if (!order) throw new Error("Objednávka neexistuje.");
     if (order.status === "ZRUSENA") throw new Error("Zo zrušenej objednávky nemožno vytvoriť faktúru.");
-    if (order.items.length === 0) throw new Error("Objednávka nemá položky.");
+    if (order.items.length === 0 && !order.charges.some((charge) => charge.includedInSellerTotal)) throw new Error("Objednávka nemá položky predajcu.");
+    if (order.legalEntity !== "SOLE_TRADER" && order.legalEntity !== "KURGI") throw new Error("Pred vytvorením konceptu faktúry priraďte objednávke overený právny subjekt.");
 
     const now = new Date();
     const created = await invoiceService.createDraft({
       direction: "VYDANA",
+      legalEntity: order.legalEntity,
       source: "INTERNA",
       clientId: order.clientId,
       orderId: order.id,
       issueDate: now,
-      dueDate: new Date(now.getTime() + 14 * 24 * 3600 * 1000),
+      dueDate: new Date(now.getTime() + (order.paymentTermDays ?? 14) * 24 * 3600 * 1000),
       deliveryDate: order.deliveryDate ?? undefined,
       currency: "EUR",
       items: [...order.items.map((item) => ({
@@ -51,8 +163,9 @@ export async function issueInvoiceFromOrder(
         quantity: item.quantity,
         unit: item.product.unit,
         unitPriceCents: item.unitPriceCents,
+        unitPriceExact: item.unitPriceExact?.toString(),
         vatRate: item.vatRate,
-      })), ...order.charges.map((charge) => ({
+      })), ...order.charges.filter((charge) => charge.includedInSellerTotal).map((charge) => ({
         description: charge.description,
         quantity: 1,
         unit: "ks",
@@ -85,6 +198,7 @@ const invoiceItemSchema = z.object({
 const manualInvoiceSchema = z
   .object({
     direction: invoiceDirectionSchema,
+    legalEntity: legalEntitySchema,
     clientId: z.string().max(100).optional(),
     supplierName: z.string().max(255).optional(),
     externalNumber: z.string().max(100).optional(),
@@ -122,6 +236,7 @@ export async function createManualInvoice(
 
   const parsed = manualInvoiceSchema.safeParse({
     direction: String(formData.get("direction") ?? ""),
+    legalEntity: String(formData.get("legalEntity") ?? ""),
     clientId: String(formData.get("clientId") ?? "").trim() || undefined,
     supplierName: String(formData.get("supplierName") ?? "").trim() || undefined,
     externalNumber: String(formData.get("externalNumber") ?? "").trim() || undefined,
@@ -135,16 +250,15 @@ export async function createManualInvoice(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje." };
 
   const data = parsed.data;
+  if (data.direction === "PRIJATA") return { error: "Prijatú faktúru zaevidujte ako historický originál; ERP dodávateľovi nevystavuje novú faktúru." };
   let invoiceId: string;
   try {
     const created = await invoiceService.createDraft({
       direction: data.direction,
+      legalEntity: data.legalEntity,
       source: "INTERNA",
       externalNumber: data.externalNumber,
       clientId: data.clientId,
-      ...(data.direction === "PRIJATA" && data.supplierName
-        ? { counterparty: { name: data.supplierName, country: "SK" } }
-        : {}),
       issueDate: data.issueDate,
       dueDate: data.dueDate,
       deliveryDate: data.deliveryDate,
@@ -435,6 +549,7 @@ export async function createManualEkasaSale(
 
 const financeProfileFormSchema = z
   .object({
+    legalEntity: legalEntitySchema,
     legalName: z.string().min(1, "Obchodné meno je povinné").max(255),
     tradeName: z.string().max(255).optional(),
     ico: z.string().min(1, "IČO je povinné").max(20),
@@ -475,6 +590,7 @@ export async function saveFinanceProfile(
 ): Promise<InvoiceFormState> {
   const user = await requireFinancePermission("CONFIGURE");
   const parsed = financeProfileFormSchema.safeParse({
+    legalEntity: String(formData.get("legalEntity") ?? ""),
     legalName: String(formData.get("legalName") ?? "").trim(),
     tradeName: String(formData.get("tradeName") ?? "").trim() || undefined,
     ico: String(formData.get("ico") ?? "").trim(),
@@ -498,19 +614,20 @@ export async function saveFinanceProfile(
   const data = parsed.data;
   try {
     await prisma.$transaction(async (tx) => {
-      const sameStart = await tx.companyProfile.findFirst({ where: { validFrom: data.validFrom } });
+      const sameStart = await tx.companyProfile.findFirst({ where: { legalEntity: data.legalEntity, validFrom: data.validFrom } });
       if (sameStart) {
         throw new Error("Firemný profil s rovnakým začiatkom platnosti už existuje.");
       }
       const previousEnd = new Date(data.validFrom.getTime() - 1);
       const nextProfile = await tx.companyProfile.findFirst({
-        where: { validFrom: { gt: data.validFrom } },
+        where: { legalEntity: data.legalEntity, validFrom: { gt: data.validFrom } },
         orderBy: { validFrom: "asc" },
         select: { validFrom: true },
       });
       const validTo = nextProfile ? new Date(nextProfile.validFrom.getTime() - 1) : null;
       await tx.companyProfile.updateMany({
         where: {
+          legalEntity: data.legalEntity,
           validFrom: { lt: data.validFrom },
           OR: [{ validTo: null }, { validTo: { gte: data.validFrom } }],
         },
@@ -519,6 +636,7 @@ export async function saveFinanceProfile(
       const profile = await tx.companyProfile.create({
         data: {
           legalName: data.legalName,
+          legalEntity: data.legalEntity,
           tradeName: data.tradeName ?? null,
           ico: data.ico,
           dic: data.dic,
@@ -544,6 +662,13 @@ export async function saveFinanceProfile(
           },
         },
       });
+      const existingAccount = await tx.bankAccount.findUnique({
+        where: { iban_currency: { iban: data.iban, currency: "EUR" } },
+        include: { companyProfile: { select: { legalEntity: true } } },
+      });
+      if (existingAccount && existingAccount.companyProfile?.legalEntity !== data.legalEntity) {
+        throw new Error("Tento IBAN patrí inému alebo nepriradenému profilu. Pred priradením ho overte.");
+      }
       await tx.bankAccount.upsert({
         where: { iban_currency: { iban: data.iban, currency: "EUR" } },
         create: {

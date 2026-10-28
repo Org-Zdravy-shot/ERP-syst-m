@@ -17,7 +17,8 @@ const productSchema = z.object({
   priceB2cCents: z.number().int().nonnegative(),
   priceB2bCents: z.number().int().nonnegative().nullable(),
   vatRate: z.number().int().min(0).max(100),
-  shelfLifeDays: z.number().int().positive(),
+  shelfLifeDays: z.number().int().positive().nullable(),
+  shelfLifeConfirmed: z.boolean(),
   isActive: z.boolean(),
 });
 
@@ -51,7 +52,8 @@ function parseProduct(formData: FormData) {
       priceB2cCents: money(String(formData.get("priceB2c") ?? "").trim(), "Predajná cena"),
       priceB2bCents: money(String(formData.get("priceB2b") ?? "").trim(), "Predvolená B2B cena", true),
       vatRate: Number(vatRaw),
-      shelfLifeDays: positiveInteger(String(formData.get("shelfLifeDays") ?? "").trim(), "Trvanlivosť"),
+      shelfLifeDays: positiveInteger(String(formData.get("shelfLifeDays") ?? "").trim(), "Trvanlivosť", true),
+      shelfLifeConfirmed: formData.get("shelfLifeConfirmed") === "on",
       isActive: formData.get("isActive") === "on",
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje produktu." };
@@ -74,7 +76,8 @@ export async function createProduct(_prev: ProductFormState, formData: FormData)
   if (!parsed.data) return { error: parsed.error };
   let product: { id: string };
   try {
-    product = await prisma.product.create({ data: { ...parsed.data, unit: "ks" }, select: { id: true } });
+    const { shelfLifeConfirmed, ...data } = parsed.data;
+    product = await prisma.product.create({ data: { ...data, shelfLifeConfirmedAt: shelfLifeConfirmed ? new Date() : null, unit: "ks" }, select: { id: true } });
   } catch (error) {
     return saveError(error);
   }
@@ -83,11 +86,12 @@ export async function createProduct(_prev: ProductFormState, formData: FormData)
   revalidatePath("/objednavky/predplatne");
   if (formData.get("returnToOrder") === "1") {
     const params = new URLSearchParams({ produkt: product.id });
+    const orderId = String(formData.get("returnOrderId") ?? "").trim();
     const klient = String(formData.get("returnKlient") ?? "").trim();
     const inbox = String(formData.get("returnInbox") ?? "").trim();
     if (klient && klient.length <= 100) params.set("klient", klient);
     if (inbox && inbox.length <= 100) params.set("inbox", inbox);
-    redirect(`/objednavky/nova?${params.toString()}`);
+    redirect(orderId && /^[a-z0-9]{10,40}$/.test(orderId) ? `/objednavky/${orderId}/upravit?${params.toString()}` : `/objednavky/nova?${params.toString()}`);
   }
   redirect(`/produkty/${product.id}/upravit?ulozene=1`);
 }
@@ -97,7 +101,9 @@ export async function updateProduct(id: string, _prev: ProductFormState, formDat
   const parsed = parseProduct(formData);
   if (!parsed.data) return { error: parsed.error };
   try {
-    await prisma.product.update({ where: { id }, data: parsed.data });
+    const { shelfLifeConfirmed, ...data } = parsed.data;
+    const existing = shelfLifeConfirmed ? await prisma.product.findUnique({ where: { id }, select: { shelfLifeConfirmedAt: true } }) : null;
+    await prisma.product.update({ where: { id }, data: { ...data, shelfLifeConfirmedAt: shelfLifeConfirmed ? existing?.shelfLifeConfirmedAt ?? new Date() : null } });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
       return { error: "Produkt už neexistuje." };

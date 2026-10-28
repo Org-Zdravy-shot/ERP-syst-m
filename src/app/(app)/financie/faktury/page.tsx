@@ -6,7 +6,7 @@ import {
   INVOICE_DOCUMENT_STATUS_COLORS,
   INVOICE_PAYMENT_STATUS_COLORS,
 } from "@/components/Badge";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatCents, formatCurrencyMinor, formatDate } from "@/lib/format";
 import { INVOICE_SOURCE_LABELS } from "@/lib/invoicing";
 import {
   invoiceDocumentStatusLabels,
@@ -14,24 +14,27 @@ import {
 } from "@/lib/zod-schemas";
 import { calculatePaymentStatus } from "@/lib/finance/domain";
 import { btnPrimary, btnSecondary, filterPill } from "@/components/ui";
+import { legalEntityLabels } from "@/lib/zod-schemas";
 
 const DIRECTION_LABELS: Record<string, string> = { VYDANA: "Vydané", PRIJATA: "Prijaté" };
 
 export default async function FakturyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ smer?: string; zdroj?: string; stav?: string }>;
+  searchParams: Promise<{ smer?: string; zdroj?: string; stav?: string; subjekt?: string }>;
 }) {
-  const { smer, zdroj, stav } = await searchParams;
+  const { smer, zdroj, stav, subjekt } = await searchParams;
   const smerFilter = smer === "VYDANA" || smer === "PRIJATA" ? smer : undefined;
   const zdrojFilter = zdroj && zdroj in INVOICE_SOURCE_LABELS ? zdroj : undefined;
   const stavFilter = stav && stav in invoiceDocumentStatusLabels ? stav : undefined;
+  const entityFilter = subjekt === "UNASSIGNED" || (subjekt && subjekt in legalEntityLabels) ? subjekt : undefined;
 
   const invoices = await prisma.invoice.findMany({
     where: {
       ...(smerFilter ? { direction: smerFilter } : {}),
       ...(zdrojFilter ? { source: zdrojFilter } : {}),
       ...(stavFilter ? { documentStatus: stavFilter } : {}),
+      ...(entityFilter ? { legalEntity: entityFilter === "UNASSIGNED" ? null : entityFilter } : {}),
     },
     include: {
       client: true,
@@ -44,7 +47,7 @@ export default async function FakturyPage({
 
   const filterHref = (patch: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    const merged = { smer: smerFilter, zdroj: zdrojFilter, stav: stavFilter, ...patch };
+    const merged = { smer: smerFilter, zdroj: zdrojFilter, stav: stavFilter, subjekt: entityFilter, ...patch };
     for (const [key, value] of Object.entries(merged)) if (value) params.set(key, value);
     const qs = params.toString();
     return qs ? `/financie/faktury?${qs}` : "/financie/faktury";
@@ -54,6 +57,7 @@ export default async function FakturyPage({
     const params = new URLSearchParams();
     if (smerFilter) params.set("smer", smerFilter);
     if (zdrojFilter) params.set("zdroj", zdrojFilter);
+    if (entityFilter) params.set("subjekt", entityFilter);
     const qs = params.toString();
     return qs ? `/financie/export?${qs}` : "/financie/export";
   };
@@ -72,6 +76,7 @@ export default async function FakturyPage({
         <Link href="/financie/faktury/nova" className={btnPrimary}>
           + Nová faktúra
         </Link>
+        <Link href="/financie/faktury/historicka" className={btnSecondary}>+ Historický originál</Link>
       </PageHeader>
 
       <div className="mb-2 flex flex-wrap gap-2">
@@ -94,6 +99,9 @@ export default async function FakturyPage({
         ))}
       </div>
       <div className="mb-4 flex flex-wrap gap-2">
+        <Link href={filterHref({ subjekt: undefined })} className={filterPill(!entityFilter)}>Všetky subjekty</Link>
+        {Object.entries(legalEntityLabels).map(([value, title]) => <Link key={value} href={filterHref({ subjekt: value })} className={filterPill(entityFilter === value)}>{title}</Link>)}
+        <Link href={filterHref({ subjekt: "UNASSIGNED" })} className={filterPill(false)}>Nepriradené</Link>
         <Link href={filterHref({ stav: undefined })} className={filterPill(!stavFilter)}>
           Všetky stavy
         </Link>
@@ -134,14 +142,14 @@ export default async function FakturyPage({
               );
               const paymentStatus = calculatePaymentStatus(inv.totalGrossCents, allocatedCents);
               const overdue =
-                inv.documentStatus === "ISSUED" &&
+                inv.source !== "HISTORICAL" && inv.documentStatus === "ISSUED" &&
                 (paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID") &&
                 inv.dueDate.getTime() < now;
               return (
                 <tr key={inv.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
                   <td className="px-4 py-3">
                     <Link href={`/financie/faktury/${inv.id}`} className="font-medium text-stone-950 hover:underline">
-                      {inv.invoiceNumber ?? "Koncept"}
+                      {inv.invoiceNumber ?? (inv.source === "HISTORICAL" ? inv.externalNumber ?? "Historický originál" : "Koncept")}
                     </Link>
                     {inv.direction === "PRIJATA" && (
                       <span className="ml-1.5 text-xs text-stone-400">(prijatá)</span>
@@ -159,7 +167,7 @@ export default async function FakturyPage({
                         {inv.client.name}
                       </Link>
                     ) : (
-                      <span className="text-stone-700">{inv.supplierName ?? "—"}</span>
+                      <span className="text-stone-700">{inv.supplierName ?? (inv.counterpartySnapshot && typeof inv.counterpartySnapshot === "object" && "name" in inv.counterpartySnapshot ? String(inv.counterpartySnapshot.name) : "—")}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-stone-600">{formatDate(inv.issueDate)}</td>
@@ -167,16 +175,16 @@ export default async function FakturyPage({
                     {formatDate(inv.dueDate)}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-stone-900">
-                    {formatCents(inv.totalGrossCents)}
+                    {formatCurrencyMinor(inv.totalGrossCents, inv.currency)}
                   </td>
                   <td className="px-4 py-3">
                     <Badge color={INVOICE_DOCUMENT_STATUS_COLORS[inv.documentStatus]}>
-                      {invoiceDocumentStatusLabels[inv.documentStatus] ?? inv.documentStatus}
+                      {inv.source === "HISTORICAL" ? inv.historicalKind === "PROFORMA" ? "Predfaktúra" : "Pôvodná faktúra" : invoiceDocumentStatusLabels[inv.documentStatus] ?? inv.documentStatus}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
                     <Badge color={overdue ? "red" : INVOICE_PAYMENT_STATUS_COLORS[paymentStatus]}>
-                      {overdue ? "Po splatnosti" : invoicePaymentStatusLabels[paymentStatus]}
+                      {inv.source === "HISTORICAL" ? inv.paymentConfirmation ? "Potvrdená mimo ERP" : "Neoverená" : overdue ? "Po splatnosti" : invoicePaymentStatusLabels[paymentStatus]}
                     </Badge>
                   </td>
                 </tr>

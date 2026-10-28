@@ -3,12 +3,13 @@ import { ProductForm } from "../ProductForm";
 import { createProduct } from "../_actions";
 
 export default async function NovyProduktPage({ searchParams }: {
-  searchParams: Promise<{ zObjednavky?: string; klient?: string; inbox?: string }>;
+  searchParams: Promise<{ zObjednavky?: string; klient?: string; inbox?: string; objednavka?: string }>;
 }) {
   const params = await searchParams;
   const orderReturn = params.zObjednavky === "1" ? {
     klient: params.klient?.slice(0, 100),
     inbox: params.inbox?.slice(0, 100),
+    objednavka: params.objednavka?.slice(0, 100),
   } : undefined;
   return <><PageHeader title="Nový produkt" subtitle="Pridajte produkt do predajného katalógu." /><ProductForm action={createProduct} orderReturn={orderReturn} /></>;
 }

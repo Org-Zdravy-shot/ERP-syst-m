@@ -380,6 +380,7 @@ model SupplierAccountEntry {
 
 model CompanyProfile {
   id        String    @id @default(cuid())
+  legalEntity String? // "SOLE_TRADER" | "KURGI"; historické profily zostávajú nepriradené
   legalName String
   tradeName String?
   ico       String
@@ -401,6 +402,7 @@ model CompanyProfile {
   bankAccounts BankAccount[]
 
   @@index([validFrom, validTo])
+  @@index([legalEntity, validFrom, validTo])
 }
 
 model TaxProfile {
@@ -436,7 +438,8 @@ model Product {
   vatRate                Int      @default(20)
   minStock               Float    @default(0)
   targetStock            Float?
-  shelfLifeDays          Int      @default(30)
+  shelfLifeDays          Int?
+  shelfLifeConfirmedAt   DateTime? // bez potvrdenia sa hodnota nepoužije na výpočet exspirácie šarže
   isActive               Boolean  @default(true)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -617,12 +620,30 @@ model StockMovement {
 model Order {
   id             String        @id @default(cuid())
   orderNumber    String        @unique // "OBJ2026-0001"
+  legalEntity    String?       // "SOLE_TRADER" | "KURGI"; staré objednávky bez automatického priradenia
   clientId       String
   client         Client        @relation(fields: [clientId], references: [id])
   channel        String        @default("MANUAL") // "MANUAL" | "EMAIL" | "WEB" | "SUBSCRIPTION"
   status         String        @default("NOVA") // "NOVA" | "POTVRDENA" | "VO_VYROBE" | "EXPEDOVANA" | "DORUCENA" | "ZRUSENA"
   orderDate      DateTime      @default(now())
+  platformPaymentStatus String? // "CUSTOMER_PAID" | "UNCONFIRMED" | "NOT_APPLICABLE"
+  customerPaidAt DateTime?
+  platformSettledAt DateTime?
+  platformSettlementCents Int?
+  platformCommissionCents Int?
+  shipmentStatus String? // "NOT_SHIPPED" | "SHIPPED_EXTERNALLY" | "DELIVERED_EXTERNALLY"
+  shippedAt DateTime?
+  deliveredAt DateTime?
   deliveryDate   DateTime?
+  latestDeliveryDate DateTime?
+  deliveryStreet String?
+  deliveryCity String?
+  deliveryZip String?
+  deliveryCountry String?
+  deliveryContact String?
+  paymentMethod String @default("UNKNOWN") // legacy "UNKNOWN"; new orders "UNAGREED" | "INVOICE" | "CARD_ON_DELIVERY" | "BANK_TRANSFER" | "CASH"
+  paymentTermDays Int?
+  submissionKey String? @unique
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
   inboxMessageId String?       @unique
@@ -647,6 +668,9 @@ model OrderItem {
   product        Product @relation(fields: [productId], references: [id])
   quantity       Int
   unitPriceCents Int // snapshot ceny v čase objednávky
+  unitPriceExact Decimal? @db.Decimal(18, 4) // presná cena bez DPH; null pri historických položkách
+  priceSource String? // "CLIENT" | "B2B" | "B2C" | "MANUAL"
+  minimumExpiryDate DateTime?
   vatRate        Int     @default(20)
 }
 
@@ -659,6 +683,9 @@ model OrderCharge {
   description    String
   unitPriceCents Int
   vatRate        Int
+  recipient      String @default("SELLER") // "SELLER" | "PLATFORM" | "CARRIER" | "UNKNOWN"
+  taxTreatment   String @default("UNVERIFIED") // "STANDARD" | "NON_PAYER" | "FOREIGN" | "UNVERIFIED"
+  includedInSellerTotal Boolean @default(true)
   createdAt      DateTime @default(now())
 
   @@index([orderId])
@@ -713,12 +740,23 @@ model InboxMessage {
 
 model Invoice {
   id                   String    @id @default(cuid())
+  legalEntity          String? // "SOLE_TRADER" | "KURGI"; staré doklady zostávajú nepriradené
   direction            String // "VYDANA" | "PRIJATA"
   documentType         String    @default("INVOICE") // "INVOICE" | "CREDIT_NOTE"
   documentStatus       String    @default("ISSUED") // "DRAFT" | "ISSUED" | "CANCELLED"
   source               String    @default("INTERNA") // "INTERNA" | "WEB" | "SUPERFAKTURA" | "OMEGA"
   externalId           String? // ID v zdrojovom systéme
   externalNumber       String? // číslo faktúry v zdrojovom systéme
+  historicalKind       String? // "FINAL" | "PROFORMA"; null pri existujúcich dokladoch
+  verificationStatus   String? // "UNVERIFIED" | "VERIFIED"
+  taxCountry           String? // ISO 3166-1 alpha-2; zahraničná DPH nie je slovenský odpočet
+  foreignVatRateBps    Int?
+  taxCurrency          String? // mena základu a dane na origináli, môže sa líšiť od meny úhrady
+  taxBaseMinor         Int?
+  taxAmountMinor       Int?
+  taxTotalMinor        Int?
+  paymentConfirmation  String? // "SUPPLIER_CONFIRMED" | "BANK_MATCHED"
+  externallyPaidAt     DateTime?
   invoiceNumber        String?   @unique // vydaná: "2026009"; pri koncepte null
   currency             String    @default("EUR")
   clientId             String?
@@ -762,6 +800,8 @@ model Invoice {
 
   @@unique([source, externalId])
   @@index([direction, documentStatus, issueDate])
+  @@index([legalEntity, direction, issueDate])
+  @@index([supplierName, externalNumber])
   @@index([supplierId, issueDate])
   @@index([originalInvoiceId])
 }
@@ -778,6 +818,7 @@ model InvoiceItem {
   quantity        Float
   unit            String   @default("ks")
   unitPriceCents  Int
+  unitPriceExact  Decimal? @db.Decimal(18, 4)
   vatRate         Int      @default(20)
   totalNetCents   Int?
   totalVatCents   Int?

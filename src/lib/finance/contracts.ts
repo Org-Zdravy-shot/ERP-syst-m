@@ -10,7 +10,7 @@ export type InvoiceDirection = "VYDANA" | "PRIJATA";
 export type InvoiceDocumentType = "INVOICE" | "CREDIT_NOTE";
 export type InvoiceDocumentStatus = "DRAFT" | "ISSUED" | "CANCELLED";
 export type InvoicePaymentStatus = "UNPAID" | "PARTIALLY_PAID" | "PAID" | "OVERPAID";
-export type InvoiceSource = "INTERNA" | "WEB" | "SUPERFAKTURA" | "OMEGA";
+export type InvoiceSource = "INTERNA" | "WEB" | "SUPERFAKTURA" | "OMEGA" | "HISTORICAL";
 
 export interface PartySnapshot {
   name: string;
@@ -41,6 +41,7 @@ export interface InvoiceLineInput {
   quantity: number;
   unit: string;
   unitPriceCents: number;
+  unitPriceExact?: string;
   vatRate: number;
   taxCategory?: "STANDARD" | "EXEMPT";
 }
@@ -67,6 +68,7 @@ export interface InvoiceCalculation {
 
 export interface CreateInvoiceDraftInput {
   direction: InvoiceDirection;
+  legalEntity?: "SOLE_TRADER" | "KURGI";
   documentType?: InvoiceDocumentType;
   source?: InvoiceSource;
   externalId?: string;
@@ -117,6 +119,7 @@ export interface CreateCreditNoteInput {
 
 export interface AccountingExportInput {
   direction?: InvoiceDirection;
+  legalEntity?: "SOLE_TRADER" | "KURGI" | null;
   dateFrom?: Date;
   dateTo?: Date;
   source?: InvoiceSource;

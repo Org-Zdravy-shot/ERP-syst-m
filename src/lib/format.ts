@@ -37,6 +37,12 @@ export function parseEurToCents(value: string): number {
   return cents;
 }
 
+/** Pôvodná suma historického dokladu v najmenších stotinách jeho meny. */
+export function formatCurrencyMinor(amount: number, currency: string): string {
+  if (currency === "EUR") return formatCents(amount);
+  return `${new Intl.NumberFormat("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount / 100)} ${currency}`;
+}
+
 export const MONTH_NAMES_SK = [
   "Január", "Február", "Marec", "Apríl", "Máj", "Jún",
   "Júl", "August", "September", "Október", "November", "December",

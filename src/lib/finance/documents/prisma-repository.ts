@@ -128,6 +128,7 @@ export class PrismaDocumentRepository implements DocumentRepository {
             quantity: true,
             unit: true,
             unitPriceCents: true,
+            unitPriceExact: true,
             vatRate: true,
             totalNetCents: true,
             totalVatCents: true,
@@ -223,6 +224,7 @@ export class PrismaDocumentRepository implements DocumentRepository {
         quantity: item.quantity,
         unit: item.unit,
         unitPriceCents: item.unitPriceCents,
+        unitPriceExact: item.unitPriceExact?.toString(),
         vatRate: item.vatRate,
         totalNetCents: item.totalNetCents,
         totalVatCents: item.totalVatCents,
@@ -291,13 +293,13 @@ export class PrismaDocumentRepository implements DocumentRepository {
   ): Promise<InvoiceAttachmentTarget | null> {
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
-      select: { id: true, direction: true },
+      select: { id: true, direction: true, source: true },
     });
     if (!invoice) return null;
     if (invoice.direction !== "VYDANA" && invoice.direction !== "PRIJATA") {
       throw new DocumentIntegrityError("Faktúra má neznámy smer.");
     }
-    return { id: invoice.id, direction: invoice.direction };
+    return { id: invoice.id, direction: invoice.direction, source: invoice.source };
   }
 
   async saveGeneratedDocument(input: GeneratedDocumentInput) {

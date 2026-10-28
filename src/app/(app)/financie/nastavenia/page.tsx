@@ -8,6 +8,7 @@ import {
 } from "@/lib/finance/invoice-service";
 import { hasFinancePermission } from "@/lib/finance/permissions";
 import { FinanceSettingsForms } from "./FinanceSettingsForms";
+import { legalEntityLabels } from "@/lib/zod-schemas";
 
 function dateInputValue(date: Date | null | undefined): string {
   return date?.toISOString().slice(0, 10) ?? "";
@@ -18,7 +19,7 @@ export default async function FinanceSettingsPage() {
   if (!hasFinancePermission(user.role, "CONFIGURE")) notFound();
 
   const now = new Date();
-  const [profile, products, counter] = await Promise.all([
+  const [profile, profiles, products, counter, entityCounters] = await Promise.all([
     prisma.companyProfile.findFirst({
       where: { isActive: true },
       include: {
@@ -31,6 +32,7 @@ export default async function FinanceSettingsPage() {
       },
       orderBy: { validFrom: "desc" },
     }),
+    prisma.companyProfile.findMany({ select: { id: true, legalEntity: true, legalName: true, ico: true, validFrom: true, validTo: true }, orderBy: { validFrom: "desc" }, take: 30 }),
     prisma.product.findMany({
       where: { isActive: true },
       include: {
@@ -46,6 +48,7 @@ export default async function FinanceSettingsPage() {
       orderBy: { name: "asc" },
     }),
     prisma.docCounter.findUnique({ where: { id: "VYDANA-2026" } }),
+    prisma.docCounter.findMany({ where: { id: { in: ["VYDANA-Z-2026", "VYDANA-K-2026"] } }, select: { id: true, lastNumber: true } }),
   ]);
 
   const taxProfile = profile?.taxProfiles[0];
@@ -66,13 +69,16 @@ export default async function FinanceSettingsPage() {
 
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-[14px] border border-stone-200 bg-white p-5">
-          <h2 className="font-semibold text-stone-950">Číselný rad vydaných faktúr</h2>
+          <h2 className="font-semibold text-stone-950">Číselné rady vydaných faktúr</h2>
+          <p className="mt-2 text-sm">Živnosť: <strong>FAZ2026{String((entityCounters.find((item) => item.id === "VYDANA-Z-2026")?.lastNumber ?? 0) + 1).padStart(3, "0")}</strong></p>
+          <p className="mt-1 text-sm">Kurgi s. r. o.: <strong>FAK2026{String((entityCounters.find((item) => item.id === "VYDANA-K-2026")?.lastNumber ?? 0) + 1).padStart(3, "0")}</strong></p>
+          <p className="mt-1 text-xs text-stone-500">Nové rady sa použijú až pri výslovne priradenom a potvrdenom subjekte. Staré čísla sa nemenia.</p>
           <p className={`mt-2 text-sm ${numberReady ? "text-[#1F7A0F]" : "text-red-700"}`}>
-            Nasledujúce číslo: <strong>{formatDocumentNumber("VYDANA", 2026, nextSequence)}</strong>
+            Pôvodný spoločný rad: <strong>{formatDocumentNumber("VYDANA", 2026, nextSequence)}</strong>
           </p>
           {!numberReady && (
             <p className="mt-2 text-xs text-red-700">
-              Historický import musí najprv potvrdiť faktúry 2026001–2026008 a nastaviť počítadlo na 8.
+              Pôvodný spoločný rad vyžaduje samostatné potvrdenie faktúr 2026001–2026008 a počítadla 8.
             </p>
           )}
         </section>
@@ -87,6 +93,7 @@ export default async function FinanceSettingsPage() {
           )}
         </section>
       </div>
+      <section className="mb-6 rounded-[14px] border border-stone-200 bg-white p-5"><h2 className="font-semibold">Existujúce firemné profily</h2><p className="mt-1 text-sm text-stone-500">Staré profily zostávajú bez automatického priradenia. Pri novom profile vyberte subjekt podľa overených údajov.</p><ul className="mt-3 space-y-1 text-sm">{profiles.map((item) => <li key={item.id}>{legalEntityLabels[item.legalEntity ?? ""] ?? "Nepriradený"} · {item.legalName} · IČO {item.ico} · od {dateInputValue(item.validFrom)}{item.validTo ? ` do ${dateInputValue(item.validTo)}` : ""}</li>)}</ul></section>
 
       <FinanceSettingsForms
         suggestedValidFrom={dateInputValue(startCandidate)}

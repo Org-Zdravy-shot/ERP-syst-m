@@ -38,4 +38,13 @@ describe("allocateProductStock", () => {
       { batchId: "lot", expiryDate: new Date("2026-11-01"), quantity: 2.5 },
     ], 0, 1.25, today)).toEqual([{ batchId: "lot", quantity: 1.25 }]);
   });
+
+  it("odmietne šaržu pred požadovanou minimálnou exspiráciou", () => {
+    expect(() => allocateProductStock([
+      { batchId: "descanti", expiryDate: new Date("2027-05-31"), quantity: 150 },
+    ], 0, 150, new Date("2027-07-31"))).toThrow(InsufficientProductStockError);
+    expect(allocateProductStock([
+      { batchId: "gleistein", expiryDate: new Date("2027-07-31"), quantity: 150 },
+    ], 0, 150, new Date("2027-07-31"))).toEqual([{ batchId: "gleistein", quantity: 150 }]);
+  });
 });

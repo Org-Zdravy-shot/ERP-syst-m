@@ -5,6 +5,8 @@ import { useActionState } from "react";
 import { createManualInvoice, type InvoiceFormState } from "../../_actions";
 import { formatCents, parseEurToCents } from "@/lib/format";
 import { btnPrimary, btnSmall, errorBox, input, label } from "@/components/ui";
+import Link from "next/link";
+import { legalEntityLabels } from "@/lib/zod-schemas";
 
 interface ClientOption {
   id: string;
@@ -88,6 +90,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
 
       <div className="rounded-[14px] border border-stone-200 bg-white p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div><label className={label}>Právny subjekt *</label><select name="legalEntity" required defaultValue="" className={input}><option value="" disabled>— vyberte subjekt —</option>{Object.entries(legalEntityLabels).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select></div>
           <div>
             <label className={label}>Smer faktúry</label>
             <select
@@ -97,9 +100,10 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
               className={input}
             >
               <option value="VYDANA">Vydaná (+) — odberateľovi</option>
-              <option value="PRIJATA">Prijatá (−) — od dodávateľa</option>
+              <option value="PRIJATA" disabled>Prijatá — použite evidenciu historického originálu</option>
             </select>
           </div>
+          <p className="self-end text-sm sm:col-span-2"><Link href="/financie/faktury/historicka" className="underline">Zaevidovať prijatú faktúru alebo predfaktúru →</Link></p>
 
           {direction === "VYDANA" ? (
             <div>

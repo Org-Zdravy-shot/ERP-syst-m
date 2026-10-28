@@ -4,12 +4,17 @@ import { z } from "zod";
 
 export const unitSchema = z.enum(["ks", "kg", "l", "g", "ml"]);
 export const clientTypeSchema = z.enum(["B2B", "B2C"]);
-export const orderChannelSchema = z.enum(["MANUAL", "EMAIL", "WEB", "SUBSCRIPTION"]);
+export const orderChannelSchema = z.enum(["MANUAL", "EMAIL", "WEB", "ZLAVOMAT", "SUBSCRIPTION"]);
+export const legalEntitySchema = z.enum(["SOLE_TRADER", "KURGI"]);
+export const legalEntityLabels: Record<string, string> = {
+  SOLE_TRADER: "Jakub Kuric – Zdravý shot",
+  KURGI: "Kurgi s. r. o.",
+};
 export const orderStatusSchema = z.enum(["NOVA", "POTVRDENA", "VO_VYROBE", "EXPEDOVANA", "DORUCENA", "ZRUSENA"]);
 export const batchStatusSchema = z.enum(["PLANNED", "DONE", "CANCELLED"]);
 export const movementTypeSchema = z.enum(["PRIJEM", "VYDAJ", "VYROBA", "SPOTREBA", "PREDAJ", "KOREKCIA"]);
 export const invoiceDirectionSchema = z.enum(["VYDANA", "PRIJATA"]);
-export const invoiceSourceSchema = z.enum(["INTERNA", "WEB", "SUPERFAKTURA", "OMEGA"]);
+export const invoiceSourceSchema = z.enum(["INTERNA", "WEB", "SUPERFAKTURA", "OMEGA", "HISTORICAL"]);
 export const invoiceStatusSchema = z.enum(["VYSTAVENA", "UHRADENA", "PO_SPLATNOSTI", "STORNO"]);
 export const invoiceDocumentTypeSchema = z.enum(["INVOICE", "CREDIT_NOTE"]);
 export const invoiceDocumentStatusSchema = z.enum(["DRAFT", "ISSUED", "CANCELLED"]);
@@ -429,5 +434,6 @@ export const orderChannelLabels: Record<string, string> = {
   MANUAL: "Manuálna",
   EMAIL: "E-mail",
   WEB: "Web",
+  ZLAVOMAT: "Zľavomat",
   SUBSCRIPTION: "Predplatné",
 };

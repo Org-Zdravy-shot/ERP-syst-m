@@ -278,7 +278,7 @@ function lineXml(input: PeppolUblInput, line: PeppolUblInput["lines"][number]): 
     "</cac:ClassifiedTaxCategory>",
     "</cac:Item>",
     "<cac:Price>",
-    element("cbc:PriceAmount", money(line.unitPriceCents), { currencyID: "EUR" }),
+    element("cbc:PriceAmount", line.unitPriceExact ?? money(line.unitPriceCents), { currencyID: "EUR" }),
     "</cac:Price>",
     `</${root}>`,
   ].join("");

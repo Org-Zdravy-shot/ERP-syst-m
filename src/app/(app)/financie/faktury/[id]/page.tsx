@@ -7,7 +7,8 @@ import {
   INVOICE_DOCUMENT_STATUS_COLORS,
   INVOICE_PAYMENT_STATUS_COLORS,
 } from "@/components/Badge";
-import { formatCents, formatDate, formatQty } from "@/lib/format";
+import { formatCents, formatCurrencyMinor, formatDate, formatQty } from "@/lib/format";
+import { legalEntityLabels } from "@/lib/zod-schemas";
 import { INVOICE_SOURCE_LABELS } from "@/lib/invoicing";
 import {
   financePartySnapshotSchema,
@@ -18,11 +19,12 @@ import { calculatePaymentStatus } from "@/lib/finance/domain";
 import { requireUser } from "@/lib/auth";
 import { hasFinancePermission } from "@/lib/finance/permissions";
 import { readEFakturaConfig } from "@/lib/finance/einvoice/config";
-import { cancelInvoice, createCreditNoteFromInvoice, finalizeInvoice } from "../../_actions";
+import { cancelInvoice, createCreditNoteFromInvoice, finalizeInvoice, verifyHistoricalInvoice } from "../../_actions";
 import { InvoiceDocuments } from "./InvoiceDocuments";
 import { InvoiceEmails } from "./InvoiceEmails";
 import { InvoiceEInvoice } from "./InvoiceEInvoice";
 import { InvoiceWorkflowActions } from "./InvoiceStatusActions";
+import { VerifyHistoricalButton } from "./VerifyHistoricalButton";
 
 export default async function FakturaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -87,11 +89,12 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   const currentUser = await requireUser();
   const canSendEmail =
     hasFinancePermission(currentUser.role, "SEND_DOCUMENT") &&
+    invoice.source !== "HISTORICAL" &&
     invoice.direction === "VYDANA" &&
     invoice.documentStatus === "ISSUED";
   const canUploadAttachment =
     hasFinancePermission(currentUser.role, "CREATE_DRAFT") &&
-    invoice.direction === "PRIJATA";
+    (invoice.direction === "PRIJATA" || invoice.source === "HISTORICAL");
   let eInvoiceConfigurationReady = false;
   try {
     readEFakturaConfig();
@@ -102,8 +105,9 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   }
   const canValidateEInvoice =
     hasFinancePermission(currentUser.role, "SEND_DOCUMENT") &&
+    invoice.source !== "HISTORICAL" &&
     invoice.direction === "VYDANA" &&
-    invoice.documentStatus === "ISSUED" &&
+    invoice.source !== "HISTORICAL" && invoice.documentStatus === "ISSUED" &&
     Boolean(invoice.order?.orderNumber) &&
     eInvoiceConfigurationReady;
   const eInvoiceDisabledReason = !eInvoiceConfigurationReady
@@ -126,6 +130,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   const allocatedCents = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
   const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocatedCents);
   const overdue =
+    invoice.source !== "HISTORICAL" &&
     invoice.documentStatus === "ISSUED" &&
     (paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID") &&
     invoice.dueDate.getTime() < Date.now();
@@ -144,7 +149,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
     <>
       <div className="print:hidden">
         <PageHeader
-          title={invoice.invoiceNumber ?? (isCreditNote ? "Koncept dobropisu" : "Koncept faktúry")}
+          title={invoice.invoiceNumber ?? (invoice.source === "HISTORICAL" ? invoice.externalNumber ?? "Historický originál" : isCreditNote ? "Koncept dobropisu" : "Koncept faktúry")}
           subtitle={`${isCreditNote ? "Dobropis" : isIssued ? "Vydaná faktúra" : "Prijatá faktúra"} · ${INVOICE_SOURCE_LABELS[invoice.source] ?? invoice.source}`}
         >
           <Link
@@ -157,7 +162,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <div className="mb-4 rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 print:hidden">
-        Toto je pracovný náhľad ERP. Oficiálnym dokladom je až nemenné PDF vytvorené po finalizácii.
+        {invoice.source === "HISTORICAL" ? "Toto je evidencia pôvodného dokladu. Priložte originál; ERP z neho nevystavuje nové PDF ani nepredpokladá nárok na slovenský odpočet DPH." : "Toto je pracovný náhľad ERP. Oficiálnym dokladom je až nemenné PDF vytvorené po finalizácii."}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 print:block">
@@ -169,13 +174,13 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                 <Badge color="red">Po splatnosti</Badge>
               ) : (
                 <Badge color={INVOICE_DOCUMENT_STATUS_COLORS[invoice.documentStatus]}>
-                  {invoiceDocumentStatusLabels[invoice.documentStatus] ?? invoice.documentStatus}
+                  {invoice.source === "HISTORICAL" ? invoice.historicalKind === "PROFORMA" ? "Predfaktúra" : "Pôvodná faktúra" : invoiceDocumentStatusLabels[invoice.documentStatus] ?? invoice.documentStatus}
                 </Badge>
               )}
             </div>
             <div className="mb-3">
               <Badge color={INVOICE_PAYMENT_STATUS_COLORS[paymentStatus]}>
-                {invoicePaymentStatusLabels[paymentStatus]}
+                {invoice.source === "HISTORICAL" ? invoice.paymentConfirmation === "SUPPLIER_CONFIRMED" ? "Dodávateľ potvrdil úhradu" : invoice.paymentConfirmation === "BANK_MATCHED" ? "Spárované s bankou" : "Úhrada neoverená" : invoicePaymentStatusLabels[paymentStatus]}
               </Badge>
             </div>
             <dl className="divide-y divide-stone-100">
@@ -194,6 +199,19 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
               {(partner?.icDph ?? invoice.client?.icDph) &&
                 infoRow("IČ DPH", partner?.icDph ?? invoice.client?.icDph)}
               {infoRow("Dátum vystavenia", formatDate(invoice.issueDate))}
+              {infoRow("Právny subjekt", invoice.legalEntity ? legalEntityLabels[invoice.legalEntity] : "Nepriradený / neoverený")}
+              {invoice.source === "HISTORICAL" && <>
+                {infoRow("Druh originálu", invoice.historicalKind === "PROFORMA" ? "Predfaktúra" : "Konečná faktúra")}
+                {infoRow("Overenie", invoice.verificationStatus === "VERIFIED" ? "Overené" : "Neoverené")}
+                {infoRow("Krajina dane", invoice.taxCountry ?? "—")}
+                {infoRow("Pôvodná sadzba dane", invoice.foreignVatRateBps == null ? "—" : `${invoice.foreignVatRateBps / 100} %`)}
+                {infoRow("Mena daňových súm", invoice.taxCurrency ?? invoice.currency)}
+                {invoice.taxBaseMinor != null && infoRow("Pôvodný daňový základ", formatCurrencyMinor(invoice.taxBaseMinor, invoice.taxCurrency ?? invoice.currency))}
+                {invoice.taxAmountMinor != null && infoRow("Pôvodná daň", formatCurrencyMinor(invoice.taxAmountMinor, invoice.taxCurrency ?? invoice.currency))}
+                {invoice.taxTotalMinor != null && infoRow("Pôvodný daňový súčet", formatCurrencyMinor(invoice.taxTotalMinor, invoice.taxCurrency ?? invoice.currency))}
+                {infoRow("Suma na úhradu", formatCurrencyMinor(invoice.totalGrossCents, invoice.currency))}
+                {invoice.externallyPaidAt && infoRow("Dátum potvrdenej úhrady", formatDate(invoice.externallyPaidAt))}
+              </>}
               {infoRow("Dátum splatnosti", formatDate(invoice.dueDate))}
               {invoice.deliveryDate && infoRow("Dátum dodania", formatDate(invoice.deliveryDate))}
               {invoice.variableSymbol && infoRow("Variabilný symbol", invoice.variableSymbol)}
@@ -241,7 +259,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
 
           <InvoiceDocuments
             invoiceId={invoice.id}
-            allowPdfGeneration={invoice.direction === "VYDANA"}
+            allowPdfGeneration={invoice.direction === "VYDANA" && invoice.source !== "HISTORICAL"}
             canGenerate={
               invoice.direction === "VYDANA" &&
               invoice.documentStatus === "ISSUED" &&
@@ -259,8 +277,9 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
               createdAt: document.createdAt.toISOString(),
             }))}
           />
+          {invoice.source === "HISTORICAL" && invoice.verificationStatus !== "VERIFIED" && hasFinancePermission(currentUser.role, "CONFIGURE") && <VerifyHistoricalButton action={verifyHistoricalInvoice.bind(null, invoice.id)} />}
 
-          {invoice.direction === "VYDANA" && (
+          {invoice.direction === "VYDANA" && invoice.source !== "HISTORICAL" && (
             <InvoiceEmails
               invoiceId={invoice.id}
               canSend={canSendEmail}
@@ -272,7 +291,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
             />
           )}
 
-          {invoice.direction === "VYDANA" && (
+          {invoice.direction === "VYDANA" && invoice.source !== "HISTORICAL" && (
             <InvoiceEInvoice
               invoiceId={invoice.id}
               canValidate={canValidateEInvoice}
@@ -287,7 +306,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
             />
           )}
 
-          {invoice.documentStatus !== "CANCELLED" && (
+          {invoice.documentStatus !== "CANCELLED" && invoice.source !== "HISTORICAL" && (
             <section className="rounded-[14px] border border-stone-200 bg-white p-5 print:hidden">
               <h2 className="mb-3 font-semibold text-stone-900">Akcie</h2>
               <InvoiceWorkflowActions
@@ -323,10 +342,10 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                     <td className="px-5 py-2.5 text-right text-stone-600">
                       {formatQty(item.quantity, item.unit)}
                     </td>
-                    <td className="px-5 py-2.5 text-right text-stone-600">{formatCents(item.unitPriceCents)}</td>
+                    <td className="px-5 py-2.5 text-right text-stone-600">{item.unitPriceExact ? `${item.unitPriceExact.toString().replace(".", ",")} ${invoice.currency}` : formatCurrencyMinor(item.unitPriceCents, invoice.currency)}</td>
                     <td className="px-5 py-2.5 text-right text-stone-600">{item.vatRate} %</td>
                     <td className="px-5 py-2.5 text-right font-medium text-stone-900">
-                      {formatCents(item.totalNetCents ?? Math.round(item.quantity * item.unitPriceCents))}
+                      {formatCurrencyMinor(item.totalNetCents ?? Math.round(item.quantity * item.unitPriceCents), invoice.currency)}
                     </td>
                   </tr>
                 ))}
@@ -337,7 +356,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                     Spolu bez DPH
                   </td>
                   <td className="px-5 py-2 text-right font-medium text-stone-900">
-                    {formatCents(invoice.totalNetCents)}
+                    {invoice.source === "HISTORICAL" && invoice.taxCurrency !== invoice.currency ? "— (uvedené v mene dane vyššie)" : formatCurrencyMinor(invoice.totalNetCents, invoice.currency)}
                   </td>
                 </tr>
                 <tr className="text-sm">
@@ -345,7 +364,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                     DPH
                   </td>
                   <td className="px-5 py-1 text-right font-medium text-stone-900">
-                    {formatCents(invoice.totalVatCents)}
+                    {invoice.source === "HISTORICAL" && invoice.taxCurrency !== invoice.currency ? "— (uvedené v mene dane vyššie)" : formatCurrencyMinor(invoice.totalVatCents, invoice.currency)}
                   </td>
                 </tr>
                 <tr className="text-sm">
@@ -353,7 +372,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                     Spolu s DPH
                   </td>
                   <td className="px-5 py-2 text-right text-base font-bold text-stone-950">
-                    {formatCents(invoice.totalGrossCents)}
+                    {formatCurrencyMinor(invoice.totalGrossCents, invoice.currency)}
                   </td>
                 </tr>
               </tfoot>

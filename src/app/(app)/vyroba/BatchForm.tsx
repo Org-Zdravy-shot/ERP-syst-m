@@ -7,7 +7,7 @@ import { btnPrimary, errorBox, input, label } from "@/components/ui";
 interface ProductOption {
   id: string;
   name: string;
-  shelfLifeDays: number;
+  shelfLifeDays: number | null;
   hasRecipe: boolean;
 }
 
@@ -48,7 +48,7 @@ export function BatchForm({ products, today }: { products: ProductOption[]; toda
         </div>
         <div>
           <label className={label}>
-            Exspirácia <span className="font-normal text-stone-400">(inak auto)</span>
+            Exspirácia <span className="font-normal text-stone-400">(inak podľa potvrdenej trvanlivosti produktu)</span>
           </label>
           <input name="expiryDate" type="date" className={input} />
         </div>

@@ -16,7 +16,7 @@ export default async function ProduktyPage() {
           <thead><tr className={thead}>
             <th className="px-[18px] py-3 font-medium">Produkt</th>
             <th className="px-[18px] py-3 font-medium">SKU</th>
-            <th className="px-[18px] py-3 text-right font-medium">B2C cena</th>
+            <th className="px-[18px] py-3 text-right font-medium">B2C bez DPH v objednávke</th>
             <th className="px-[18px] py-3 font-medium">Stav</th>
             <th className="px-[18px] py-3 font-medium">Akcia</th>
           </tr></thead>
