@@ -8,6 +8,7 @@ import {
   FinanceDomainError,
   formatDocumentNumber,
   isDateWithinValidity,
+  isVatPayerAtDate,
 } from "./domain";
 import { hasFinancePermission } from "./permissions";
 import { evaluateProductionIssuingInfrastructure } from "./invoice-service";
@@ -67,6 +68,14 @@ test("časová platnosť je na oboch hraniciach inkluzívna", () => {
   expect(isDateWithinValidity(from, from, to)).toBe(true);
   expect(isDateWithinValidity(to, from, to)).toBe(true);
   expect(isDateWithinValidity(new Date("2026-08-01T00:00:00.000Z"), from, to)).toBe(false);
+});
+
+test("status platiteľa DPH začína až účinným dátumom registrácie", () => {
+  const registeredFrom = new Date("2026-11-15T00:00:00.000Z");
+  expect(isVatPayerAtDate("PAYER", registeredFrom, new Date("2026-11-14T23:59:59.999Z"))).toBe(false);
+  expect(isVatPayerAtDate("PAYER", registeredFrom, registeredFrom)).toBe(true);
+  expect(isVatPayerAtDate("NON_PAYER", registeredFrom, registeredFrom)).toBe(false);
+  expect(isVatPayerAtDate("PAYER", null, registeredFrom)).toBe(false);
 });
 
 test("oficiálny rad vydaných faktúr pokračuje číslom 2026009", () => {
