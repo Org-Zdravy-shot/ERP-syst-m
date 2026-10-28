@@ -5,6 +5,7 @@ import {
   calculateInvoice,
   calculatePaymentStatus,
   canTransitionDocument,
+  defaultInvoiceVariableSymbol,
   FinanceDomainError,
   formatDocumentNumber,
   isDateWithinValidity,
@@ -82,6 +83,14 @@ test("oficiálny rad vydaných faktúr pokračuje číslom 2026009", () => {
   expect(formatDocumentNumber("VYDANA", 2026, 9)).toBe("2026009");
   expect(formatDocumentNumber("PRIJATA", 2026, 9)).toBe("PF2026009");
   expect(formatDocumentNumber("NAKUP", 2026, 9)).toBe("NO2026009");
+});
+
+test("nové priame faktúry majú vlastný variabilný symbol bez kolízie so starým radom", () => {
+  expect(defaultInvoiceVariableSymbol("FAK2026001")).toBe("2202600001");
+  expect(defaultInvoiceVariableSymbol("FAK2026002")).toBe("2202600002");
+  expect(defaultInvoiceVariableSymbol("FAZ2026001")).toBe("1202600001");
+  expect(defaultInvoiceVariableSymbol("2026009")).toBe("2026009");
+  expect(defaultInvoiceVariableSymbol("FAK2026001")).not.toBe("2026001");
 });
 
 test("finančný operátor nemôže finalizovať ani meniť daňové nastavenia", () => {

@@ -25,6 +25,7 @@ import {
   assertDocumentTransition,
   calculateInvoice,
   calculatePaymentStatus,
+  defaultInvoiceVariableSymbol,
   FinanceDomainError,
   isVatPayerAtDate,
 } from "./domain";
@@ -498,7 +499,7 @@ export class PrismaInvoiceService implements InvoiceService {
           documentStatus: "ISSUED",
           finalizedAt,
           finalizedById: actorId,
-          variableSymbol: invoice.variableSymbol || invoiceNumber.replace(/\D/g, ""),
+          variableSymbol: invoice.variableSymbol || defaultInvoiceVariableSymbol(invoiceNumber),
           issuerSnapshot: toJson(issuerSnapshot),
           counterpartySnapshot: toJson(counterpartySnapshot),
           taxSnapshot: toJson({

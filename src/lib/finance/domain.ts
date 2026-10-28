@@ -181,3 +181,15 @@ export function formatDocumentNumber(
       return `NO${year}${String(sequence).padStart(3, "0")}`;
   }
 }
+
+/** Samostatné desaťmiestne VS pre ERP faktúry; nepreberá čísla z webu ani starých programov. */
+export function defaultInvoiceVariableSymbol(invoiceNumber: string): string {
+  const entityNumber = /^FA([ZK])(\d{4})(\d{3,})$/.exec(invoiceNumber);
+  if (!entityNumber) return invoiceNumber.replace(/\D/g, "");
+  const sequence = Number(entityNumber[3]);
+  if (!Number.isSafeInteger(sequence) || sequence > 99_999) {
+    throw new FinanceDomainError("INVALID_LINE", "Číselný rad faktúr prekročil kapacitu variabilného symbolu.");
+  }
+  const entityDigit = entityNumber[1] === "Z" ? "1" : "2";
+  return `${entityDigit}${entityNumber[2]}${String(sequence).padStart(5, "0")}`;
+}
