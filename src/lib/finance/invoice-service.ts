@@ -26,6 +26,7 @@ import {
   calculateInvoice,
   calculatePaymentStatus,
   FinanceDomainError,
+  isVatPayerAtDate,
 } from "./domain";
 import { resolveMailProviderKind } from "./mail/config";
 
@@ -351,6 +352,7 @@ export class PrismaInvoiceService implements InvoiceService {
       if (!company) blockers.push("Pre dátum dodania neexistuje platný firemný profil.");
       const taxProfile = company?.taxProfiles[0];
       let primaryAccount = company?.bankAccounts[0];
+      const vatApplies = invoice.direction === "VYDANA" && isVatPayerAtDate(taxProfile?.vatStatus ?? "", taxProfile?.vatRegisteredFrom, taxDate);
       if (!taxProfile) blockers.push("Pre dátum dodania neexistuje platný daňový profil.");
       if (invoice.direction === "VYDANA") {
         if (!invoice.deliveryDate) blockers.push("Vydaná faktúra musí mať dátum dodania.");
@@ -366,7 +368,7 @@ export class PrismaInvoiceService implements InvoiceService {
           if (!linkedOrder) blockers.push("Prepojená objednávka neexistuje.");
           const charges = linkedOrder?.charges.filter((charge) => charge.includedInSellerTotal) ?? [];
           if (charges.some((charge) => charge.taxTreatment === "UNVERIFIED" || charge.taxTreatment === "FOREIGN")) blockers.push("Daňový režim dopravy alebo služby nie je overený.");
-          if (taxProfile?.vatStatus === "PAYER" && charges.some((charge) => charge.taxTreatment === "NON_PAYER")) blockers.push("Doprava alebo služba je označená ako neplatiteľská, ale daňový profil subjektu je platiteľ.");
+          if (vatApplies && charges.some((charge) => charge.taxTreatment === "NON_PAYER")) blockers.push("Doprava alebo služba je označená ako neplatiteľská, ale daňový profil subjektu je platiteľ.");
           if (linkedOrder) {
             const expected = [
               ...linkedOrder.items.map((item) => `P|${item.productId}|${item.quantity}|${item.unitPriceExact?.toString() ?? item.unitPriceCents}|${item.vatRate}`),
@@ -395,12 +397,6 @@ export class PrismaInvoiceService implements InvoiceService {
         partyFromClient(invoice.client) ??
         parsePartySnapshot(invoice.counterpartySnapshot);
       if (!externalParty) blockers.push("Chýba úplný snapshot obchodného partnera.");
-
-      const vatApplies =
-        invoice.direction === "VYDANA" &&
-        taxProfile?.vatStatus === "PAYER" &&
-        !!taxProfile.vatRegisteredFrom &&
-        taxDate.getTime() >= taxProfile.vatRegisteredFrom.getTime();
 
       const effectiveLines = [];
       for (const item of invoice.items) {
@@ -467,7 +463,7 @@ export class PrismaInvoiceService implements InvoiceService {
       const issuerSnapshot = invoice.direction === "VYDANA" ? companyParty : externalParty;
       const counterpartySnapshot = invoice.direction === "VYDANA" ? externalParty : companyParty;
       const taxSnapshot: TaxSnapshot = {
-        vatStatus: taxProfile.vatStatus === "PAYER" ? "PAYER" : "NON_PAYER",
+        vatStatus: invoice.direction === "VYDANA" ? (vatApplies ? "PAYER" : "NON_PAYER") : (taxProfile.vatStatus === "PAYER" ? "PAYER" : "NON_PAYER"),
         ...(taxProfile.vatRegisteredFrom ? { vatRegisteredFrom: taxProfile.vatRegisteredFrom } : {}),
         domesticTaxMode: taxProfile.domesticTaxMode === "EXEMPT" ? "EXEMPT" : "STANDARD",
         deliveryDate: taxDate,

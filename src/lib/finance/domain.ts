@@ -153,6 +153,11 @@ export function isDateWithinValidity(date: Date, validFrom: Date, validTo?: Date
   return timestamp >= validFrom.getTime() && (!validTo || timestamp <= validTo.getTime());
 }
 
+/** Registrácia platiteľa sa uplatní až od dátumu jej účinnosti. */
+export function isVatPayerAtDate(vatStatus: string, vatRegisteredFrom: Date | null | undefined, taxDate: Date): boolean {
+  return vatStatus === "PAYER" && !!vatRegisteredFrom && taxDate.getTime() >= vatRegisteredFrom.getTime();
+}
+
 export type DocumentNumberKind = "VYDANA" | "PRIJATA" | "OBJ" | "SARZA" | "NAKUP";
 
 export function formatDocumentNumber(

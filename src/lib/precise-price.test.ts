@@ -32,6 +32,12 @@ describe("presná jednotková cena", () => {
   it("zaokrúhli základ až po násobení polovicou nahor", () => {
     expect(lineNetCents(150, "1.8275")).toBe(27_413);
   });
+  it("zachová presnosť aj pri desatinnom množstve na ručnej faktúre", () => {
+    expect(lineNetCents(1.5, "1.8270")).toBe(274);
+    const invoice = calculateInvoice({ currency: "EUR", lines: [{ description: "Služba", quantity: 1.5, unit: "h", unitPriceCents: 183, unitPriceExact: "1.8270", vatRate: 23 }] });
+    expect(invoice.lines[0].totalNetCents).toBe(274);
+    expect(invoice.lines[0].unitPriceExact).toBe("1.8270");
+  });
   it.each(["", "-1", "1,23456", "1.2.3", "abc"])("odmietne neplatnú cenu %s", (input) => {
     expect(() => parseUnitPrice(input)).toThrow();
   });
