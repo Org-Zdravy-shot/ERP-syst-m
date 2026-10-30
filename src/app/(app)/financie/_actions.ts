@@ -669,28 +669,21 @@ export async function saveFinanceProfile(
           },
         },
       });
-      const existingAccount = await tx.bankAccount.findUnique({
-        where: { iban_currency: { iban: data.iban, currency: "EUR" } },
+      const existingAccounts = await tx.bankAccount.findMany({
+        where: { iban: data.iban, currency: "EUR" },
         include: { companyProfile: { select: { legalEntity: true } } },
       });
-      if (existingAccount && existingAccount.companyProfile?.legalEntity !== data.legalEntity) {
+      if (existingAccounts.some((account) => account.companyProfile?.legalEntity !== data.legalEntity)) {
         throw new Error("Tento IBAN patrí inému alebo nepriradenému profilu. Pred priradením ho overte.");
       }
-      await tx.bankAccount.upsert({
-        where: { iban_currency: { iban: data.iban, currency: "EUR" } },
-        create: {
+      await tx.bankAccount.create({
+        data: {
           companyProfileId: profile.id,
           name: "Hlavný účet",
           iban: data.iban,
           bic: data.bic ?? null,
           currency: "EUR",
           isPrimary: true,
-        },
-        update: {
-          companyProfileId: profile.id,
-          bic: data.bic ?? null,
-          isPrimary: true,
-          isActive: true,
         },
       });
       await tx.auditLog.create({

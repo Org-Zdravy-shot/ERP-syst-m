@@ -211,18 +211,29 @@ async function syncTatraConnection(connectionId: string): Promise<SyncSummary> {
     // Účty sa pri každom syncu doplnia/aktualizujú
     const accounts = await provider.listAccounts();
     for (const account of accounts) {
-      await prisma.bankAccount.upsert({
-        where: { iban_currency: { iban: account.iban, currency: account.currency } },
-        create: {
+      const existingAccount = await prisma.bankAccount.findFirst({
+        where: {
+          iban: account.iban,
+          currency: account.currency,
+          OR: [{ bankConnectionId: connectionId }, { bankConnectionId: null }],
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      if (existingAccount) {
+        await prisma.bankAccount.update({
+          where: { id: existingAccount.id },
+          data: { bankConnectionId: connectionId, providerAccountId: account.providerAccountId, name: account.name },
+        });
+      } else {
+        await prisma.bankAccount.create({ data: {
           bankConnectionId: connectionId,
           providerAccountId: account.providerAccountId,
           name: account.name,
           iban: account.iban,
           bic: account.bic ?? null,
           currency: account.currency,
-        },
-        update: { bankConnectionId: connectionId, providerAccountId: account.providerAccountId, name: account.name },
-      });
+        } });
+      }
     }
 
     let hasMore = true;
@@ -301,17 +312,28 @@ export async function importStatementTransactions(
       data: { provider: "STATEMENT_IMPORT", status: "CONNECTED" },
     }));
 
-  await prisma.bankAccount.upsert({
-    where: { iban_currency: { iban: normalizedIban, currency: "EUR" } },
-    create: {
+  const existingAccount = await prisma.bankAccount.findFirst({
+    where: {
+      iban: normalizedIban,
+      currency: "EUR",
+      OR: [{ bankConnectionId: connection.id }, { bankConnectionId: null }],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existingAccount) {
+    await prisma.bankAccount.update({
+      where: { id: existingAccount.id },
+      data: { bankConnectionId: connection.id, providerAccountId: normalizedIban },
+    });
+  } else {
+    await prisma.bankAccount.create({ data: {
       bankConnectionId: connection.id,
       providerAccountId: normalizedIban,
       name: `Účet ${normalizedIban.slice(-4)}`,
       iban: normalizedIban,
       currency: "EUR",
-    },
-    update: { bankConnectionId: connection.id, providerAccountId: normalizedIban },
-  });
+    } });
+  }
 
   const withAccount = transactions.map((t) => ({ ...t, providerAccountId: normalizedIban }));
   const { imported, duplicates, newPaymentIds } = await persistTransactions(
