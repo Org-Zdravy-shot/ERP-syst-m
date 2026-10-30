@@ -905,7 +905,9 @@ model BankAccount {
 
   transactions BankTransaction[]
 
-  @@unique([iban, currency])
+  // Rovnaký účet môže patriť viacerým časovým verziám profilu toho istého subjektu.
+  @@unique([companyProfileId, iban, currency])
+  @@index([iban, currency])
   @@unique([bankConnectionId, providerAccountId])
 }
 
