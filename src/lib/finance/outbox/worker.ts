@@ -1,7 +1,7 @@
 import type { DocumentService, MailProvider } from "@/lib/finance/contracts";
 import { prisma } from "@/lib/prisma";
 import { sendInvoiceEmail } from "@/lib/finance/mail/email-service";
-import { sendSupplierOrderEmail } from "@/lib/suppliers/order-email";
+import { automaticPackagingMailReady, sendSupplierOrderEmail } from "@/lib/suppliers/order-email";
 import { MAIL_MAX_ATTEMPTS } from "@/lib/finance/mail/config";
 import { getMailProvider, getWorkerDocumentService } from "./composition";
 import { enqueueOutbox } from "./enqueue";
@@ -45,7 +45,11 @@ async function claimNext(now: Date): Promise<{
 } | null> {
   for (let raceAttempt = 0; raceAttempt < 5; raceAttempt += 1) {
     const candidate = await prisma.outboxEvent.findFirst({
-      where: { status: "PENDING", availableAt: { lte: now } },
+      where: {
+        status: "PENDING",
+        availableAt: { lte: now },
+        ...(automaticPackagingMailReady() ? {} : { type: { not: "SUPPLIER_ORDER_EMAIL" } }),
+      },
       orderBy: { availableAt: "asc" },
       select: { id: true },
     });

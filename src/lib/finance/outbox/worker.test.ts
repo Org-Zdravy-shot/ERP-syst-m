@@ -76,6 +76,20 @@ test("worker obnoví zaseknuté PROCESSING udalosti po časovom limite", async (
   );
 });
 
+test("počas pauzy front preskočí e-maily dodávateľom", async () => {
+  const previous = process.env.SUPPLIER_AUTO_ORDER_ENABLED;
+  delete process.env.SUPPLIER_AUTO_ORDER_ENABLED;
+  try {
+    await processPendingOutbox(1, { now: () => now });
+    expect(mocks.outboxFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ type: { not: "SUPPLIER_ORDER_EMAIL" } }),
+    }));
+  } finally {
+    if (previous === undefined) delete process.env.SUPPLIER_AUTO_ORDER_ENABLED;
+    else process.env.SUPPLIER_AUTO_ORDER_ENABLED = previous;
+  }
+});
+
 test("neopakovateľná chyba započíta pokus a udalosť ukončí", async () => {
   mocks.outboxFindFirst.mockResolvedValue({ id: "event-1" });
   mocks.outboxUpdateMany
