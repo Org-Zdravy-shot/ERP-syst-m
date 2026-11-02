@@ -7,6 +7,7 @@ export interface StockLevel {
   minStock: number;
   quantity: number;
   isLow: boolean;
+  hasRecordedStock: boolean;
   kind?: string;
 }
 
@@ -18,12 +19,15 @@ export async function getMaterialStockLevels(): Promise<StockLevel[]> {
       by: ["materialId"],
       where: { materialId: { not: null } },
       _sum: { quantity: true },
+      _count: { _all: true },
     }),
   ]);
-  const byId = new Map(sums.map((s) => [s.materialId, s._sum.quantity ?? 0]));
+  const byId = new Map(sums.map((s) => [s.materialId, { quantity: s._sum.quantity ?? 0, count: s._count._all }]));
   return materials.map((m) => {
-    const quantity = byId.get(m.id) ?? 0;
-    return { id: m.id, name: m.name, unit: m.unit, kind: m.kind, minStock: m.minStock, quantity, isLow: quantity < m.minStock };
+    const recorded = byId.get(m.id);
+    const quantity = recorded?.quantity ?? 0;
+    const hasRecordedStock = (recorded?.count ?? 0) > 0;
+    return { id: m.id, name: m.name, unit: m.unit, kind: m.kind, minStock: m.minStock, quantity, hasRecordedStock, isLow: hasRecordedStock && quantity < m.minStock };
   });
 }
 
@@ -40,7 +44,7 @@ export async function getProductStockLevels(): Promise<StockLevel[]> {
   const byId = new Map(sums.map((s) => [s.productId, s._sum.quantity ?? 0]));
   return products.map((p) => {
     const quantity = byId.get(p.id) ?? 0;
-    return { id: p.id, name: p.name, unit: p.unit, minStock: p.minStock, quantity, isLow: quantity < p.minStock };
+    return { id: p.id, name: p.name, unit: p.unit, minStock: p.minStock, quantity, hasRecordedStock: true, isLow: quantity < p.minStock };
   });
 }
 

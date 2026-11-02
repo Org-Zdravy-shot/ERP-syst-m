@@ -24,10 +24,10 @@ function StockTable({ title, levels }: { title: string; levels: StockLevel[] }) 
           {levels.map((item) => (
             <tr key={item.id} className={tr}>
               <td className={td}>{item.name}</td>
-              <td className={tdRight}>{formatQty(item.quantity, item.unit)}</td>
+              <td className={tdRight}>{item.hasRecordedStock ? formatQty(item.quantity, item.unit) : "—"}</td>
               <td className={tdRightMuted}>{formatQty(item.minStock, item.unit)}</td>
               <td className="px-[18px] py-[9px] text-right">
-                {item.isLow ? <Badge color="red">Nízky stav</Badge> : <Badge color="emerald">OK</Badge>}
+                {!item.hasRecordedStock ? <Badge color="gray">Nezistené</Badge> : item.isLow ? <Badge color="red">Nízky stav</Badge> : <Badge color="emerald">OK</Badge>}
               </td>
             </tr>
           ))}
@@ -51,6 +51,7 @@ export default async function SkladPage() {
     getSession(),
   ]);
   const lowCount = [...materials, ...products].filter((i) => i.isLow).length;
+  const unknownCount = materials.filter((i) => !i.hasRecordedStock).length;
   const ingredients = materials.filter((item) => item.kind !== "PACKAGING");
   const packaging = materials.filter((item) => item.kind === "PACKAGING");
 
@@ -60,8 +61,8 @@ export default async function SkladPage() {
         title="Sklad"
         subtitle={
           lowCount > 0
-            ? `${lowCount} položiek pod minimálnou zásobou`
-            : "Všetky zásoby nad minimom"
+            ? `${lowCount} položiek pod minimálnou zásobou${unknownCount ? ` · ${unknownCount} bez počiatočného stavu` : ""}`
+            : unknownCount > 0 ? `${unknownCount} položiek bez počiatočného stavu` : "Všetky zásoby nad minimom"
         }
       >
         {hasFinancePermission(session.role, "CONFIGURE") && <Link href="/sklad/polozky" className={btnSecondary}>

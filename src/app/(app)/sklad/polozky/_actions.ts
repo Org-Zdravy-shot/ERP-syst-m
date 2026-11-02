@@ -57,6 +57,7 @@ export async function saveMaterial(_previous: MaterialFormState, formData: FormD
       if (data.autoReorder) {
         if (!automaticPackagingMailReady()) throw new Error("Produkčný e-mail ešte nie je pripravený na automatické objednávanie.");
         if (!data.id) throw new Error("Najprv uložte obal a potom nastavte ponuku dodávateľa.");
+        if (await tx.stockMovement.count({ where: { materialId: data.id } }) === 0) throw new Error("Najprv zapíšte počiatočný stav obalu cez skladový príjem.");
         const company = await tx.companyProfile.findFirst({ where: { isActive: true, legalEntity: data.autoOrderLegalEntity, validFrom: { lte: new Date() }, OR: [{ validTo: null }, { validTo: { gte: new Date() } }] } });
         if (!company) throw new Error("Pre vybraný nákupný subjekt chýba platný firemný profil.");
         const offers = await tx.supplierCatalogItem.findMany({
