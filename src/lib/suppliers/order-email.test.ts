@@ -13,7 +13,7 @@ const now = new Date("2026-11-02T10:00:00.000Z");
 const order = {
   id: "order-1", orderNumber: "NO2026001", status: "APPROVED", shippingCents: 0, discountCents: 0,
   supplierSnapshot: { name: "Dodávateľ fliaš", email: "dodavatel@example.sk" },
-  deliveryLocationSnapshot: { legalName: "Zdravý Shot", street: "Hlavná 1", city: "Senica", zip: "90501" },
+  deliveryLocationSnapshot: { legalName: "Kurgi s. r. o.", ico: "57911304", street: "Hlavná 1", city: "Senica", zip: "90501" },
   items: [{ lineNumber: 1, description: "Fľaša 40 ml", supplierSku: "FL40", quantity: 1000, unit: "ks", unitPriceCents: 18, pricePerQuantity: 1, priceType: "NET", vatRate: 23 }],
 };
 
@@ -33,6 +33,11 @@ test("odošle objednávku s množstvom a označí ju ako odoslanú", async () =>
     subject: "Nákupná objednávka NO2026001 – Zdravý Shot",
     text: expect.stringContaining("Fľaša 40 ml (FL40) — 1 000 ks"),
   }));
+  const body = send.mock.calls[0][0].text as string;
+  expect(body).toContain("Kupujúci: Kurgi s. r. o., Hlavná 1, 90501, Senica, IČO 57911304");
+  expect(body).toContain("Cena tovaru s DPH bez prípadnej dopravy");
+  expect(body).toContain("spôsobu prevzatia alebo dopravy");
+  expect(body).not.toContain("Miesto dodania");
   expect(mocks.updateMany).toHaveBeenCalledWith({ where: { id: "order-1", status: "APPROVED" }, data: { status: "SENT", sentAt: now } });
 });
 

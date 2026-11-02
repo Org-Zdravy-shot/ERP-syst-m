@@ -27,18 +27,20 @@ export async function sendSupplierOrderEmail(input: { orderId: string; outboxEve
   const email = textField(order.supplierSnapshot, "email");
   if (!email || !order.items.length) throw new NonRetryableError("Objednávke chýba príjemca alebo položky.");
   const supplierName = textField(order.supplierSnapshot, "legalName") ?? textField(order.supplierSnapshot, "name") ?? "dodávateľ";
-  const deliveryName = textField(order.deliveryLocationSnapshot, "legalName");
-  const deliveryAddress = [textField(order.deliveryLocationSnapshot, "street"), textField(order.deliveryLocationSnapshot, "zip"), textField(order.deliveryLocationSnapshot, "city")].filter(Boolean).join(", ");
+  const buyerName = textField(order.deliveryLocationSnapshot, "legalName");
+  const buyerAddress = [textField(order.deliveryLocationSnapshot, "street"), textField(order.deliveryLocationSnapshot, "zip"), textField(order.deliveryLocationSnapshot, "city")].filter(Boolean).join(", ");
+  const buyerIco = textField(order.deliveryLocationSnapshot, "ico");
   const totals = calculateSupplierOrderTotals(order.items.map((item) => ({
     quantity: item.quantity, unitPriceCents: item.unitPriceCents, pricePerQuantity: item.pricePerQuantity,
     priceType: item.priceType === "GROSS" ? "GROSS" : "NET", vatRate: item.vatRate,
   })), order.shippingCents, order.discountCents);
   const lines = order.items.map((item, index) => `${index + 1}. ${item.description}${item.supplierSku ? ` (${item.supplierSku})` : ""} — ${formatQty(item.quantity, item.unit)}; ${formatCents(totals.lines[index].totalGrossCents)} s DPH`);
+  const goodsGrossCents = totals.lines.reduce((sum, line) => sum + line.totalGrossCents, 0);
   const body = [
     `Dobrý deň, ${supplierName},`, "", `objednávame u vás nasledujúce obaly (objednávka ${order.orderNumber}):`, "",
-    ...lines, "", `Spolu s DPH: ${formatCents(totals.totalGrossCents)}`,
-    "", `Miesto dodania: ${[deliveryName, deliveryAddress].filter(Boolean).join(", ")}`,
-    "", "Prosíme o potvrdenie objednávky a termínu dodania.", "", "Zdravý Shot",
+    ...lines, "", `Cena tovaru s DPH bez prípadnej dopravy: ${formatCents(goodsGrossCents)}`,
+    "", `Kupujúci: ${[buyerName, buyerAddress, buyerIco ? `IČO ${buyerIco}` : null].filter(Boolean).join(", ")}`,
+    "", "Prosíme o potvrdenie objednávky, dostupnosti a spôsobu prevzatia alebo dopravy.", "", "Zdravý Shot",
   ].join("\n");
   const result = await input.provider.send({
     idempotencyKey: `supplier-order:${order.id}:email`,
