@@ -13,7 +13,7 @@ export default async function NovaFakturaPage() {
 
   return (
     <>
-      <PageHeader title="Nová faktúra" subtitle="Ručné vystavenie vydanej alebo prijatej faktúry">
+      <PageHeader title="Nová faktúra" subtitle="Ručné vystavenie vydanej faktúry">
         <Link href="/financie/faktury" className={btnSecondary}>
           ← Späť na faktúry
         </Link>
