@@ -55,6 +55,7 @@ export async function saveMaterial(_previous: MaterialFormState, formData: FormD
       if (data.id && !previous) throw new Error("Skladová položka neexistuje.");
       if (previous && previous.unit !== data.unit) throw new Error("Jednotku existujúcej položky nemožno zmeniť, pretože skladové pohyby už môžu byť v pôvodnej jednotke.");
       if (data.autoReorder) {
+        if (process.env.SUPPLIER_AUTO_ORDER_ENABLED !== "true") throw new Error("Automatické objednávanie obalov je dočasne vypnuté. Po sezóne ho musí najprv zapnúť správca systému.");
         if (!automaticPackagingMailReady()) throw new Error("Produkčný e-mail ešte nie je pripravený na automatické objednávanie.");
         if (!data.id) throw new Error("Najprv uložte obal a potom nastavte ponuku dodávateľa.");
         if (await tx.stockMovement.count({ where: { materialId: data.id } }) === 0) throw new Error("Najprv zapíšte počiatočný stav obalu cez skladový príjem.");

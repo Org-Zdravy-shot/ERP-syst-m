@@ -19,8 +19,9 @@ zásob. Používateľ má na profile dodávateľa okamžite vidieť:
 - či je potrebné niečo doobjednať a ktorý dodávateľ je pre položku preferovaný.
 
 Prvá verzia podporuje EUR a slovenské nákupy. Bežné doobjednanie vytvára
-koncept na kontrolu. Pri obaloch môže správca výslovne zapnúť automatické
-objednávanie pre konkrétnu položku, preferovaného dodávateľa a nákupný subjekt.
+koncept na kontrolu. Automatické objednávanie obalov je teraz globálne vypnuté.
+Po sezóne ho správca môže zapnúť cez `SUPPLIER_AUTO_ORDER_ENABLED=true` a až
+potom pre konkrétnu položku, preferovaného dodávateľa a nákupný subjekt.
 
 ## Zásady dátového modelu
 

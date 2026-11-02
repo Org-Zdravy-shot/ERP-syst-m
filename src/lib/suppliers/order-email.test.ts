@@ -7,7 +7,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {
   $transaction: mocks.transaction,
 } }));
 
-import { sendSupplierOrderEmail } from "./order-email";
+import { automaticPackagingMailReady, sendSupplierOrderEmail } from "./order-email";
 
 const now = new Date("2026-11-02T10:00:00.000Z");
 const order = {
@@ -22,6 +22,17 @@ beforeEach(() => {
   mocks.findOrder.mockResolvedValue(order);
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback({ supplierOrder: { updateMany: mocks.updateMany }, auditLog: { create: mocks.audit } }));
+});
+
+test("bez výslovného zapnutia zostane automatické objednávanie vypnuté", () => {
+  const previous = process.env.SUPPLIER_AUTO_ORDER_ENABLED;
+  delete process.env.SUPPLIER_AUTO_ORDER_ENABLED;
+  try {
+    expect(automaticPackagingMailReady()).toBe(false);
+  } finally {
+    if (previous === undefined) delete process.env.SUPPLIER_AUTO_ORDER_ENABLED;
+    else process.env.SUPPLIER_AUTO_ORDER_ENABLED = previous;
+  }
 });
 
 test("odošle objednávku s množstvom a označí ju ako odoslanú", async () => {
