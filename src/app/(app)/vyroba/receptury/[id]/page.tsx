@@ -52,7 +52,7 @@ export default async function RecipeEditorPage({
     <>
       <PageHeader
         title={`Receptúra: ${recipe.product.name}`}
-        subtitle={`Spotreba surovín na dávku ${recipe.batchSize} ks`}
+        subtitle={`Spotreba surovín a obalov na dávku ${recipe.batchSize} ks`}
       >
         <Link href="/vyroba/receptury" className={btnSecondary}>
           ← Všetky receptúry
@@ -84,11 +84,11 @@ export default async function RecipeEditorPage({
         </form>
 
         <div className={card}>
-          <div className={cardHeader}>Suroviny na {recipe.batchSize} ks</div>
+          <div className={cardHeader}>Suroviny a obaly na {recipe.batchSize} ks</div>
           <table className={table}>
             <thead>
               <tr className={thead}>
-                <th className="px-[18px] py-2 font-medium">Surovina</th>
+                <th className="px-[18px] py-2 font-medium">Surovina / obal</th>
                 <th className="px-[18px] py-2 text-right font-medium">Množstvo</th>
                 <th className="px-[18px] py-2 font-medium">Upraviť</th>
               </tr>
@@ -129,7 +129,7 @@ export default async function RecipeEditorPage({
               {recipe.items.length === 0 && (
                 <tr className={tr}>
                   <td colSpan={3} className="px-[18px] py-6 text-center text-stone-400">
-                    Receptúra zatiaľ nemá žiadne suroviny — pridajte ich nižšie
+                    Receptúra zatiaľ nemá žiadne suroviny ani obaly — pridajte ich nižšie
                   </td>
                 </tr>
               )}
@@ -141,16 +141,13 @@ export default async function RecipeEditorPage({
           <form action={upsertRecipeItem} className={`${card} flex flex-wrap items-end gap-3 p-4`}>
             <input type="hidden" name="recipeId" value={recipe.id} />
             <div className="min-w-56 flex-1">
-              <label className={labelSmall}>Pridať surovinu</label>
+              <label className={labelSmall}>Pridať surovinu alebo obal</label>
               <select name="materialId" required className={`${inlineInput} w-full`} defaultValue="">
                 <option value="" disabled>
                   — vyberte —
                 </option>
-                {availableMaterials.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.unit})
-                  </option>
-                ))}
+                <optgroup label="Suroviny">{availableMaterials.filter((m) => m.kind !== "PACKAGING").map((m) => <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>)}</optgroup>
+                <optgroup label="Obaly a fľaše">{availableMaterials.filter((m) => m.kind === "PACKAGING").map((m) => <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>)}</optgroup>
               </select>
             </div>
             <div>

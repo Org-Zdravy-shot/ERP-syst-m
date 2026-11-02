@@ -77,6 +77,7 @@ export default async function DoobjednaniePage() {
     ...materials.map((item) => ({
       key: `material:${item.id}`,
       kind: "material" as const,
+      materialKind: item.kind,
       id: item.id,
       name: item.name,
       unit: item.unit,
@@ -114,7 +115,7 @@ export default async function DoobjednaniePage() {
         <summary className={`${cardHeader} cursor-pointer`}>Nastaviť minimálne a cieľové zásoby ({allItems.length})</summary>
         <div className="grid grid-cols-1 gap-3 p-5 lg:grid-cols-2">
           {allItems.map((item) => <div key={item.key} className="rounded-[10px] border border-stone-100 p-3">
-            <div className="mb-2 text-sm font-semibold text-stone-900">{item.name} <span className="font-normal text-stone-400">· {item.kind === "material" ? "surovina" : "produkt"}</span></div>
+            <div className="mb-2 text-sm font-semibold text-stone-900">{item.name} <span className="font-normal text-stone-400">· {item.kind === "material" ? item.materialKind === "PACKAGING" ? "obal" : "surovina" : "produkt"}</span></div>
             <StockTargetForm itemRef={item.key} minStock={item.minStock} targetStock={item.targetStock} unit={item.unit} />
           </div>)}
         </div>

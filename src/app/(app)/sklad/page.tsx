@@ -51,6 +51,8 @@ export default async function SkladPage() {
     getSession(),
   ]);
   const lowCount = [...materials, ...products].filter((i) => i.isLow).length;
+  const ingredients = materials.filter((item) => item.kind !== "PACKAGING");
+  const packaging = materials.filter((item) => item.kind === "PACKAGING");
 
   return (
     <>
@@ -62,6 +64,9 @@ export default async function SkladPage() {
             : "Všetky zásoby nad minimom"
         }
       >
+        {hasFinancePermission(session.role, "CONFIGURE") && <Link href="/sklad/polozky" className={btnSecondary}>
+          + Surovina alebo obal
+        </Link>}
         {hasFinancePermission(session.role, "VIEW") && <Link href="/dodavatelia/doobjednanie" className={btnSecondary}>
           Doobjednanie zásob
         </Link>}
@@ -71,7 +76,8 @@ export default async function SkladPage() {
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <StockTable title="Suroviny" levels={materials} />
+        <StockTable title="Suroviny" levels={ingredients} />
+        <StockTable title="Obaly a fľaše" levels={packaging} />
         <StockTable title="Hotové produkty" levels={products} />
       </div>
     </>

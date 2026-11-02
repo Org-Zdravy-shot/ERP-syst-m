@@ -1,6 +1,7 @@
 import type { DocumentService, MailProvider } from "@/lib/finance/contracts";
 import { prisma } from "@/lib/prisma";
 import { sendInvoiceEmail } from "@/lib/finance/mail/email-service";
+import { sendSupplierOrderEmail } from "@/lib/suppliers/order-email";
 import { MAIL_MAX_ATTEMPTS } from "@/lib/finance/mail/config";
 import { getMailProvider, getWorkerDocumentService } from "./composition";
 import { enqueueOutbox } from "./enqueue";
@@ -18,6 +19,7 @@ export interface OutboxDeps {
 
 interface PdfPayload {
   invoiceId: string;
+  supplierOrderId?: string;
   actorId?: string;
   emailIdempotencyKey?: string;
 }
@@ -157,6 +159,14 @@ async function dispatch(
   const payload = (event.payload ?? {}) as PdfPayload;
 
   switch (event.type) {
+    case "SUPPLIER_ORDER_EMAIL": {
+      if (!payload.supplierOrderId) throw new NonRetryableError("Chýba supplierOrderId v payloade.");
+      await sendSupplierOrderEmail({
+        orderId: payload.supplierOrderId, outboxEventId: event.id,
+        provider: deps.mailProvider ?? getMailProvider(), now: deps.now(),
+      });
+      return;
+    }
     case "INVOICE_PDF": {
       if (!payload.invoiceId) throw new NonRetryableError("Chýba invoiceId v payloade.");
       const documentService =

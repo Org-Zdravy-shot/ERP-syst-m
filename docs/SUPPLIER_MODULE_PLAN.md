@@ -18,9 +18,9 @@ zásob. Používateľ má na profile dodávateľa okamžite vidieť:
 - ktoré vratné nádoby, palety alebo obaly držíme my a ktoré drží dodávateľ;
 - či je potrebné niečo doobjednať a ktorý dodávateľ je pre položku preferovaný.
 
-Prvá verzia podporuje EUR a slovenské nákupy. Systém môže automaticky vytvoriť
-návrh objednávky, ale nič neodošle dodávateľovi bez vedomého potvrdenia
-používateľa.
+Prvá verzia podporuje EUR a slovenské nákupy. Bežné doobjednanie vytvára
+koncept na kontrolu. Pri obaloch môže správca výslovne zapnúť automatické
+objednávanie pre konkrétnu položku, preferovaného dodávateľa a nákupný subjekt.
 
 ## Zásady dátového modelu
 
@@ -176,6 +176,7 @@ jedným potvrdením vytvoriť koncepty objednávok rozdelené podľa dodávateľ
 ### S3 — riadená automatizácia
 
 - [ ] PDF/e-mail nákupnej objednávky cez existujúci outbox;
+- [x] voliteľná automatická textová e-mailová objednávka obalov pri nízkej zásobe cez existujúci outbox cron;
 - [ ] pripomienky omeškaných dodávok a vratných obalov;
 - [ ] metriky dodávateľa: cena, spoľahlivosť, dodacia doba a reklamácie;
 - [ ] voliteľné pravidelné vytváranie konceptov objednávok;

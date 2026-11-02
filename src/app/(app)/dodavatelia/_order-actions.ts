@@ -345,6 +345,11 @@ export async function transitionSupplierOrder(
         data.approvedById = user.userId;
       }
       if (to === "SENT") {
+        const automaticEmail = await tx.outboxEvent.findFirst({
+          where: { type: "SUPPLIER_ORDER_EMAIL", aggregateType: "SupplierOrder", aggregateId: orderId, status: { in: ["PENDING", "PROCESSING"] } },
+          select: { id: true },
+        });
+        if (automaticEmail) throw new SupplierOrderActionError("Automatický e-mail ešte čaká na odoslanie; stav sa aktualizuje po jeho prijatí poskytovateľom.");
         const company = await tx.companyProfile.findFirst({
           where: { isActive: true, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gte: now } }] },
           orderBy: { validFrom: "desc" },
@@ -574,9 +579,12 @@ export async function updateStockTarget(
   try {
     await prisma.$transaction(async (tx) => {
       const before = kind === "material"
-        ? await tx.material.findUnique({ where: { id }, select: { minStock: true, targetStock: true } })
+        ? await tx.material.findUnique({ where: { id }, select: { minStock: true, targetStock: true, autoReorder: true } })
         : await tx.product.findUnique({ where: { id }, select: { minStock: true, targetStock: true } });
       if (!before) throw new SupplierOrderActionError("Skladová položka neexistuje.");
+      if ("autoReorder" in before && before.autoReorder && (minStock <= 0 || targetStock === null)) {
+        throw new SupplierOrderActionError("Pri automatickom objednávaní musí zostať kladné minimum a cieľová zásoba. Automatiku najprv vypnite v sklade.");
+      }
       if (kind === "material") await tx.material.update({ where: { id }, data: { minStock, targetStock } });
       else await tx.product.update({ where: { id }, data: { minStock, targetStock } });
       await tx.auditLog.create({
