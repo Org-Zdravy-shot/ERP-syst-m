@@ -127,6 +127,8 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   const snapshotValue = isIssued ? invoice.counterpartySnapshot : invoice.issuerSnapshot;
   const parsedSnapshot = financePartySnapshotSchema.safeParse(snapshotValue);
   const partner = parsedSnapshot.success ? parsedSnapshot.data : null;
+  const parsedIssuer = financePartySnapshotSchema.safeParse(invoice.issuerSnapshot);
+  const issuer = parsedIssuer.success ? parsedIssuer.data : null;
   const allocatedCents = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
   const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocatedCents);
   const overdue =
@@ -165,8 +167,23 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
         {invoice.source === "HISTORICAL" ? "Toto je evidencia pôvodného dokladu. Priložte originál; ERP z neho nevystavuje nové PDF ani nepredpokladá nárok na slovenský odpočet DPH." : "Toto je pracovný náhľad ERP. Oficiálnym dokladom je až nemenné PDF vytvorené po finalizácii."}
       </div>
 
+      <div className="mb-5 grid gap-3 sm:grid-cols-3 print:hidden">
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Suma dokladu</p>
+          <p className="mt-2 font-display text-xl font-bold tabular-nums text-stone-950">{formatCurrencyMinor(invoice.totalGrossCents, invoice.currency)}</p>
+        </div>
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Splatnosť</p>
+          <p className={`mt-2 font-display text-xl font-bold ${overdue ? "text-red-700" : "text-stone-950"}`}>{formatDate(invoice.dueDate)}</p>
+        </div>
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Stav úhrady</p>
+          <div className="mt-3"><Badge color={overdue ? "red" : INVOICE_PAYMENT_STATUS_COLORS[paymentStatus]}>{invoice.source === "HISTORICAL" ? invoice.paymentConfirmation ? "Potvrdená mimo ERP" : "Neoverená" : overdue ? "Po splatnosti" : invoicePaymentStatusLabels[paymentStatus]}</Badge></div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 print:block">
-        <div className="space-y-6 print:space-y-4">
+        <div className="space-y-6 lg:order-2 print:space-y-4">
           <section className="rounded-[14px] border border-stone-200 bg-white p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-stone-900">Údaje</h2>
@@ -322,10 +339,33 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           )}
         </div>
 
-        <div className="lg:col-span-2 print:mt-4">
+        <div className="lg:order-1 lg:col-span-2 print:mt-4">
           <section className="rounded-[14px] border border-stone-200 bg-white">
-            <h2 className="border-b border-stone-100 px-5 py-3 font-semibold text-stone-900">Položky</h2>
-            <table className="w-full text-sm">
+            <p className="border-b border-stone-100 px-5 py-2 text-xs font-medium text-stone-500">Pracovný prehľad ERP · oficiálny doklad je nemenné PDF po finalizácii</p>
+            <div className="grid gap-5 border-b border-stone-200 p-5 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Dodávateľ</p>
+                <p className="mt-2 font-semibold text-stone-950">{issuer?.name ?? "Údaje dodávateľa nie sú dostupné"}</p>
+                {issuer?.street && <p className="mt-1 text-sm text-stone-600">{issuer.street}</p>}
+                {(issuer?.zip || issuer?.city) && <p className="text-sm text-stone-600">{[issuer?.zip, issuer?.city].filter(Boolean).join(" ")}</p>}
+                {issuer?.ico && <p className="mt-2 text-xs text-stone-500">IČO: {issuer.ico}</p>}
+                {issuer?.dic && <p className="text-xs text-stone-500">DIČ: {issuer.dic}</p>}
+                {issuer?.icDph && <p className="text-xs text-stone-500">IČ DPH: {issuer.icDph}</p>}
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{isIssued ? "Odberateľ" : "Evidovaný partner"}</p>
+                <p className="mt-2 font-semibold text-stone-950">{counterparty}</p>
+                {partner?.street && <p className="mt-1 text-sm text-stone-600">{partner.street}</p>}
+                {(partner?.zip || partner?.city) && <p className="text-sm text-stone-600">{[partner?.zip, partner?.city].filter(Boolean).join(" ")}</p>}
+                {(partner?.ico ?? invoice.client?.ico) && <p className="mt-2 text-xs text-stone-500">IČO: {partner?.ico ?? invoice.client?.ico}</p>}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 bg-stone-50 px-5 py-4">
+              <div><p className="text-lg font-bold text-stone-950">{isCreditNote ? "Dobropis" : isIssued ? "Faktúra" : "Prijatá faktúra"} {invoice.invoiceNumber ?? invoice.externalNumber ?? "—"}</p>{invoice.variableSymbol && <p className="mt-1 text-sm text-stone-600">Variabilný symbol: {invoice.variableSymbol}</p>}</div>
+              <dl className="grid grid-cols-[auto_auto] gap-x-5 gap-y-1 text-sm"><dt className="text-stone-500">Vystavená</dt><dd className="text-right font-medium">{formatDate(invoice.issueDate)}</dd>{invoice.deliveryDate && <><dt className="text-stone-500">Dodanie</dt><dd className="text-right font-medium">{formatDate(invoice.deliveryDate)}</dd></>}<dt className="text-stone-500">Splatná</dt><dd className="text-right font-medium">{formatDate(invoice.dueDate)}</dd></dl>
+            </div>
+            <div className="border-b border-stone-100 px-5 py-4"><h2 className="font-semibold text-stone-900">Položky dokladu</h2><p className="mt-0.5 text-sm text-stone-500">Rozpis uložených cien a DPH.</p></div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm">
               <thead>
                 <tr className="border-b border-stone-100 text-left text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <th className="px-5 py-2">Popis</th>
@@ -376,7 +416,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                   </td>
                 </tr>
               </tfoot>
-            </table>
+            </table></div>
           </section>
         </div>
       </div>
