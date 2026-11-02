@@ -229,13 +229,14 @@ export default async function FakturyPage({
               </tr>
             )}
             {visibleRows.map(({ invoice: inv, paymentStatus, overdue }) => {
+              const displayedNumber = inv.invoiceNumber ?? (inv.source === "HISTORICAL" ? inv.externalNumber ?? "Historický originál" : "Koncept");
               return (
                 <tr key={inv.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
                   <td className="px-4 py-3">
                     <Link href={`/financie/faktury/${inv.id}`} className="font-medium text-stone-950 hover:underline">
-                      {inv.invoiceNumber ?? (inv.source === "HISTORICAL" ? inv.externalNumber ?? "Historický originál" : "Koncept")}
+                      {displayedNumber}
                     </Link>
-                    {inv.externalNumber && inv.externalNumber !== inv.invoiceNumber && <div className="mt-0.5 text-xs text-stone-500">Externé č. {inv.externalNumber}</div>}
+                    {inv.externalNumber && inv.externalNumber !== displayedNumber && <div className="mt-0.5 text-xs text-stone-500">Externé č. {inv.externalNumber}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-medium text-stone-900">{inv.documentType === "CREDIT_NOTE" ? "Dobropis" : inv.source === "HISTORICAL" && inv.historicalKind === "PROFORMA" ? "Predfaktúra" : inv.direction === "PRIJATA" ? "Prijatá faktúra" : "Vydaná faktúra"}</span>
