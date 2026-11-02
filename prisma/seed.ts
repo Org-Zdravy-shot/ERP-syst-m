@@ -42,10 +42,10 @@ async function main() {
   const citronovaStava = await prisma.material.create({ data: { name: "Citrónová šťava", unit: "l", minStock: 10, lastPriceCents: 380 } });
   const med = await prisma.material.create({ data: { name: "Med", unit: "kg", minStock: 3, lastPriceCents: 950 } });
   const korenie = await prisma.material.create({ data: { name: "Čierne korenie", unit: "kg", minStock: 0.5, lastPriceCents: 1500 } });
-  const flaska60 = await prisma.material.create({ data: { name: "Fľaška 60ml", unit: "ks", minStock: 500, lastPriceCents: 18 } });
-  const flaska100 = await prisma.material.create({ data: { name: "Fľaška 100ml", unit: "ks", minStock: 300, lastPriceCents: 24 } });
-  const etiketa = await prisma.material.create({ data: { name: "Etiketa", unit: "ks", minStock: 1000, lastPriceCents: 5 } });
-  const vrchnak = await prisma.material.create({ data: { name: "Vrchnák", unit: "ks", minStock: 1000, lastPriceCents: 4 } });
+  const flaska60 = await prisma.material.create({ data: { name: "Fľaška 60ml", unit: "ks", kind: "PACKAGING", minStock: 500, lastPriceCents: 18 } });
+  const flaska100 = await prisma.material.create({ data: { name: "Fľaška 100ml", unit: "ks", kind: "PACKAGING", minStock: 300, lastPriceCents: 24 } });
+  const etiketa = await prisma.material.create({ data: { name: "Etiketa", unit: "ks", kind: "PACKAGING", minStock: 1000, lastPriceCents: 5 } });
+  const vrchnak = await prisma.material.create({ data: { name: "Vrchnák", unit: "ks", kind: "PACKAGING", minStock: 1000, lastPriceCents: 4 } });
 
   // ---------- Receptúry (na 100 ks) ----------
   await prisma.recipe.create({

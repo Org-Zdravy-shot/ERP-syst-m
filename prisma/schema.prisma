@@ -229,6 +229,7 @@ model SupplierOrder {
   id                       String    @id @default(cuid())
   orderNumber              String    @unique // "NO2026001"
   supplierId               String
+  legalEntity              String? // "SOLE_TRADER" | "KURGI" pri automatickom nákupe
   supplier                 Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   status                   String    @default("DRAFT") // "DRAFT" | "APPROVED" | "SENT" | "CONFIRMED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED"
   orderDate                DateTime  @default(now())
@@ -516,8 +517,11 @@ model Material {
   id             String   @id @default(cuid())
   name           String // "Zázvor čerstvý"
   unit           String // "kg" | "l" | "ks" | "g" | "ml"
+  kind           String   @default("INGREDIENT") // "INGREDIENT" | "PACKAGING"
   minStock       Float    @default(0)
   targetStock    Float?
+  autoReorder    Boolean  @default(false)
+  autoOrderLegalEntity String? // "SOLE_TRADER" | "KURGI" pri automatickom nákupe
   lastPriceCents Int      @default(0) // posledná nákupná cena za jednotku
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -527,6 +531,9 @@ model Material {
   movements            StockMovement[]
   supplierCatalogItems SupplierCatalogItem[]
   supplierOrderItems   SupplierOrderItem[]
+
+  @@index([kind, isActive])
+  @@index([autoReorder, isActive])
 }
 
 // ---------- Výroba ----------
