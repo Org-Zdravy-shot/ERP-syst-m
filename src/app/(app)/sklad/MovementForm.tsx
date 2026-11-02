@@ -8,6 +8,7 @@ interface Item {
   id: string;
   name: string;
   unit: string;
+  kind?: string;
 }
 
 export function MovementForm({ materials, products, batches }: { materials: Item[]; products: Item[]; batches: Array<{ id: string; productId: string; batchNumber: string; expiryDate: string }> }) {
@@ -38,7 +39,14 @@ export function MovementForm({ materials, products, batches }: { materials: Item
             — vyberte —
           </option>
           <optgroup label="Suroviny">
-            {materials.map((m) => (
+            {materials.filter((m) => m.kind !== "PACKAGING").map((m) => (
+              <option key={m.id} value={`m:${m.id}`}>
+                {m.name} ({m.unit})
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Obaly a fľaše">
+            {materials.filter((m) => m.kind === "PACKAGING").map((m) => (
               <option key={m.id} value={`m:${m.id}`}>
                 {m.name} ({m.unit})
               </option>

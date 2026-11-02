@@ -12,7 +12,7 @@ import {
 } from "./_commercial-actions";
 import { btnSmallPrimary, errorBox, input, labelSmall } from "@/components/ui";
 
-type StockOption = { id: string; name: string; unit: string };
+type StockOption = { id: string; name: string; unit: string; kind?: string };
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -44,7 +44,10 @@ export function SupplierCatalogItemForm({
           <select name="itemRef" defaultValue="service" className={input}>
             <option value="service">Služba / bez skladovej väzby</option>
             <optgroup label="Suroviny">
-              {materials.map((material) => <option key={material.id} value={`material:${material.id}`}>{material.name} ({material.unit})</option>)}
+              {materials.filter((material) => material.kind !== "PACKAGING").map((material) => <option key={material.id} value={`material:${material.id}`}>{material.name} ({material.unit})</option>)}
+            </optgroup>
+            <optgroup label="Obaly a fľaše">
+              {materials.filter((material) => material.kind === "PACKAGING").map((material) => <option key={material.id} value={`material:${material.id}`}>{material.name} ({material.unit})</option>)}
             </optgroup>
             <optgroup label="Hotové produkty">
               {products.map((product) => <option key={product.id} value={`product:${product.id}`}>{product.name} ({product.unit})</option>)}

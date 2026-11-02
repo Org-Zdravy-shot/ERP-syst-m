@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { processPendingOutbox } from "@/lib/finance/outbox/worker";
+import { enqueueAutomaticPackagingOrders } from "@/lib/suppliers/automatic-packaging";
 import { configuredSecret, secretMatches } from "@/lib/security/secrets";
 
 export const runtime = "nodejs";
@@ -19,10 +20,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    let packaging: { created: number; skipped: number } | null = null;
+    let packagingFailed = false;
+    try {
+      packaging = await enqueueAutomaticPackagingOrders();
+    } catch (error) {
+      packagingFailed = true;
+      console.error("Automatické doobjednanie obalov zlyhalo:", error instanceof Error ? error.message : "neznáma chyba");
+    }
     const summary = await processPendingOutbox(100);
     return NextResponse.json(
-      { status: summary.failed > 0 ? "failed" : "done", ...summary },
-      { status: summary.failed > 0 ? 502 : 200 },
+      { status: packagingFailed || summary.failed > 0 ? "failed" : "done", packaging, ...summary },
+      { status: packagingFailed || summary.failed > 0 ? 502 : 200 },
     );
   } catch (error) {
     console.error(

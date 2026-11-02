@@ -156,7 +156,7 @@ export default async function DodavatelDetailPage({ params }: { params: Promise<
     }),
     prisma.material.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, unit: true },
+      select: { id: true, name: true, unit: true, kind: true },
       orderBy: { name: "asc" },
     }),
     prisma.product.findMany({

@@ -187,7 +187,7 @@ export interface DocumentService {
 
 export interface MailMessage {
   idempotencyKey: string;
-  invoiceId: string;
+  invoiceId?: string;
   from: string;
   to: string[];
   subject: string;

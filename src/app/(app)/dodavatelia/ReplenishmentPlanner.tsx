@@ -31,6 +31,7 @@ type ReplenishmentOffer = {
 export type ReplenishmentItem = {
   key: string;
   kind: "material" | "product";
+  materialKind?: string;
   id: string;
   name: string;
   unit: string;

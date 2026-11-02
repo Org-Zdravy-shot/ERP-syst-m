@@ -7,6 +7,7 @@ export interface StockLevel {
   minStock: number;
   quantity: number;
   isLow: boolean;
+  kind?: string;
 }
 
 /** Stav zásob surovín — SUM pohybov z ledgeru. */
@@ -22,7 +23,7 @@ export async function getMaterialStockLevels(): Promise<StockLevel[]> {
   const byId = new Map(sums.map((s) => [s.materialId, s._sum.quantity ?? 0]));
   return materials.map((m) => {
     const quantity = byId.get(m.id) ?? 0;
-    return { id: m.id, name: m.name, unit: m.unit, minStock: m.minStock, quantity, isLow: quantity < m.minStock };
+    return { id: m.id, name: m.name, unit: m.unit, kind: m.kind, minStock: m.minStock, quantity, isLow: quantity < m.minStock };
   });
 }
 
