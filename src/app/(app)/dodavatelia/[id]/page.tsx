@@ -96,7 +96,7 @@ export default async function DodavatelDetailPage({ params }: { params: Promise<
       tags: { orderBy: { name: "asc" } },
       catalogItems: {
         include: {
-          material: { select: { id: true, name: true, unit: true } },
+          material: { select: { id: true, name: true, unit: true, kind: true } },
           product: { select: { id: true, name: true, unit: true } },
           prices: { orderBy: [{ minimumQuantity: "asc" }, { validFrom: "desc" }] },
         },
@@ -315,14 +315,18 @@ export default async function DodavatelDetailPage({ params }: { params: Promise<
             <h2 className={cardHeader}>Ponuky, balenia a ceny ({supplier.catalogItems.length})</h2>
             <div className="divide-y divide-stone-100">
               {supplier.catalogItems.map((item) => {
+                const now = new Date();
                 const currentPrice = selectActiveSupplierPrice(
                   item.prices,
                   Math.max(item.minOrderQuantity, item.packQuantity),
-                  new Date(),
+                  now,
+                );
+                const displayPrice = currentPrice ?? item.prices.find((price) =>
+                  price.validFrom <= now && (!price.validTo || price.validTo >= now)
                 );
                 const toggleCatalogAction = toggleSupplierCatalogItem.bind(null, supplier.id, item.id);
                 const stockLink = item.material
-                  ? `Surovina: ${item.material.name}`
+                  ? `${item.material.kind === "PACKAGING" ? "Obal" : "Surovina"}: ${item.material.name}`
                   : item.product
                     ? `Produkt: ${item.product.name}`
                     : "Služba / bez skladovej väzby";
@@ -343,14 +347,17 @@ export default async function DodavatelDetailPage({ params }: { params: Promise<
                       {(item.originCountry || item.qualityNote) && <div className="mt-1 text-xs text-stone-500">
                         {item.originCountry ? `Pôvod ${item.originCountry}` : ""}{item.originCountry && item.qualityNote ? " · " : ""}{item.qualityNote}
                       </div>}
+                      {item.note && <p className="mt-2 text-xs text-stone-500">{item.note}</p>}
                     </div>
                     <div className="flex shrink-0 items-start gap-2">
                       {canViewFinance && <div className="text-right">
                         <div className="font-semibold text-stone-900">
-                          {currentPrice ? `${formatCents(currentPrice.unitPriceCents)} / ${formatQty(currentPrice.pricePerQuantity, item.unit)}` : "Cena chýba"}
+                          {displayPrice ? `${formatCents(displayPrice.unitPriceCents)} / ${formatQty(displayPrice.pricePerQuantity, item.unit)}` : "Platná cena chýba"}
                         </div>
-                        {currentPrice && <div className="text-xs text-stone-400">
-                          {currentPrice.priceType === "NET" ? "bez DPH" : "s DPH"}{currentPrice.vatRate !== null ? ` · DPH ${currentPrice.vatRate} %` : ""}
+                        {displayPrice && <div className="text-xs text-stone-400">
+                          {displayPrice.minimumQuantity > 0 ? `od ${formatQty(displayPrice.minimumQuantity, item.unit)} · ` : ""}
+                          {displayPrice.priceType === "NET" ? "bez DPH" : "s DPH"}{displayPrice.vatRate !== null ? ` · DPH ${displayPrice.vatRate} %` : ""}
+                          {displayPrice.validTo ? ` · do ${formatDate(displayPrice.validTo)}` : ""}
                         </div>}
                       </div>}
                       {canConfigureFinance && <form action={toggleCatalogAction}>
