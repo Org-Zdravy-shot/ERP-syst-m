@@ -21,13 +21,14 @@ const DIRECTION_LABELS: Record<string, string> = { VYDANA: "Vydané", PRIJATA: "
 export default async function FakturyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ smer?: string; zdroj?: string; stav?: string; subjekt?: string }>;
+  searchParams: Promise<{ smer?: string; zdroj?: string; stav?: string; subjekt?: string; q?: string }>;
 }) {
-  const { smer, zdroj, stav, subjekt } = await searchParams;
+  const { smer, zdroj, stav, subjekt, q } = await searchParams;
   const smerFilter = smer === "VYDANA" || smer === "PRIJATA" ? smer : undefined;
   const zdrojFilter = zdroj && zdroj in INVOICE_SOURCE_LABELS ? zdroj : undefined;
   const stavFilter = stav && stav in invoiceDocumentStatusLabels ? stav : undefined;
   const entityFilter = subjekt === "UNASSIGNED" || (subjekt && subjekt in legalEntityLabels) ? subjekt : undefined;
+  const query = q?.trim().slice(0, 100) ?? "";
 
   const invoices = await prisma.invoice.findMany({
     where: {
@@ -35,6 +36,13 @@ export default async function FakturyPage({
       ...(zdrojFilter ? { source: zdrojFilter } : {}),
       ...(stavFilter ? { documentStatus: stavFilter } : {}),
       ...(entityFilter ? { legalEntity: entityFilter === "UNASSIGNED" ? null : entityFilter } : {}),
+      ...(query ? { OR: [
+        { invoiceNumber: { contains: query, mode: "insensitive" as const } },
+        { externalNumber: { contains: query, mode: "insensitive" as const } },
+        { variableSymbol: { contains: query, mode: "insensitive" as const } },
+        { supplierName: { contains: query, mode: "insensitive" as const } },
+        { client: { name: { contains: query, mode: "insensitive" as const } } },
+      ] } : {}),
     },
     include: {
       client: true,
@@ -47,7 +55,7 @@ export default async function FakturyPage({
 
   const filterHref = (patch: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    const merged = { smer: smerFilter, zdroj: zdrojFilter, stav: stavFilter, subjekt: entityFilter, ...patch };
+    const merged = { smer: smerFilter, zdroj: zdrojFilter, stav: stavFilter, subjekt: entityFilter, q: query || undefined, ...patch };
     for (const [key, value] of Object.entries(merged)) if (value) params.set(key, value);
     const qs = params.toString();
     return qs ? `/financie/faktury?${qs}` : "/financie/faktury";
@@ -63,12 +71,24 @@ export default async function FakturyPage({
   };
 
   const now = Date.now();
+  const invoiceRows = invoices.map((invoice) => {
+    const allocatedCents = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
+    const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocatedCents);
+    const overdue = invoice.source !== "HISTORICAL" && invoice.documentStatus === "ISSUED" &&
+      (paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID") && invoice.dueDate.getTime() < now;
+    return { invoice, paymentStatus, overdue, remainingCents: Math.max(0, invoice.totalGrossCents - allocatedCents) };
+  });
+  const activeIssued = invoiceRows.filter(({ invoice }) => invoice.direction === "VYDANA" && invoice.documentType === "INVOICE" && invoice.documentStatus === "ISSUED" && invoice.source !== "HISTORICAL" && invoice.currency === "EUR");
+  const unpaid = activeIssued.filter(({ remainingCents }) => remainingCents > 0);
+  const overdue = unpaid.filter(({ overdue }) => overdue);
+  const draftCount = invoiceRows.filter(({ invoice }) => invoice.documentStatus === "DRAFT").length;
+  const unpaidCents = unpaid.reduce((sum, row) => sum + row.remainingCents, 0);
 
   return (
     <>
       <PageHeader title="Faktúry" subtitle="Jednotná evidencia ERP, webu a historických dokladov">
-        <a href={exportHref()} className={btnSecondary} download>
-          ⬇ Export CSV
+        <a href={exportHref()} className={btnSecondary} download title="Export finalizovaných dokladov pre účtovníka; vyhľadávanie a stav zoznamu sa naň nevzťahujú">
+          ⬇ Účtovný export
         </a>
         <Link href="/financie/import" className={btnSecondary}>
           Import
@@ -79,7 +99,38 @@ export default async function FakturyPage({
         <Link href="/financie/faktury/historicka" className={btnSecondary}>+ Historický originál</Link>
       </PageHeader>
 
-      <div className="mb-2 flex flex-wrap gap-2">
+      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Na úhradu</p>
+          <p className="mt-2 font-display text-2xl font-bold tabular-nums text-stone-950">{formatCents(unpaidCents)}</p>
+          <p className="mt-1 text-xs text-stone-500">{unpaid.length} vydaných faktúr v EUR</p>
+        </div>
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Po splatnosti</p>
+          <p className={`mt-2 font-display text-2xl font-bold tabular-nums ${overdue.length ? "text-red-700" : "text-stone-950"}`}>{overdue.length}</p>
+          <p className="mt-1 text-xs text-stone-500">vydaných faktúr na preverenie</p>
+        </div>
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Koncepty</p>
+          <p className="mt-2 font-display text-2xl font-bold tabular-nums text-stone-950">{draftCount}</p>
+          <p className="mt-1 text-xs text-stone-500">čakajú na dokončenie</p>
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-[14px] border border-stone-200 bg-white p-4">
+        <form action="/financie/faktury" className="mb-4 flex flex-wrap items-end gap-2">
+          {smerFilter && <input type="hidden" name="smer" value={smerFilter} />}
+          {zdrojFilter && <input type="hidden" name="zdroj" value={zdrojFilter} />}
+          {stavFilter && <input type="hidden" name="stav" value={stavFilter} />}
+          {entityFilter && <input type="hidden" name="subjekt" value={entityFilter} />}
+          <div className="min-w-[220px] flex-1">
+            <label htmlFor="invoice-search" className="mb-1.5 block text-xs font-semibold text-stone-700">Hľadať faktúru</label>
+            <input id="invoice-search" type="search" name="q" defaultValue={query} placeholder="Číslo, VS, klient alebo dodávateľ" className="w-full rounded-[10px] border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-950 focus:ring-[3px] focus:ring-brand/35" />
+          </div>
+          <button type="submit" className={btnSecondary}>Hľadať</button>
+          {query && <Link href={filterHref({ q: undefined })} className={btnSecondary}>Vymazať</Link>}
+        </form>
+        <div className="mb-2 flex flex-wrap gap-2">
         <Link href={filterHref({ smer: undefined })} className={filterPill(!smerFilter)}>
           Všetky smery
         </Link>
@@ -97,11 +148,11 @@ export default async function FakturyPage({
             {label}
           </Link>
         ))}
-      </div>
-      <div className="mb-4 flex flex-wrap gap-2">
+        </div>
+        <div className="flex flex-wrap gap-2">
         <Link href={filterHref({ subjekt: undefined })} className={filterPill(!entityFilter)}>Všetky subjekty</Link>
         {Object.entries(legalEntityLabels).map(([value, title]) => <Link key={value} href={filterHref({ subjekt: value })} className={filterPill(entityFilter === value)}>{title}</Link>)}
-        <Link href={filterHref({ subjekt: "UNASSIGNED" })} className={filterPill(false)}>Nepriradené</Link>
+        <Link href={filterHref({ subjekt: "UNASSIGNED" })} className={filterPill(entityFilter === "UNASSIGNED")}>Nepriradené</Link>
         <Link href={filterHref({ stav: undefined })} className={filterPill(!stavFilter)}>
           Všetky stavy
         </Link>
@@ -110,7 +161,10 @@ export default async function FakturyPage({
             {label}
           </Link>
         ))}
+        </div>
       </div>
+
+      <p className="mb-2 text-xs text-stone-500">Zobrazených {invoiceRows.length} najnovších dokladov{invoiceRows.length === 200 ? " (limit 200)" : ""}. Súhrn vyššie sa počíta len zo zobrazených dokladov podľa aktuálneho filtra.</p>
 
       <div className="overflow-x-auto rounded-[14px] border border-stone-200 bg-white">
         <table className="w-full text-sm">
@@ -135,16 +189,7 @@ export default async function FakturyPage({
                 </td>
               </tr>
             )}
-            {invoices.map((inv) => {
-              const allocatedCents = inv.paymentAllocations.reduce(
-                (sum, allocation) => sum + allocation.amountCents,
-                0,
-              );
-              const paymentStatus = calculatePaymentStatus(inv.totalGrossCents, allocatedCents);
-              const overdue =
-                inv.source !== "HISTORICAL" && inv.documentStatus === "ISSUED" &&
-                (paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID") &&
-                inv.dueDate.getTime() < now;
+            {invoiceRows.map(({ invoice: inv, paymentStatus, overdue }) => {
               return (
                 <tr key={inv.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
                   <td className="px-4 py-3">
