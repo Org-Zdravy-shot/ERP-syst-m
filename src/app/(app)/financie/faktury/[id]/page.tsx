@@ -165,8 +165,23 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
         {invoice.source === "HISTORICAL" ? "Toto je evidencia pôvodného dokladu. Priložte originál; ERP z neho nevystavuje nové PDF ani nepredpokladá nárok na slovenský odpočet DPH." : "Toto je pracovný náhľad ERP. Oficiálnym dokladom je až nemenné PDF vytvorené po finalizácii."}
       </div>
 
+      <div className="mb-5 grid gap-3 sm:grid-cols-3 print:hidden">
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Suma dokladu</p>
+          <p className="mt-2 font-display text-xl font-bold tabular-nums text-stone-950">{formatCurrencyMinor(invoice.totalGrossCents, invoice.currency)}</p>
+        </div>
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Splatnosť</p>
+          <p className={`mt-2 font-display text-xl font-bold ${overdue ? "text-red-700" : "text-stone-950"}`}>{formatDate(invoice.dueDate)}</p>
+        </div>
+        <div className="rounded-[14px] border border-stone-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Stav úhrady</p>
+          <div className="mt-3"><Badge color={overdue ? "red" : INVOICE_PAYMENT_STATUS_COLORS[paymentStatus]}>{invoice.source === "HISTORICAL" ? invoice.paymentConfirmation ? "Potvrdená mimo ERP" : "Neoverená" : overdue ? "Po splatnosti" : invoicePaymentStatusLabels[paymentStatus]}</Badge></div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 print:block">
-        <div className="space-y-6 print:space-y-4">
+        <div className="space-y-6 lg:order-2 print:space-y-4">
           <section className="rounded-[14px] border border-stone-200 bg-white p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-stone-900">Údaje</h2>
@@ -322,10 +337,10 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           )}
         </div>
 
-        <div className="lg:col-span-2 print:mt-4">
+        <div className="lg:order-1 lg:col-span-2 print:mt-4">
           <section className="rounded-[14px] border border-stone-200 bg-white">
-            <h2 className="border-b border-stone-100 px-5 py-3 font-semibold text-stone-900">Položky</h2>
-            <table className="w-full text-sm">
+            <div className="border-b border-stone-100 px-5 py-4"><h2 className="font-semibold text-stone-900">Položky dokladu</h2><p className="mt-0.5 text-sm text-stone-500">Rozpis uložených cien a DPH.</p></div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm">
               <thead>
                 <tr className="border-b border-stone-100 text-left text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <th className="px-5 py-2">Popis</th>
@@ -376,7 +391,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
                   </td>
                 </tr>
               </tfoot>
-            </table>
+            </table></div>
           </section>
         </div>
       </div>
