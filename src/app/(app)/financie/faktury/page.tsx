@@ -21,14 +21,14 @@ const DIRECTION_LABELS: Record<string, string> = { VYDANA: "Vydané", PRIJATA: "
 export default async function FakturyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ smer?: string; zdroj?: string; stav?: string; subjekt?: string; q?: string; uhrada?: string; rok?: string }>;
+  searchParams: Promise<{ smer?: string; zdroj?: string; stav?: string; subjekt?: string; q?: string | string[]; uhrada?: string; rok?: string }>;
 }) {
   const { smer, zdroj, stav, subjekt, q, uhrada, rok } = await searchParams;
   const smerFilter = smer === "VYDANA" || smer === "PRIJATA" ? smer : undefined;
   const zdrojFilter = zdroj && zdroj in INVOICE_SOURCE_LABELS ? zdroj : undefined;
   const stavFilter = stav && stav in invoiceDocumentStatusLabels ? stav : undefined;
   const entityFilter = subjekt === "UNASSIGNED" || (subjekt && subjekt in legalEntityLabels) ? subjekt : undefined;
-  const query = q?.trim().slice(0, 100) ?? "";
+  const query = typeof q === "string" ? q.trim().slice(0, 100) : "";
   const paymentFilter = uhrada === "PAID" || uhrada === "UNPAID" || uhrada === "OVERDUE" ? uhrada : undefined;
   const currentYear = new Date().getFullYear();
   const yearFilter = rok === String(currentYear) ? currentYear : undefined;
