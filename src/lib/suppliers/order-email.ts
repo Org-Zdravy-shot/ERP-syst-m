@@ -12,11 +12,11 @@ function textField(snapshot: unknown, key: string): string | null {
 }
 
 export function automaticPackagingMailReady(): boolean {
-  return process.env.NODE_ENV !== "production" || (
+  return process.env.SUPPLIER_AUTO_ORDER_ENABLED === "true" && (process.env.NODE_ENV !== "production" || (
     MAIL_FROM.toLowerCase() === "info@zdravyshot.sk" &&
     process.env.FINANCE_MAIL_DKIM_CONFIRMED === "true" &&
     mailProviderConfigured()
-  );
+  ));
 }
 
 export async function sendSupplierOrderEmail(input: { orderId: string; outboxEventId: string; provider: MailProvider; now: Date }): Promise<void> {

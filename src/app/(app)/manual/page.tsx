@@ -86,9 +86,9 @@ export default async function ManualPage() {
           <li>V <Link href="/sklad/polozky" className="underline">skladových položkách</Link> založte každú surovinu alebo obal a nastavte minimum a cieľovú zásobu.</li>
           <li>Počiatočné množstvo zapíšte cez <Link href="/sklad/pohyby" className="underline">príjem do skladu</Link>. Obal použitý pri výrobe pridajte aj do receptúry.</li>
           <li>V <Link href="/dodavatelia" className="underline">profile dodávateľa</Link> doplňte e-mail, ponuku naviazanú na obal, balenie, cenu a označte jedinú preferovanú ponuku.</li>
-          <li>Pri konkrétnom obale vyberte nákupný subjekt a zapnite automatické objednávanie. Pri stave pod minimom systém zohľadní otvorené objednávky, vytvorí jednu nákupnú objednávku na dodávateľa a odošle ju e-mailom.</li>
+          <li>Po sezóne správca systému zapne spoločný prepínač automatických objednávok. Až potom možno pri konkrétnom obale zapnúť automatické objednávanie. Pri stave pod minimom systém zohľadní otvorené objednávky, vytvorí jednu nákupnú objednávku na dodávateľa a odošle ju e-mailom.</li>
         </ol>
-        <p className="mt-3 text-xs text-stone-500">Automatika je pri nových obaloch vypnutá. Ak chýba platná ponuka, cena, nákupný profil alebo pripravený odosielateľ, objednávka sa neodošle.</p>
+        <p className="mt-3 text-xs text-stone-500">Spoločný prepínač aj automatika pri nových obaloch sú vypnuté. Ak chýba počiatočný stav, platná ponuka, cena, nákupný profil alebo pripravený odosielateľ, objednávka sa neodošle.</p>
       </section>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
