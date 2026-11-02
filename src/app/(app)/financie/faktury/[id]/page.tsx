@@ -127,6 +127,8 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   const snapshotValue = isIssued ? invoice.counterpartySnapshot : invoice.issuerSnapshot;
   const parsedSnapshot = financePartySnapshotSchema.safeParse(snapshotValue);
   const partner = parsedSnapshot.success ? parsedSnapshot.data : null;
+  const parsedIssuer = financePartySnapshotSchema.safeParse(invoice.issuerSnapshot);
+  const issuer = parsedIssuer.success ? parsedIssuer.data : null;
   const allocatedCents = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
   const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocatedCents);
   const overdue =
@@ -339,6 +341,29 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
 
         <div className="lg:order-1 lg:col-span-2 print:mt-4">
           <section className="rounded-[14px] border border-stone-200 bg-white">
+            <p className="border-b border-stone-100 px-5 py-2 text-xs font-medium text-stone-500">Pracovný prehľad ERP · oficiálny doklad je nemenné PDF po finalizácii</p>
+            <div className="grid gap-5 border-b border-stone-200 p-5 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Dodávateľ</p>
+                <p className="mt-2 font-semibold text-stone-950">{issuer?.name ?? "Údaje dodávateľa nie sú dostupné"}</p>
+                {issuer?.street && <p className="mt-1 text-sm text-stone-600">{issuer.street}</p>}
+                {(issuer?.zip || issuer?.city) && <p className="text-sm text-stone-600">{[issuer?.zip, issuer?.city].filter(Boolean).join(" ")}</p>}
+                {issuer?.ico && <p className="mt-2 text-xs text-stone-500">IČO: {issuer.ico}</p>}
+                {issuer?.dic && <p className="text-xs text-stone-500">DIČ: {issuer.dic}</p>}
+                {issuer?.icDph && <p className="text-xs text-stone-500">IČ DPH: {issuer.icDph}</p>}
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{isIssued ? "Odberateľ" : "Evidovaný partner"}</p>
+                <p className="mt-2 font-semibold text-stone-950">{counterparty}</p>
+                {partner?.street && <p className="mt-1 text-sm text-stone-600">{partner.street}</p>}
+                {(partner?.zip || partner?.city) && <p className="text-sm text-stone-600">{[partner?.zip, partner?.city].filter(Boolean).join(" ")}</p>}
+                {(partner?.ico ?? invoice.client?.ico) && <p className="mt-2 text-xs text-stone-500">IČO: {partner?.ico ?? invoice.client?.ico}</p>}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 bg-stone-50 px-5 py-4">
+              <div><p className="text-lg font-bold text-stone-950">{isCreditNote ? "Dobropis" : isIssued ? "Faktúra" : "Prijatá faktúra"} {invoice.invoiceNumber ?? invoice.externalNumber ?? "—"}</p>{invoice.variableSymbol && <p className="mt-1 text-sm text-stone-600">Variabilný symbol: {invoice.variableSymbol}</p>}</div>
+              <dl className="grid grid-cols-[auto_auto] gap-x-5 gap-y-1 text-sm"><dt className="text-stone-500">Vystavená</dt><dd className="text-right font-medium">{formatDate(invoice.issueDate)}</dd>{invoice.deliveryDate && <><dt className="text-stone-500">Dodanie</dt><dd className="text-right font-medium">{formatDate(invoice.deliveryDate)}</dd></>}<dt className="text-stone-500">Splatná</dt><dd className="text-right font-medium">{formatDate(invoice.dueDate)}</dd></dl>
+            </div>
             <div className="border-b border-stone-100 px-5 py-4"><h2 className="font-semibold text-stone-900">Položky dokladu</h2><p className="mt-0.5 text-sm text-stone-500">Rozpis uložených cien a DPH.</p></div>
             <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm">
               <thead>
