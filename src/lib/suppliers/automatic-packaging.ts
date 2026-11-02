@@ -64,7 +64,8 @@ export async function enqueueAutomaticPackagingOrders(now = new Date()): Promise
         const offers = material.supplierCatalogItems;
         if (offers.length !== 1 || offers[0].supplierId !== supplierId || offers[0].unit !== material.unit) { skippedLines++; continue; }
         const offer = offers[0];
-        const stock = await tx.stockMovement.aggregate({ where: { materialId: id }, _sum: { quantity: true } });
+        const stock = await tx.stockMovement.aggregate({ where: { materialId: id }, _sum: { quantity: true }, _count: { _all: true } });
+        if (stock._count._all === 0) { skippedLines++; continue; }
         const currentQuantity = stock._sum.quantity ?? 0;
         if (currentQuantity < 0) { skippedLines++; continue; }
         const openLines = await tx.supplierOrderItem.findMany({

@@ -38,7 +38,7 @@ beforeEach(() => {
   mocks.supplier.mockResolvedValue({ id: "supplier-1", name: "Dodávateľ fliaš", isActive: true, email: "dodavatel@example.sk", contacts: [] });
   mocks.company.mockResolvedValue({ legalName: "Zdravý Shot", ico: "12345678", dic: "1234567890", street: "Hlavná 1", city: "Senica", zip: "90501", country: "SK" });
   mocks.material.mockImplementation(async ({ where }: { where: { id: string } }) => materials.find((material) => material.id === where.id));
-  mocks.stock.mockResolvedValue({ _sum: { quantity: 100 } });
+  mocks.stock.mockResolvedValue({ _sum: { quantity: 100 }, _count: { _all: 1 } });
   mocks.openLines.mockResolvedValue([]);
   mocks.createOrder.mockResolvedValue({ id: "order-1" });
   mocks.nextNumber.mockResolvedValue("NO2026001");
@@ -67,4 +67,11 @@ test("neúplná preferovaná ponuka nevytvorí objednávku", async () => {
   mocks.findEnabled.mockResolvedValue([{ id: "bottle-40", autoOrderLegalEntity: "SOLE_TRADER", supplierCatalogItems: [] }]);
   expect(await enqueueAutomaticPackagingOrders(now)).toEqual({ created: 0, skipped: 1 });
   expect(mocks.transaction).not.toHaveBeenCalled();
+});
+
+test("bez zapísaného počiatočného stavu nevytvorí objednávku", async () => {
+  mocks.stock.mockResolvedValue({ _sum: { quantity: null }, _count: { _all: 0 } });
+  expect(await enqueueAutomaticPackagingOrders(now)).toEqual({ created: 0, skipped: 2 });
+  expect(mocks.createOrder).not.toHaveBeenCalled();
+  expect(mocks.enqueue).not.toHaveBeenCalled();
 });
