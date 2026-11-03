@@ -63,8 +63,302 @@ model Client {
   subscriptions Subscription[]
   productPrices ClientProductPrice[]
   priceRules    ClientPriceRule[]
+  christmasOrders ChristmasOrder[]
 
   @@index([iban])
+}
+
+// Vianočná ekonomika je zámerne oddelená od Order/Invoice a všeobecných financií.
+model ChristmasCampaign {
+  id          String   @id @default(cuid())
+  legalEntity String   // validované na aplikačnej vrstve
+  year        Int
+  name        String
+  status      String   @default("OPEN") // OPEN | CLOSED
+  endsAt      DateTime? // potvrdený koniec kampane; bez neho nie je možné uzavrieť vyúčtovanie
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  settings    ChristmasCampaignSettings?
+  pricingVersions ChristmasPricingVersion[]
+  costVersions ChristmasCostVersion[]
+  recipeVersions ChristmasRecipeVersion[]
+  orders      ChristmasOrder[]
+  adExpenses  ChristmasAdExpense[]
+  settlements ChristmasSettlement[]
+  auditLogs   ChristmasAuditLog[]
+
+  @@unique([legalEntity, year, name])
+  @@unique([id, legalEntity])
+  @@index([legalEntity, year])
+  @@map("christmas_campaign")
+}
+
+model ChristmasCampaignSettings {
+  campaignId String @id
+  campaign   ChristmasCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  thresholdMode String @default("TOTAL_SHOTS")
+  outputVatRate Decimal @db.Decimal(8, 4)
+  splitRate Decimal @db.Decimal(8, 4)
+  sweetenedDrinkTaxStatus String @default("UNCONFIRMED")
+  updatedAt DateTime @updatedAt
+  @@map("christmas_campaign_settings")
+}
+
+model ChristmasPricingVersion {
+  id String @id @default(cuid())
+  campaignId String
+  campaign ChristmasCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  version Int
+  data Json
+  reason String
+  createdById String?
+  createdAt DateTime @default(now())
+  snapshots ChristmasCalculationSnapshot[]
+  @@unique([campaignId, version])
+  @@unique([id, campaignId])
+  @@map("christmas_pricing_version")
+}
+
+model ChristmasCostVersion {
+  id String @id @default(cuid())
+  campaignId String
+  campaign ChristmasCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  version Int
+  data Json
+  reason String
+  createdById String?
+  createdAt DateTime @default(now())
+  snapshots ChristmasCalculationSnapshot[]
+  @@unique([campaignId, version])
+  @@unique([id, campaignId])
+  @@map("christmas_cost_version")
+}
+
+model ChristmasRecipeVersion {
+  id String @id @default(cuid())
+  campaignId String
+  campaign ChristmasCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  version Int
+  data Json
+  reason String
+  createdById String?
+  createdAt DateTime @default(now())
+  snapshots ChristmasCalculationSnapshot[]
+  @@unique([campaignId, version])
+  @@unique([id, campaignId])
+  @@map("christmas_recipe_version")
+}
+
+model ChristmasOrder {
+  id String @id @default(cuid())
+  campaignId String
+  legalEntity String
+  campaign ChristmasCampaign @relation(fields: [campaignId, legalEntity], references: [id, legalEntity], onDelete: Restrict)
+  number String
+  submissionKey String? @unique
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contactName String?
+  deliveryDate DateTime?
+  status String @default("DRAFT")
+  origin String @default("UNKNOWN")
+  note String?
+  paidAt DateTime?
+  paymentReference String?
+  invoiceReference String?
+  refundedAt DateTime?
+  refundReference String?
+  cancelledAt DateTime?
+  cancellationReason String?
+  currentRevision Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items ChristmasOrderItem[]
+  packages ChristmasOrderPackage[]
+  extraCosts ChristmasOrderExtraCost[]
+  revenues ChristmasOrderRevenue[]
+  attribution ChristmasLeadAttribution?
+  snapshots ChristmasCalculationSnapshot[]
+  adExpenses ChristmasAdExpense[]
+  auditLogs ChristmasAuditLog[]
+  @@unique([campaignId, number])
+  @@unique([id, campaignId])
+  @@index([campaignId, status, origin])
+  @@map("christmas_order")
+}
+
+model ChristmasOrderItem {
+  id String @id @default(cuid())
+  orderId String
+  campaignId String
+  order ChristmasOrder @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  revision Int
+  sku String
+  quantity Int
+  listUnitNet Decimal? @db.Decimal(18, 4)
+  unitNet Decimal? @db.Decimal(18, 4)
+  priceReason String?
+  vatRate Decimal @db.Decimal(8, 4)
+  @@index([orderId])
+  @@map("christmas_order_item")
+}
+
+model ChristmasOrderPackage {
+  id String @id @default(cuid())
+  orderId String
+  campaignId String
+  order ChristmasOrder @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  revision Int
+  name String
+  kind String
+  quantity Int
+  contents Json
+  brandingDescription String?
+  unitMaterialCost Decimal? @db.Decimal(18, 4)
+  materialVatRate Decimal @default(0) @db.Decimal(8, 4)
+  materialVatDeductible Boolean @default(false)
+  unitBrandingCost Decimal? @db.Decimal(18, 4)
+  unitLaborCost Decimal? @db.Decimal(18, 4)
+  unitWasteCost Decimal? @db.Decimal(18, 4)
+  unitRevenueNet Decimal? @db.Decimal(18, 4)
+  vatRate Decimal @db.Decimal(8, 4)
+  costsConfirmed Boolean @default(false)
+  @@index([orderId])
+  @@map("christmas_order_package")
+}
+
+model ChristmasOrderExtraCost {
+  id String @id @default(cuid())
+  orderId String
+  campaignId String
+  order ChristmasOrder @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  revision Int
+  name String
+  category String
+  quantity Decimal @db.Decimal(18, 4)
+  unit String
+  unitPurchasePrice Decimal? @db.Decimal(18, 4)
+  vatRate Decimal @db.Decimal(8, 4)
+  vatDeductible Boolean @default(false)
+  includeInProfit Boolean @default(true)
+  confirmedNoCost Boolean @default(false)
+  note String?
+  @@index([orderId])
+  @@map("christmas_order_extra_cost")
+}
+
+model ChristmasOrderRevenue {
+  id String @id @default(cuid())
+  orderId String
+  campaignId String
+  order ChristmasOrder @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  revision Int
+  name String
+  category String
+  quantity Decimal @db.Decimal(18, 4)
+  unitNet Decimal @db.Decimal(18, 4)
+  vatRate Decimal @db.Decimal(8, 4)
+  @@index([orderId])
+  @@map("christmas_order_revenue")
+}
+
+model ChristmasLeadAttribution {
+  id String @id @default(cuid())
+  orderId String
+  campaignId String
+  order ChristmasOrder @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  leadId String?
+  source String?
+  sourceCampaign String?
+  crmReference String?
+  note String?
+  updatedAt DateTime @updatedAt
+  @@unique([orderId, campaignId])
+  @@map("christmas_lead_attribution")
+}
+
+model ChristmasCalculationSnapshot {
+  id String @id @default(cuid())
+  orderId String
+  campaignId String
+  order ChristmasOrder @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  revision Int
+  pricingVersionId String
+  costVersionId String
+  recipeVersionId String
+  pricingVersion ChristmasPricingVersion @relation(fields: [pricingVersionId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  costVersion ChristmasCostVersion @relation(fields: [costVersionId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  recipeVersion ChristmasRecipeVersion @relation(fields: [recipeVersionId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  input Json
+  configuration Json
+  result Json
+  revenueNetCents Int
+  revenueGrossCents Int
+  directCostCents Int
+  overheadCents Int
+  otherCostCents Int
+  divisibleProfitCents Int
+  agencyShareCents Int
+  companyShareCents Int
+  createdById String?
+  createdAt DateTime @default(now())
+  @@unique([orderId, revision])
+  @@index([campaignId, createdAt])
+  @@map("christmas_calculation_snapshot")
+}
+
+model ChristmasAdExpense {
+  id String @id @default(cuid())
+  submissionKey String @unique
+  campaignId String
+  campaign ChristmasCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  orderId String?
+  order ChristmasOrder? @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  spentAt DateTime
+  platform String
+  name String
+  description String?
+  amount Decimal @db.Decimal(18, 4)
+  currency String @default("EUR")
+  vatRate Decimal @db.Decimal(8, 4)
+  vatDeductible Boolean @default(false)
+  supplier String?
+  note String?
+  voidedAt DateTime?
+  voidReason String?
+  voidedById String?
+  createdAt DateTime @default(now())
+  @@index([campaignId, spentAt])
+  @@map("christmas_ad_expense")
+}
+
+model ChristmasSettlement {
+  id String @id @default(cuid())
+  campaignId String
+  campaign ChristmasCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  status String @default("CLOSED")
+  includedOrders Json
+  totalAgencyCents Int
+  totalCompanyCents Int
+  createdById String?
+  createdAt DateTime @default(now())
+  @@unique([campaignId])
+  @@map("christmas_settlement")
+}
+
+model ChristmasAuditLog {
+  id String @id @default(cuid())
+  campaignId String
+  campaign ChristmasCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  orderId String?
+  order ChristmasOrder? @relation(fields: [orderId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  actorId String?
+  action String
+  beforeData Json?
+  afterData Json?
+  createdAt DateTime @default(now())
+  @@index([campaignId, orderId, createdAt])
+  @@map("christmas_audit_log")
 }
 
 // ---------- Dodávatelia ----------
