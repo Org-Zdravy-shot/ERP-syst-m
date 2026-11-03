@@ -56,6 +56,9 @@ V tomto účte nie sú natívne Railway snapshoty dostupné bez Pro plánu;
 automatické zálohy preto používaný plán nemenia. Výsledok každej úlohy je
 v Railway logoch (`backup_verified` alebo `backup_failed`).
 
+Po zmene kontajnera nasadiť zálohovaciu službu samostatne z koreňa repozitára:
+`railway up ops/backups --path-as-root --service database-backup --detach`.
+
 Obnova: stiahnuť príslušný `database/*.dump` a `manifests/*.json`, obnoviť dump
 cez `pg_restore --no-owner --no-acl` do **novej prázdnej databázy** a podľa
 manifestu nahrať dokumenty z `documents/<sha256>` pod ich `originalKey` do
@@ -63,7 +66,10 @@ cieľového dokumentového bucketu. Pri zmene bucketu upraviť `DocumentAsset.bu
 Pred prepnutím aplikácie porovnať tabuľky a overiť sťahovanie dokumentu.
 
 Pôvodná adresa `https://erp-syst-m-production.up.railway.app` patrí po migrácii
-priamo novej aplikácii; existujúce integračné URL sa preto nemenia.
+priamo novej aplikácii, rovnako aj legacy adresa
+`https://web-production-97cdce.up.railway.app`; existujúce integračné URL sa
+preto nemenia. Starý projekt zostáva na žiadosť vlastníka zapnutý; nové zápisy
+smerujú do novej produkčnej databázy.
 
 ## Dokumentácia
 
