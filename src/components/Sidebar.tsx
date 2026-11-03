@@ -59,6 +59,12 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M12 7.5v9M9.5 9.7c0-1.2 1.1-2 2.5-2s2.5.9 2.5 2c0 2.6-5 1.8-5 4.4 0 1.1 1.1 2 2.5 2s2.5-.8 2.5-2" />
     </>
   ),
+  vianoce: (
+    <>
+      <rect x="5" y="9" width="14" height="12" rx="1" />
+      <path d="M3 9h18M12 9v12M12 9c-3-2-5-3-5-5 0-1.5 1-2 2-2 2 0 3 4 3 7ZM12 9c3-2 5-3 5-5 0-1.5-1-2-2-2-2 0-3 4-3 7Z" />
+    </>
+  ),
   klienti: (
     <>
       <circle cx="9" cy="8" r="3" />
@@ -90,6 +96,7 @@ const NAV_ITEMS = [
   { href: "/produkty", label: "Produkty", icon: "produkty" },
   { href: "/plan", label: "Plnenie plánu", icon: "plan" },
   { href: "/financie", label: "Financie", icon: "financie" },
+  { href: "/vianocna-b2b", label: "Vianočná B2B kampaň", icon: "vianoce" },
   { href: "/klienti", label: "Klienti", icon: "klienti" },
   { href: "/konkurencia", label: "Konkurencia", icon: "konkurencia" },
   { href: "/manual", label: "Manuál", icon: "manual" },
@@ -107,8 +114,8 @@ export function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-stone-950 print:hidden">
-      <div className="px-5 pb-1 pt-[22px]">
+    <aside className="flex w-full shrink-0 flex-col bg-stone-950 md:w-60 print:hidden">
+      <div className="px-4 pb-1 pt-3 md:px-5 md:pt-[22px]">
         <Image
           src="/logo.png"
           alt="Zdravý Shot"
@@ -122,10 +129,10 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-0.5 px-3 pt-5">
+      <nav className="flex flex-1 flex-row gap-0.5 overflow-x-auto px-2 py-2 md:flex-col md:overflow-visible md:px-3 md:pt-5">
         {NAV_ITEMS.filter(
           (item) =>
-            (item.href !== "/financie" && item.href !== "/manual" && item.href !== "/plan") ||
+            (item.href !== "/financie" && item.href !== "/manual" && item.href !== "/plan" && item.href !== "/vianocna-b2b") ||
             canViewFinance,
         ).map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -133,7 +140,7 @@ export function Sidebar({
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-[11px] rounded-[10px] px-3 py-[9px] text-[13.5px] transition ${
+              className={`flex shrink-0 items-center gap-[11px] rounded-[10px] px-3 py-[9px] text-[13.5px] transition ${
                 isActive
                   ? "bg-brand font-semibold text-stone-950"
                   : "font-medium text-stone-300 hover:bg-stone-900 hover:text-white"
@@ -157,8 +164,8 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="mt-3 border-t border-stone-800 px-5 py-4">
-        <div className="mb-2 text-xs text-stone-400">{userName}</div>
+      <div className="flex items-center justify-between border-t border-stone-800 px-4 py-2 md:mt-3 md:block md:px-5 md:py-4">
+        <div className="text-xs text-stone-400 md:mb-2">{userName}</div>
         <form action={logoutAction}>
           <button
             type="submit"

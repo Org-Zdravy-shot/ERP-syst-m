@@ -6,6 +6,12 @@ export const unitSchema = z.enum(["ks", "kg", "l", "g", "ml"]);
 export const clientTypeSchema = z.enum(["B2B", "B2C"]);
 export const orderChannelSchema = z.enum(["MANUAL", "EMAIL", "WEB", "ZLAVOMAT", "SUBSCRIPTION"]);
 export const legalEntitySchema = z.enum(["SOLE_TRADER", "KURGI"]);
+export const christmasOriginSchema = z.enum(["AGENCY", "OWN", "UNKNOWN"]);
+export const christmasOrderStatusSchema = z.enum(["DRAFT", "QUOTE_APPROVED", "QUOTE_SENT", "CONFIRMED", "INVOICED", "PAID", "CANCELLED", "REFUNDED"]);
+export const christmasOrderStatusLabels: Record<z.infer<typeof christmasOrderStatusSchema>, string> = {
+  DRAFT: "Rozpracovaná", QUOTE_APPROVED: "Schválená ponuka", QUOTE_SENT: "Odoslaná ponuka", CONFIRMED: "Potvrdená objednávka", INVOICED: "Fakturovaná", PAID: "Zaplatená", CANCELLED: "Stornovaná", REFUNDED: "Refundovaná",
+};
+export const christmasOriginLabels: Record<z.infer<typeof christmasOriginSchema>, string> = { AGENCY: "Agentúra", OWN: "Vlastný zákazník", UNKNOWN: "Neoverený pôvod" };
 export const legalEntityLabels: Record<string, string> = {
   SOLE_TRADER: "Jakub Kuric – Zdravý shot",
   KURGI: "Kurgi s. r. o.",
