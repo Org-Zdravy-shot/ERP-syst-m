@@ -11,6 +11,7 @@ import { invoiceService } from "@/lib/finance/invoice-service";
 import { requireFinancePermission } from "@/lib/finance/permissions";
 import { parseEurToCents } from "@/lib/format";
 import { parseUnitPrice, unitPriceCents } from "@/lib/precise-price";
+import { fmcgLineSchema } from "@/lib/finance/einvoice/fmcg";
 
 export interface InvoiceFormState {
   error?: string;
@@ -197,6 +198,7 @@ const invoiceItemSchema = z.object({
     try { parseUnitPrice(value); return true; } catch { return false; }
   }, "Zadajte platnú jednotkovú cenu s najviac 4 desatinnými miestami.").transform(parseUnitPrice).optional(),
   vatRate: z.number().int().min(0).max(100),
+  fmcg: fmcgLineSchema.optional(),
 }).refine((item) => !item.unitPriceExact || unitPriceCents(item.unitPriceExact) === item.unitPriceCents, {
   message: "Jednotková cena nesúhlasí s presnou cenou.",
   path: ["unitPriceExact"],
@@ -254,7 +256,11 @@ export async function createManualInvoice(
     note: String(formData.get("note") ?? "").trim() || undefined,
     items,
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné údaje." };
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const row = issue.path[0] === "items" && typeof issue.path[1] === "number" ? `Riadok ${issue.path[1] + 1}, ${issue.path.slice(2).join(".") || "položka"}: ` : "";
+    return { error: `${row}${issue.message}` };
+  }
 
   const data = parsed.data;
   if (data.direction === "PRIJATA") return { error: "Prijatú faktúru zaevidujte ako historický originál; ERP dodávateľovi nevystavuje novú faktúru." };

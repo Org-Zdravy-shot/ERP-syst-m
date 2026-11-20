@@ -9,6 +9,8 @@ import { btnPrimary, btnSmall, errorBox, input, label } from "@/components/ui";
 import Link from "next/link";
 import { legalEntityLabels } from "@/lib/zod-schemas";
 import { InvoiceCustomerPicker } from "./InvoiceCustomerPicker";
+import { FmcgFields, fmcgLabels } from "../fmcg-fields";
+import { fmcgLineSchema, type FmcgLineMetadata } from "@/lib/finance/einvoice/fmcg";
 
 interface ClientOption {
   id: string;
@@ -22,6 +24,7 @@ interface Line {
   unit: string;
   unitPrice: string; // EUR text, napr. "1,80"
   vatRate: string;
+  fmcg?: FmcgLineMetadata;
 }
 
 const EMPTY_LINE: Line = { description: "", quantity: "1", unit: "ks", vatRate: "0", unitPrice: "" };
@@ -87,16 +90,24 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
             unitPriceCents: unitPriceCents(exact),
             unitPriceExact: exact,
             vatRate: Number.parseInt(line.vatRate, 10) || 0,
+            ...(line.fmcg ? { fmcg: line.fmcg } : {}),
           };
         } catch {
           return null;
         }
-      })
-      .filter((item) => item && item.description && item.quantity > 0);
+      });
     return JSON.stringify(items);
   }, [lines]);
   const invalidPriceRows = lines.map((line) => {
     try { parseUnitPrice(line.unitPrice); return false; } catch { return true; }
+  });
+  const fmcgErrors = lines.map((line) => {
+    if (!line.fmcg) return "";
+    const result = fmcgLineSchema.safeParse(line.fmcg);
+    if (result.success) return "";
+    const issue = result.error.issues[0];
+    const key = String(issue.path.at(-1)) as keyof typeof fmcgLabels;
+    return `${fmcgLabels[key] ?? "Údaje pre reťazec"}: ${issue.message}`;
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -248,6 +259,10 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
                   </button>
                 )}
               </div>
+              <div className="col-span-2 sm:col-span-6 xl:col-span-12">
+                <FmcgFields row={index + 1} value={line.fmcg} onChange={(fmcg) => updateLine(index, { fmcg })} />
+                {fmcgErrors[index] && <p role="alert" className="mt-1 text-xs text-red-700">Riadok {index + 1}: {fmcgErrors[index]}</p>}
+              </div>
             </div>
           ))}
 
@@ -277,7 +292,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
 
       <div className="flex flex-wrap items-center justify-end gap-4">
       <p className="text-xs text-stone-500">Uložením vznikne koncept. Faktúra sa tým ešte nefinalizuje ani neodošle.</p>
-      <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean)} className={btnPrimary}>
+      <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean) || fmcgErrors.some(Boolean)} className={btnPrimary}>
         {pending ? "Ukladám…" : "Uložiť koncept"}
       </button>
       </div>
