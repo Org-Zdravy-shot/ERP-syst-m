@@ -30,6 +30,7 @@ import {
   isVatPayerAtDate,
 } from "./domain";
 import { resolveMailProviderKind } from "./mail/config";
+import { parseFmcgLine } from "./einvoice/fmcg";
 
 type Tx = Prisma.TransactionClient;
 
@@ -281,6 +282,7 @@ export class PrismaInvoiceService implements InvoiceService {
               totalVatCents: line.totalVatCents,
               totalGrossCents: line.totalGrossCents,
               taxCategory: line.taxCategory ?? "STANDARD",
+              ...(line.fmcg ? { fmcgSnapshot: toJson(line.fmcg) } : {}),
             })),
           },
         },
@@ -436,6 +438,7 @@ export class PrismaInvoiceService implements InvoiceService {
           unitPriceExact: item.unitPriceExact?.toString(),
           vatRate,
           taxCategory,
+          ...(item.fmcgSnapshot ? { fmcg: parseFmcgLine(item.fmcgSnapshot, item.lineNumber) } : {}),
         });
       }
 
@@ -587,6 +590,7 @@ export class PrismaInvoiceService implements InvoiceService {
       unitPriceExact: item.unitPriceExact?.toString(),
       vatRate: item.vatRate,
       taxCategory: item.taxCategory === "EXEMPT" ? "EXEMPT" as const : "STANDARD" as const,
+      ...(item.fmcgSnapshot ? { fmcg: parseFmcgLine(item.fmcgSnapshot, item.lineNumber) } : {}),
     }));
     const calculation = calculateInvoice({ currency: "EUR", lines: items });
     const alreadyCredited = original.creditNotes.reduce(

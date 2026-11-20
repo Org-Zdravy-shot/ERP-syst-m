@@ -32,7 +32,9 @@ Pridaný generátor podporuje 38 názvov z hárka AdditionalItemProperty A11:A48
 
 Hárok AdditionalItemProperty označuje typy poplatkov num, hlavný mapovací hárok ich opisuje ako text. Kódy sa zachovávajú ako text. Význam a požadované hodnoty pre konkrétne produkty musí potvrdiť odberateľ. Nepoužiteľné údaje sa nevymýšľajú.
 
-**Hranica tejto zmeny:** ide o podporu vstupu UBL generátora. Ešte treba doplniť perzistentné nemenné snapshoty FMCG pri fakturačných riadkoch, formulár a napojenie z objednávok/expedície. Bez toho bežný ERP workflow tieto polia automaticky neposiela. Treba aj súhrnnú fakturáciu viacerých dodaní, štandardné hlavičkové referencie, kontrolu PDF do 10 MB a validačný test BIS + slovenského overlayu + akceptáciu 101ky. Súbežné EDI je alternatíva navrhnutá odberateľom, nie dôkaz existujúceho EDI pripojenia v našom ERP.
+**Ukladanie:** aditívna migrácia `20261120090000_invoice_fmcg_snapshot` pridáva nullable JSONB `InvoiceItem.fmcgSnapshot`. Staršie riadky zostávajú bez metadát. Vstup sa validuje pred uložením konceptu a pri prepočte/finalizácii, celý dobropis preberie uložené riadkové údaje. Dokumentový repozitár ich číta priamo z faktúry, nie z aktuálneho katalógu. Pri čiastočnom dobropise treba dodať metadáta zodpovedajúce konkrétnym vráteným položkám. Existujúca aplikačná finalizácia zakazuje opätovné vystavenie; všeobecný databázový zákaz zmien všetkých polí finalizovaných faktúr nie je súčasťou tejto migrácie.
+
+**Zostáva:** formulár a napojenie z objednávok/expedície, súhrnná fakturácia viacerých dodaní, štandardné hlavičkové referencie, kontrola PDF do 10 MB a validačný test BIS + slovenského overlayu + akceptácia 101ky. Súbežné EDI je alternatíva navrhnutá odberateľom, nie dôkaz existujúceho EDI pripojenia v našom ERP.
 
 ## SuperFaktúra: overené pracovné postupy a medzery
 
@@ -40,7 +42,7 @@ Priamo prezreté prihlásené obrazovky účtu Kurgi: prehľad, zoznam faktúr, 
 
 | Oblasť | ERP stav a potrebná práca |
 |---|---|
-| Faktúry a koncepty | Existujú. Doplniť výber firmy podľa názvu/IČO, inline klienta, editovanie konceptu, duplikáciu a kontrolu pred vystavením. |
+| Faktúry a koncepty | Existujú. Doplnený výber firmy podľa názvu/IČO a inline uloženie klienta. Zostáva editovanie konceptu, duplikácia a kontrola pred vystavením. |
 | Dobropisy | Existujú v doméne. Overiť čiastočné dobropisy, PDF, Peppol a úhrady v E2E. |
 | Zálohy a vyúčtovanie | Historická predfaktúra nie je plnohodnotné vystavovanie záloh, daňový doklad k prijatej platbe ani vyúčtovanie. Doplniť celý reťazec. |
 | Ponuky a nadväzujúce doklady | Samostatná všeobecná agenda ponúk s platnosťou/schválením a konverziou chýba. Vianočná kalkulačka ju nenahrádza. |
@@ -51,7 +53,7 @@ Priamo prezreté prihlásené obrazovky účtu Kurgi: prehľad, zoznam faktúr, 
 | Platby | Import výpisov, alokácie a cash-flow existujú. Živé bankové API vyžaduje onboarding. |
 | Odoslanie a upomienky | Outbox/mail sú v kóde. Overiť E2E a stav doručenia, prílohy a opakované pokusy. |
 | Exporty | Existuje CSV. Plná zhoda s exportmi Omega/Pohoda/Money/MRP/ISDOC/XLSX nie je hotová. |
-| Klienti a automatické dopĺňanie | Lokálna databáza klientov existuje. Pripravuje sa spoločné vyhľadávanie + online provider. |
+| Klienti a automatické dopĺňanie | Pridané spoločné vyhľadávanie v novej faktúre a formulári nového klienta. Lokálne kontakty majú prednosť; Autoform čaká na API kľúč a živý test. |
 | Prehľady, roly, história | Existujú základy. Overiť rozsah filtrov, hromadné operácie, audit a mobilné rozhranie. |
 
 Referencie: [funkcie](https://www.superfaktura.sk/funkcie/), [ponuky](https://pomoc.superfaktura.sk/ako-funguju-cenove-ponuky/), [koncepty](https://pomoc.superfaktura.sk/koncepty/), [číslovanie](https://pomoc.superfaktura.sk/cislovanie-dokladov/), [zaokrúhľovanie](https://pomoc.superfaktura.sk/faq-zaokruhlovanie/), [Peppol/API poradňa](https://www.superfaktura.sk/blog/efaktura-poradna-4-odpovede-na-vase-otazky/).
@@ -63,6 +65,17 @@ Rozhranie má zachovať pracovné postupy, slovenské názvy a žlto-čiernu ide
 [Autoform API](https://ekosystem.slovensko.digital/sluzby/autoform/integracny-manual) poskytuje názov/IČO/DIČ/IČ DPH/adresu pre firmy aj SZČO. Vyhľadávanie ide cez server, privátny API kľúč zostáva v `AUTOFORM_API_KEY`. Bez kľúča fungujú uložené ERP kontakty a ručný vstup. [Cenník](https://ekosystem.slovensko.digital/cennik): 9 EUR/mesiac pre 1–255 požiadaviek, 36 EUR pre 256–1000, prvých 30 dní bezplatne; aktuálne podmienky overiť pri registrácii. Predplatné ani účet sa v tejto práci nezakladali.
 
 ORSF inzeruje bezplatné verejné API, ale oba pokusy o search/detail v tomto prostredí vrátili HTTP 403. Nie je preto overenou prevádzkovou náhradou. Zodpovedajúce [API](https://orsf.sk/api) a [pravidlá](https://www.orsf.sk/legal/aup) tiež obsahujú rozdielne tvrdenia o autentifikácii/limitoch.
+
+Výber výsledku doplní názov, IČO, dostupné DIČ/IČ DPH a adresu. Chýbajúce identifikátory sa neodvodzujú. Nový odberateľ sa uloží samostatným tlačidlom bez straty položiek faktúry. Uložený klient sa pri zhode IČO vyberie bez prepisu; archivovaný alebo viacnásobný záznam vyvolá konkrétnu chybu. Oba nové vstupy klienta používajú spoločný transakčný zámok nad normalizovaným IČO. Nejde o globálny databázový unique constraint; staršie importy a zmeny IČO zostávajú samostatnou kontrolou.
+
+Vyhľadávanie má 650 ms oneskorenie, ochranu proti zastaraným odpovediam a päťminútovú procesovú cache najviac 100 dopytov. Cache nie je spoločný limit medzi replikami. Server vyžaduje prihlásenie; vytvorenie klienta z faktúry vyžaduje CREATE_DRAFT. Bez kľúča zostáva funkčný miestny adresár a ručné zadanie.
+
+## Lokálna validácia a nasadenie
+
+- Vyhľadávanie: celá sada 323 úspešných testov, 2 preskočené; produkčný build prešiel s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
+- FMCG snapshoty: testy ukladaných dát, plného dobropisu, odmietnutia neplatného dátumu/DPH a čítania snapshotu až do UBL; databázová migrácia zatiaľ nebola aplikovaná na PostgreSQL.
+- Živé Autoform ani doručenie Peppol neboli testované. Žiadna produkčná zmena ani odoslanie faktúry.
+- `npm audit --omit=dev` 20. 11. 2026 hlási 4 závislosti: Next.js (moderate), effect a sprostredkovane @prisma/config/prisma (high). Ide o aktuálny stav existujúcich závislostí; pred nasadením treba samostatnú aktualizáciu a overenie. Automatický downgrade Prisma odporúčaný auditom sa nevykonal.
 
 ## Podmienky januárového prechodu
 

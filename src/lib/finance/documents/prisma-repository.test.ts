@@ -18,6 +18,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { PrismaDocumentRepository } from "./prisma-repository";
 import { createInvoicePdfFixture } from "./test-fixtures";
+import { renderPeppolBisUbl } from "../einvoice/ubl";
 
 function databaseInvoice(
   overrides: Record<string, unknown> = {},
@@ -110,6 +111,25 @@ test("PDF podklad prečíta presnú cenu položky", async () => {
   mocks.findUnique.mockResolvedValue(record);
   const data = await new PrismaDocumentRepository().getInvoicePdfData("invoice-test-1");
   expect(data?.lines[0].unitPriceExact).toBe("1.8270");
+});
+
+test("UBL reads FMCG from the invoice snapshot without consulting the product catalog", async () => {
+  const record = databaseInvoice();
+  const items = record.items as Array<Record<string, unknown>>;
+  items[0].fmcgSnapshot = { gtin: "8589000072245", properties: { buyer_order_number: "101-42", batch_number: "LOT-7" } };
+  mocks.findUnique.mockResolvedValue(record);
+  const data = await new PrismaDocumentRepository().getInvoicePdfData("invoice-test-1");
+  expect(data?.lines[0].fmcg).toEqual(items[0].fmcgSnapshot);
+  const rendered = renderPeppolBisUbl({ ...data!, buyerReference: "101-42", sellerEndpoint: { schemeId: "0245", value: "2123456789" }, buyerEndpoint: { schemeId: "0245", value: "2020188588" } });
+  expect(rendered.xml).toContain("<cbc:Name>batch_number</cbc:Name><cbc:Value>LOT-7</cbc:Value>");
+  expect(rendered.xml).toContain('schemeID="0160">8589000072245');
+});
+
+test("corrupt stored FMCG is rejected with the exact row and field", async () => {
+  const record = databaseInvoice();
+  (record.items as Array<Record<string, unknown>>)[0].fmcgSnapshot = { properties: { expiry_date: "2027-02-30" } };
+  mocks.findUnique.mockResolvedValue(record);
+  await expect(new PrismaDocumentRepository().getInvoicePdfData("invoice-test-1")).rejects.toThrow("Riadok 1, FMCG properties.expiry_date");
 });
 
 test("dobropis bez čísla pôvodnej faktúry sa odmietne", async () => {

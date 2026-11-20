@@ -5,6 +5,8 @@
  * Doménová vrstva mapuje databázové záznamy na tieto stabilné typy.
  */
 
+import type { FmcgLineMetadata } from "./einvoice/fmcg";
+
 export type Currency = "EUR";
 export type InvoiceDirection = "VYDANA" | "PRIJATA";
 export type InvoiceDocumentType = "INVOICE" | "CREDIT_NOTE";
@@ -44,6 +46,7 @@ export interface InvoiceLineInput {
   unitPriceExact?: string;
   vatRate: number;
   taxCategory?: "STANDARD" | "EXEMPT";
+  fmcg?: FmcgLineMetadata;
 }
 
 export interface InvoiceLineCalculation extends InvoiceLineInput {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseFmcgLine } from "../einvoice/fmcg";
 import { prisma } from "@/lib/prisma";
 import {
   DocumentGenerationError,
@@ -134,6 +135,7 @@ export class PrismaDocumentRepository implements DocumentRepository {
             totalVatCents: true,
             totalGrossCents: true,
             taxCategory: true,
+            fmcgSnapshot: true,
           },
         },
       },
@@ -230,6 +232,7 @@ export class PrismaDocumentRepository implements DocumentRepository {
         totalVatCents: item.totalVatCents,
         totalGrossCents: item.totalGrossCents,
         taxCategory,
+        ...(item.fmcgSnapshot ? { fmcg: parseFmcgLine(item.fmcgSnapshot, item.lineNumber, item.totalVatCents) } : {}),
       };
     });
     if (lines.length === 0) {

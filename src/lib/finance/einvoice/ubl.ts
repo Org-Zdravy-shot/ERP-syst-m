@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PartySnapshot } from "@/lib/finance/contracts";
 import type { InvoicePdfData } from "@/lib/finance/documents/types";
-import { parseFmcgLine, type FmcgLineMetadata } from "./fmcg";
+import { parseFmcgLine } from "./fmcg";
 
 const CUSTOMIZATION_ID = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0";
 const PROFILE_ID = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
@@ -21,8 +21,6 @@ export interface PeppolEndpoint {
 }
 
 export interface PeppolUblInput extends InvoicePdfData {
-  /** Must be supplied from immutable line snapshots, never current product data. */
-  lines: (InvoicePdfData["lines"][number] & { fmcg?: FmcgLineMetadata })[];
   sellerEndpoint: PeppolEndpoint;
   buyerEndpoint: PeppolEndpoint;
   /** Referencia dodaná kupujúcim alebo číslo jeho objednávky. */
@@ -261,14 +259,7 @@ function lineXml(input: PeppolUblInput, line: PeppolUblInput["lines"][number]): 
   const quantityName = isCreditNote ? "cbc:CreditedQuantity" : "cbc:InvoicedQuantity";
   const category = categoryFor(input, line);
   const unitCode = UNIT_CODES[line.unit.trim().toLowerCase()];
-  const fmcg = line.fmcg === undefined ? undefined : parseFmcgLine(line.fmcg, line.lineNumber);
-  if (fmcg?.properties.vat_amount !== undefined) {
-    const [whole, fraction = ""] = fmcg.properties.vat_amount.split(".");
-    const metadataTax = BigInt(whole) * BigInt(10_000) + BigInt(fraction.padEnd(4, "0")) * (whole.startsWith("-") ? BigInt(-1) : BigInt(1));
-    if (metadataTax !== BigInt(line.totalVatCents) * BigInt(100)) {
-      throw new UblGenerationError(`Riadok ${line.lineNumber}: FMCG vat_amount nesedí s DPH položky.`);
-    }
-  }
+  const fmcg = line.fmcg === undefined ? undefined : parseFmcgLine(line.fmcg, line.lineNumber, line.totalVatCents);
 
   return [
     `<${root}>`,
