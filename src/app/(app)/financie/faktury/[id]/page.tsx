@@ -25,6 +25,7 @@ import { InvoiceEmails } from "./InvoiceEmails";
 import { InvoiceEInvoice } from "./InvoiceEInvoice";
 import { InvoiceWorkflowActions } from "./InvoiceStatusActions";
 import { VerifyHistoricalButton } from "./VerifyHistoricalButton";
+import { FmcgSummary } from "../fmcg-fields";
 
 export default async function FakturaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -378,7 +379,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
               <tbody>
                 {invoice.items.map((item) => (
                   <tr key={item.id} className="border-b border-stone-50 last:border-0">
-                    <td className="px-5 py-2.5 font-medium text-stone-900">{item.description}</td>
+                    <td className="px-5 py-2.5 font-medium text-stone-900">{item.description}<FmcgSummary snapshot={item.fmcgSnapshot} /></td>
                     <td className="px-5 py-2.5 text-right text-stone-600">
                       {formatQty(item.quantity, item.unit)}
                     </td>

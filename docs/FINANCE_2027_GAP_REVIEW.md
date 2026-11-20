@@ -34,7 +34,9 @@ Hárok AdditionalItemProperty označuje typy poplatkov num, hlavný mapovací h�
 
 **Ukladanie:** aditívna migrácia `20261120090000_invoice_fmcg_snapshot` pridáva nullable JSONB `InvoiceItem.fmcgSnapshot`. Staršie riadky zostávajú bez metadát. Vstup sa validuje pred uložením konceptu a pri prepočte/finalizácii, celý dobropis preberie uložené riadkové údaje. Dokumentový repozitár ich číta priamo z faktúry, nie z aktuálneho katalógu. Pri čiastočnom dobropise treba dodať metadáta zodpovedajúce konkrétnym vráteným položkám. Existujúca aplikačná finalizácia zakazuje opätovné vystavenie; všeobecný databázový zákaz zmien všetkých polí finalizovaných faktúr nie je súčasťou tejto migrácie.
 
-**Zostáva:** formulár a napojenie z objednávok/expedície, súhrnná fakturácia viacerých dodaní, štandardné hlavičkové referencie, kontrola PDF do 10 MB a validačný test BIS + slovenského overlayu + akceptácia 101ky. Súbežné EDI je alternatíva navrhnutá odberateľom, nie dôkaz existujúceho EDI pripojenia v našom ERP.
+**Formulár:** každá položka novej ručnej faktúry má voliteľnú sekciu „Údaje pre obchodné reťazce“. Obsahuje GTIN a všetkých 38 polí špecifikácie; základné referencie a šarža sú oddelené od rozšírených polí. Prázdne voliteľné hodnoty sa vynechávajú, desatinná čiarka sa normalizuje, validácia označí konkrétny riadok/pole. Detail faktúry zobrazuje uložené metadáta pri každej položke.
+
+**Zostáva:** automatické napojenie z objednávok/expedície, súhrnná fakturácia viacerých dodaní, štandardné hlavičkové referencie, kontrola PDF do 10 MB a validačný test BIS + slovenského overlayu + akceptácia 101ky. Súbežné EDI je alternatíva navrhnutá odberateľom, nie dôkaz existujúceho EDI pripojenia v našom ERP.
 
 ## SuperFaktúra: overené pracovné postupy a medzery
 
