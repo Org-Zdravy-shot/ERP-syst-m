@@ -24,7 +24,7 @@ Interný ERP pre Zdravý shot. Na projekte pracujú **dvaja ľudia paralelne, ka
 - [x] Pridať validované FMCG metadáta do UBL generátora.
 - [x] Pridať vyhľadávanie firmy a uloženie odberateľa priamo v koncepte faktúry; ochrana proti duplicitnému vytvoreniu podľa IČO.
 - [ ] Pripojiť online register a overiť živé doplnenie firmy s používateľovým API kľúčom.
-- [x] Ukladať FMCG údaje pri položkách a prepojiť formulár so snapshotmi (migrácia pripravená, zatiaľ neaplikovaná).
+- [x] Ukladať FMCG údaje pri položkách a prepojiť formulár so snapshotmi (migrácia overená na izolovanom lokálnom PostgreSQL, nie v produkcii).
 - [ ] Dokončiť zostávajúce workflow podľa matice SuperFaktúry, integračné testy Peppol a akceptáciu 101ky.
 
 ### Pôvodná v1
