@@ -74,10 +74,23 @@ Vyhľadávanie má 650 ms oneskorenie, ochranu proti zastaraným odpovediam a p�
 
 ## Lokálna validácia a nasadenie
 
-- Vyhľadávanie: celá sada 323 úspešných testov, 2 preskočené; produkčný build prešiel s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
-- FMCG snapshoty: testy ukladaných dát, plného dobropisu, odmietnutia neplatného dátumu/DPH a čítania snapshotu až do UBL; databázová migrácia zatiaľ nebola aplikovaná na PostgreSQL.
+- Celá sada po rozšírení: 332 úspešných testov, 2 preskočené; produkčný build prešiel s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
+- Na samostatnom lokálnom PostgreSQL 18 prešlo všetkých 20 migrácií vrátane FMCG. Integračná skúška overila súbežné vytvorenie jedného klienta, JSONB roundtrip konceptu a súm, odmietnutie neobjektového snapshotu databázou, prenos uloženého snapshotu do UBL a jeho zachovanie v plnom dobropise. Zistila aj návratový typ void pri advisory locku; query má teraz explicitný cast na text pre Prisma. Všetky dáta boli syntetické. Vystavená faktúra bola lokálna fixture, nie test celej finalizácie alebo skutočné odoslanie.
+- Lokálny `/api/health` vrátil 200/ok. Manuálna vizuálna kontrola neprebehla: browser host bol nedostupný, natívne Chrome hlásilo chýbajúce okno/timeout. Testovací web aj databáza boli po kontrole zastavené.
 - Živé Autoform ani doručenie Peppol neboli testované. Žiadna produkčná zmena ani odoslanie faktúry.
-- `npm audit --omit=dev` 20. 11. 2026 hlási 4 závislosti: Next.js (moderate), effect a sprostredkovane @prisma/config/prisma (high). Ide o aktuálny stav existujúcich závislostí; pred nasadením treba samostatnú aktualizáciu a overenie. Automatický downgrade Prisma odporúčaný auditom sa nevykonal.
+- Samostatná vetva opravy závislostí aktualizuje Next.js 16.4.2 → 16.4.6 a override effect 3.22.1 bez zmeny verzie Prisma. Po oprave `npm audit --omit=dev` 20. 11. 2026 hlási 0 zraniteľností. Plný audit vrátane vývojových nástrojov ešte hlási 3 nálezy. Referencie: [Next.js](https://github.com/advisories/GHSA-f3mh-rxg3-f5g2), [Effect](https://github.com/advisories/GHSA-7589-6fvf-x4pw). Produkčný runtime tým ešte nebol aktualizovaný.
+
+## Návrhy zmien na kontrolu
+
+Vetvy tvoria zásobník, nie päť nezávislých zmien. Poradie kontroly/integrácie:
+
+1. [PR #96 – UBL a Autoform adaptér](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/96)
+2. [PR #97 – vyhľadávanie a inline odberateľ](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/97)
+3. [PR #98 – perzistentné FMCG snapshoty](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/98)
+4. [PR #99 – editor a zobrazenie FMCG](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/99)
+5. [PR #100 – bezpečnostné aktualizácie závislostí](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/100)
+
+Všetky PR sú drafty. Hlavná vetva ani produkčné nastavenia sa nemenili. Po integrácii spodnej vetvy treba ďalšiemu PR upraviť cieľ a overiť diff. Pred prevádzkou ostáva API onboarding, vizuálne QA a integračné podmienky nižšie.
 
 ## Podmienky januárového prechodu
 
