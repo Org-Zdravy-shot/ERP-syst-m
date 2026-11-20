@@ -8,6 +8,7 @@ import { lineNetCents, parseUnitPrice, unitPriceCents } from "@/lib/precise-pric
 import { btnPrimary, btnSmall, errorBox, input, label } from "@/components/ui";
 import Link from "next/link";
 import { legalEntityLabels } from "@/lib/zod-schemas";
+import { InvoiceCustomerPicker } from "./InvoiceCustomerPicker";
 
 interface ClientOption {
   id: string;
@@ -54,6 +55,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
     {},
   );
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
+  const [savingClient, setSavingClient] = useState(false);
 
   const updateLine = (index: number, patch: Partial<Line>) => {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
@@ -118,17 +120,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
           <div><label className={label}>Číslo faktúry</label><p className="rounded-[10px] border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500">Pridelí sa pri finalizácii</p></div>
 
           <div className="sm:col-span-2 lg:col-span-3">
-              <label className={label}>Odberateľ</label>
-              <select name="clientId" required className={input} defaultValue="">
-                <option value="" disabled>
-                  — vyberte klienta —
-                </option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.type})
-                  </option>
-                ))}
-              </select>
+              <InvoiceCustomerPicker clients={clients} onSavingChange={setSavingClient} />
             </div>
           <p className="text-sm sm:col-span-2 lg:col-span-3"><Link href="/financie/faktury/historicka" className="font-medium text-stone-700 underline">Zaevidovať prijatú faktúru alebo predfaktúru →</Link></p>
 
@@ -285,7 +277,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
 
       <div className="flex flex-wrap items-center justify-end gap-4">
       <p className="text-xs text-stone-500">Uložením vznikne koncept. Faktúra sa tým ešte nefinalizuje ani neodošle.</p>
-      <button type="submit" disabled={pending || invalidPriceRows.some(Boolean)} className={btnPrimary}>
+      <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean)} className={btnPrimary}>
         {pending ? "Ukladám…" : "Uložiť koncept"}
       </button>
       </div>

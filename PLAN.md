@@ -18,6 +18,17 @@ Interný ERP pre Zdravý shot. Na projekte pracujú **dvaja ľudia paralelne, ka
 
 ## Stav
 
+### Fakturácia 2027 — pracovná vetva, bez nasadenia
+
+- [x] Preskúmať prílohu 101 Drogerie FMCG v1.9 a zdokumentovať integračné medzery v `docs/FINANCE_2027_GAP_REVIEW.md`.
+- [x] Pridať validované FMCG metadáta do UBL generátora.
+- [x] Pridať vyhľadávanie firmy a uloženie odberateľa priamo v koncepte faktúry; ochrana proti duplicitnému vytvoreniu podľa IČO.
+- [ ] Pripojiť online register a overiť živé doplnenie firmy s používateľovým API kľúčom.
+- [ ] Ukladať FMCG údaje pri položkách a prepojiť formulár so snapshotmi.
+- [ ] Dokončiť zostávajúce workflow podľa matice SuperFaktúry, integračné testy Peppol a akceptáciu 101ky.
+
+### Pôvodná v1
+
 - [x] **Fáza 0 — spoločný základ** (hotová, je v `main`): scaffold Next.js 16 + Prisma 6 (SQLite) + kompletná schéma + migrácia + seed, iron-session auth, layout so slovenským sidebarom, placeholder stránky všetkých modulov, `POST /api/inbox`, `GET /api/konkurencia` stub, zdieľané helpery v `src/lib/`
 - [x] **Dev A — Prevádzka** (hotová, je v `main`): Sklad (stavy z ledgeru, pohyby, príjem/výdaj), Výroba (receptúry, šarže, transakčné dokončenie s odpisom surovín), Plnenie plánu (ciele vs. live skutočnosť), Dashboard (živé KPI)
 - [x] **Dev B — Obchod a financie** (hotová, je v `main`): Klienti + Objednávky + Predplatné + Inbox (Dev B), Financie — faktúry (vystavenie z objednávky, ručné, stavy, tlač), SuperFaktúra CSV import, eKasa import, CSV export pre účtovníka, marže (dokončil Dev A vo feat/financie)
