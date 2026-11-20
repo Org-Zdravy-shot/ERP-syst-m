@@ -264,8 +264,8 @@ function lineXml(input: PeppolUblInput, line: PeppolUblInput["lines"][number]): 
   const fmcg = line.fmcg === undefined ? undefined : parseFmcgLine(line.fmcg, line.lineNumber);
   if (fmcg?.properties.vat_amount !== undefined) {
     const [whole, fraction = ""] = fmcg.properties.vat_amount.split(".");
-    const metadataTax = BigInt(whole) * 10_000n + BigInt(fraction.padEnd(4, "0")) * (whole.startsWith("-") ? -1n : 1n);
-    if (metadataTax !== BigInt(line.totalVatCents) * 100n) {
+    const metadataTax = BigInt(whole) * BigInt(10_000) + BigInt(fraction.padEnd(4, "0")) * (whole.startsWith("-") ? BigInt(-1) : BigInt(1));
+    if (metadataTax !== BigInt(line.totalVatCents) * BigInt(100)) {
       throw new UblGenerationError(`Riadok ${line.lineNumber}: FMCG vat_amount nesedí s DPH položky.`);
     }
   }
