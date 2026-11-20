@@ -93,6 +93,36 @@ function invoice(overrides: Partial<PeppolUblInput> = {}): PeppolUblInput {
 }
 
 describe("Peppol BIS Billing 3.0 UBL", () => {
+  it.each(["INVOICE", "CREDIT_NOTE"] as const)("keeps FMCG references on their own %s lines", (documentType) => {
+    const result = renderPeppolBisUbl(invoice({ documentType, originalInvoiceNumber: "2026001", lines: [
+      { ...lines[0], fmcg: { gtin: "8589000072245", properties: { buyer_order_number: "OBJ-A<&", batch_number: "L001", expiry_date: "2027-02-28", item_type: "Z", vat_amount: "4.6000" } } },
+      { ...lines[1], fmcg: { properties: { buyer_order_number: "OBJ-B", delivery_note_number: "DL-B", receiving_advice_number: "REC-B", delivery_party_gln: "8589000072245" } } },
+    ] }));
+    expect(result.xml).toContain('<cbc:ID schemeID="0160">8589000072245</cbc:ID>');
+    const tag = documentType === "INVOICE" ? "InvoiceLine" : "CreditNoteLine";
+    const renderedLines = result.xml.split(`<cac:${tag}>`).slice(1);
+    expect(renderedLines[0]).toContain("OBJ-A&lt;&amp;");
+    expect(renderedLines[0]).not.toContain("OBJ-B");
+    expect(renderedLines[1]).toContain("REC-B");
+    expect(result.xml).toContain('<cbc:PayableAmount currencyID="EUR">29.85</cbc:PayableAmount>');
+  });
+
+  it("validates dates and identifies the exact faulty FMCG line", () => {
+    expect(() => renderPeppolBisUbl(invoice({ lines: [
+      { ...lines[0], fmcg: { properties: { expiry_date: "2027-02-29" } } }, lines[1],
+    ] }))).toThrow("Riadok 1, FMCG properties.expiry_date");
+    expect(() => renderPeppolBisUbl(invoice({ lines: [
+      { ...lines[0], fmcg: { properties: { vat_amount: "4.61" } } }, lines[1],
+    ] }))).toThrow("vat_amount nesedí");
+  });
+
+  it("hashes FMCG content deterministically and changes the hash when a reference changes", () => {
+    const render = (buyer: string, reverse = false) => renderPeppolBisUbl(invoice({ lines: [
+      { ...lines[0], fmcg: { properties: reverse ? { batch_number: "L1", buyer_order_number: buyer } : { buyer_order_number: buyer, batch_number: "L1" } } }, lines[1],
+    ] }));
+    expect(render("A").sha256).toBe(render("A", true).sha256);
+    expect(render("A").sha256).not.toBe(render("B").sha256);
+  });
   it("prenáša presnú jednotkovú cenu z objednávky aj do elektronickej faktúry", () => {
     const result = renderPeppolBisUbl(invoice({
       lines: [{ ...lines[0], quantity: 150, unitPriceCents: 183, unitPriceExact: "1.8270", totalNetCents: 27_405, totalVatCents: 6_303, totalGrossCents: 33_708 }],

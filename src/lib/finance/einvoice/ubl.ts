@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PartySnapshot } from "@/lib/finance/contracts";
 import type { InvoicePdfData } from "@/lib/finance/documents/types";
+import { parseFmcgLine, type FmcgLineMetadata } from "./fmcg";
 
 const CUSTOMIZATION_ID = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0";
 const PROFILE_ID = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
@@ -20,6 +21,8 @@ export interface PeppolEndpoint {
 }
 
 export interface PeppolUblInput extends InvoicePdfData {
+  /** Must be supplied from immutable line snapshots, never current product data. */
+  lines: (InvoicePdfData["lines"][number] & { fmcg?: FmcgLineMetadata })[];
   sellerEndpoint: PeppolEndpoint;
   buyerEndpoint: PeppolEndpoint;
   /** Referencia dodaná kupujúcim alebo číslo jeho objednávky. */
@@ -258,6 +261,14 @@ function lineXml(input: PeppolUblInput, line: PeppolUblInput["lines"][number]): 
   const quantityName = isCreditNote ? "cbc:CreditedQuantity" : "cbc:InvoicedQuantity";
   const category = categoryFor(input, line);
   const unitCode = UNIT_CODES[line.unit.trim().toLowerCase()];
+  const fmcg = line.fmcg === undefined ? undefined : parseFmcgLine(line.fmcg, line.lineNumber);
+  if (fmcg?.properties.vat_amount !== undefined) {
+    const [whole, fraction = ""] = fmcg.properties.vat_amount.split(".");
+    const metadataTax = BigInt(whole) * 10_000n + BigInt(fraction.padEnd(4, "0")) * (whole.startsWith("-") ? -1n : 1n);
+    if (metadataTax !== BigInt(line.totalVatCents) * 100n) {
+      throw new UblGenerationError(`Riadok ${line.lineNumber}: FMCG vat_amount nesedí s DPH položky.`);
+    }
+  }
 
   return [
     `<${root}>`,
@@ -269,6 +280,7 @@ function lineXml(input: PeppolUblInput, line: PeppolUblInput["lines"][number]): 
     ...(line.productSku?.trim()
       ? ["<cac:SellersItemIdentification>", element("cbc:ID", line.productSku.trim()), "</cac:SellersItemIdentification>"]
       : []),
+    ...(fmcg?.gtin ? ["<cac:StandardItemIdentification>", element("cbc:ID", fmcg.gtin, { schemeID: "0160" }), "</cac:StandardItemIdentification>"] : []),
     "<cac:ClassifiedTaxCategory>",
     element("cbc:ID", category),
     ...(category === "O" ? [] : [element("cbc:Percent", String(line.vatRate))]),
@@ -276,6 +288,9 @@ function lineXml(input: PeppolUblInput, line: PeppolUblInput["lines"][number]): 
     element("cbc:ID", "VAT"),
     "</cac:TaxScheme>",
     "</cac:ClassifiedTaxCategory>",
+    ...Object.entries(fmcg?.properties ?? {}).sort(([a], [b]) => a.localeCompare(b)).flatMap(([name, value]) => value === undefined ? [] : [
+      "<cac:AdditionalItemProperty>", element("cbc:Name", name), element("cbc:Value", value), "</cac:AdditionalItemProperty>",
+    ]),
     "</cac:Item>",
     "<cac:Price>",
     element("cbc:PriceAmount", line.unitPriceExact ?? money(line.unitPriceCents), { currencyID: "EUR" }),
