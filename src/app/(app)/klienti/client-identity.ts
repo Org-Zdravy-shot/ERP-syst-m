@@ -4,7 +4,8 @@ import type { Prisma } from "@prisma/client";
 export async function findClientByIcoForCreation(tx: Prisma.TransactionClient, ico: string) {
   const normalized = ico.replace(/\s/g, "");
   if (!normalized) return null;
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`invoice-client:${normalized}`}))`;
+  // PostgreSQL returns void; cast it so Prisma can deserialize the result.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`invoice-client:${normalized}`}))::text`;
   const matches = await tx.$queryRaw<Array<{ id: string; name: string; type: string; isActive: boolean }>>`
     SELECT "id", "name", "type", "isActive" FROM "Client"
     WHERE regexp_replace(COALESCE("ico", ''), '[[:space:]]', '', 'g') = ${normalized}
