@@ -27,8 +27,9 @@ const company = z.object({
 export function mapAutoformResults(payload: unknown): CompanyMatch[] {
   const rows = z.array(company).max(20).parse(payload);
   return rows.filter((row) => !row.terminated_on).map((row) => {
-    const ico = row.cin.replace(/\s/g, "").padStart(8, "0");
-    if (!/^\d{8}$/.test(ico)) throw new Error("Register vrátil neplatné IČO.");
+    const rawIco = row.cin.replace(/\s/g, "");
+    if (!/^\d{1,8}$/.test(rawIco) || /^0+$/.test(rawIco)) throw new Error("Register vrátil neplatné IČO.");
+    const ico = rawIco.padStart(8, "0");
     const number = row.street_number || [row.reg_number, row.building_number].filter(Boolean).join("/");
     const dic = row.tin.replace(/\s/g, "");
     const icDph = row.vatin.replace(/\s/g, "").toUpperCase();

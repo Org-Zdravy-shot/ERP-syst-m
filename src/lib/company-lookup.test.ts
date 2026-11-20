@@ -9,6 +9,8 @@ describe("company lookup", () => {
   it("excludes terminated companies and rejects malformed responses", () => {
     expect(mapAutoformResults([{ id: 1, name: "Zaniknutá", cin: "12345678", terminated_on: "2025-01-01" }])).toEqual([]);
     expect(() => mapAutoformResults({ results: [] })).toThrow();
+    expect(() => mapAutoformResults([{ id: 1, name: "Firma", cin: null }])).toThrow("IČO");
+    expect(() => mapAutoformResults([{ id: 1, name: "Firma", cin: "00000000" }])).toThrow("IČO");
   });
   it("uses the documented query and never sends partial ICO requests", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response("[]"));
