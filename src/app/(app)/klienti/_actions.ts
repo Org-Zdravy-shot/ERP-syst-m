@@ -9,6 +9,7 @@ import { hasFinancePermission } from "@/lib/finance/permissions";
 import { parseEurToCents } from "@/lib/format";
 import { clientSchema } from "@/lib/zod-schemas";
 import { slovakDateKey } from "@/app/(app)/objednavky/pricing";
+import { findClientByIcoForCreation } from "./client-identity";
 
 export interface ClientFormState {
   error?: string;
@@ -131,7 +132,18 @@ export async function createClient(_prevState: ClientFormState, formData: FormDa
     return { error: "IBAN klienta môže meniť iba finančný administrátor." };
   }
 
-  const client = await prisma.client.create({ data: toDbData(parsed.data, canEditFinance) });
+  let client: { id: string };
+  try {
+    client = await prisma.$transaction(async (tx) => {
+      const existing = parsed.data.ico ? await findClientByIcoForCreation(tx, parsed.data.ico) : null;
+      if (existing) {
+        throw new Error(`Firma s týmto IČO už existuje: ${existing.name}.${existing.isActive ? " Vyberte ju v adresári klientov." : " Najprv ju obnovte z archívu."}`);
+      }
+      return tx.client.create({ data: toDbData(parsed.data, canEditFinance) });
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Klienta sa nepodarilo uložiť." };
+  }
 
   revalidatePath("/klienti");
   redirect(`/klienti/${client.id}`);

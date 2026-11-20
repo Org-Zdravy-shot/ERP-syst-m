@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import type { ClientFormState } from "./_actions";
+import { CompanySearch } from "@/components/CompanySearch";
 
 export interface ClientFormValues {
   type: string;
@@ -52,11 +53,18 @@ export function ClientForm({
   showFinanceFields?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
-  const values = { ...EMPTY, ...initial };
+  const [values, setValues] = useState(() => ({ ...EMPTY, ...initial }));
   const [type, setType] = useState(values.type);
+  const [existingClient, setExistingClient] = useState("");
 
   return (
     <form action={formAction} className="max-w-2xl space-y-5 rounded-[14px] border border-stone-200 bg-white p-6">
+      {!initial && type === "B2B" && <CompanySearch onSelect={(company) => {
+        if (company.clientId) { setExistingClient(company.clientId); return; }
+        setExistingClient("");
+        setValues((previous) => ({ ...previous, name: company.name, ico: company.ico, dic: company.dic, icDph: company.icDph, street: company.street, city: company.city, zip: company.zip }));
+      }} />}
+      {existingClient && <p className="rounded-xl bg-amber-50 p-3 text-sm">Táto firma už je v adresári. <Link href={`/klienti/${existingClient}`} className="font-semibold underline">Otvoriť uloženého klienta</Link><button type="button" className="ml-3 underline" onClick={() => setExistingClient("")}>Pokračovať s novým klientom</button></p>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
           <label htmlFor="type" className={labelClass}>Typ klienta</label>
@@ -67,7 +75,7 @@ export function ClientForm({
         </div>
         <div className="sm:col-span-2">
           <label htmlFor="name" className={labelClass}>Meno / názov *</label>
-          <input id="name" name="name" required defaultValue={values.name} className={inputClass} placeholder="Fitko Havran s.r.o." />
+          <input id="name" name="name" required value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} className={inputClass} placeholder="Fitko Havran s.r.o." />
         </div>
       </div>
 
@@ -75,15 +83,15 @@ export function ClientForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label htmlFor="ico" className={labelClass}>IČO</label>
-            <input id="ico" name="ico" defaultValue={values.ico} className={inputClass} />
+            <input id="ico" name="ico" value={values.ico} onChange={(e) => setValues({ ...values, ico: e.target.value })} className={inputClass} />
           </div>
           <div>
             <label htmlFor="dic" className={labelClass}>DIČ</label>
-            <input id="dic" name="dic" defaultValue={values.dic} className={inputClass} />
+            <input id="dic" name="dic" value={values.dic} onChange={(e) => setValues({ ...values, dic: e.target.value })} className={inputClass} />
           </div>
           <div>
             <label htmlFor="icDph" className={labelClass}>IČ DPH</label>
-            <input id="icDph" name="icDph" defaultValue={values.icDph} className={inputClass} />
+            <input id="icDph" name="icDph" value={values.icDph} onChange={(e) => setValues({ ...values, icDph: e.target.value })} className={inputClass} />
           </div>
         </div>
       )}
@@ -117,15 +125,15 @@ export function ClientForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="sm:col-span-2">
           <label htmlFor="street" className={labelClass}>Ulica a číslo</label>
-          <input id="street" name="street" defaultValue={values.street} className={inputClass} />
+          <input id="street" name="street" value={values.street} onChange={(e) => setValues({ ...values, street: e.target.value })} className={inputClass} />
         </div>
         <div>
           <label htmlFor="city" className={labelClass}>Mesto</label>
-          <input id="city" name="city" defaultValue={values.city} className={inputClass} />
+          <input id="city" name="city" value={values.city} onChange={(e) => setValues({ ...values, city: e.target.value })} className={inputClass} />
         </div>
         <div>
           <label htmlFor="zip" className={labelClass}>PSČ</label>
-          <input id="zip" name="zip" defaultValue={values.zip} className={inputClass} />
+          <input id="zip" name="zip" value={values.zip} onChange={(e) => setValues({ ...values, zip: e.target.value })} className={inputClass} />
         </div>
       </div>
 
@@ -141,7 +149,7 @@ export function ClientForm({
       <div className="flex gap-3">
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || Boolean(existingClient)}
           className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-brand-dark disabled:opacity-50"
         >
           {pending ? "Ukladám…" : submitLabel}
