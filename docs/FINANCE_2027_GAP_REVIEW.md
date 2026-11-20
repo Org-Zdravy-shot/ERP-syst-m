@@ -74,10 +74,10 @@ Vyhľadávanie má 650 ms oneskorenie, ochranu proti zastaraným odpovediam a p�
 
 ## Lokálna validácia a nasadenie
 
-- Vyhľadávanie: celá sada 323 úspešných testov, 2 preskočené; produkčný build prešiel s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
+- Celá sada po rozšírení: 332 úspešných testov, 2 preskočené; produkčný build prešiel s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
 - FMCG snapshoty: testy ukladaných dát, plného dobropisu, odmietnutia neplatného dátumu/DPH a čítania snapshotu až do UBL; databázová migrácia zatiaľ nebola aplikovaná na PostgreSQL.
 - Živé Autoform ani doručenie Peppol neboli testované. Žiadna produkčná zmena ani odoslanie faktúry.
-- `npm audit --omit=dev` 20. 11. 2026 hlási 4 závislosti: Next.js (moderate), effect a sprostredkovane @prisma/config/prisma (high). Ide o aktuálny stav existujúcich závislostí; pred nasadením treba samostatnú aktualizáciu a overenie. Automatický downgrade Prisma odporúčaný auditom sa nevykonal.
+- Samostatná vetva opravy závislostí aktualizuje Next.js 16.4.2 → 16.4.6 a override effect 3.22.1 bez zmeny verzie Prisma. Po oprave `npm audit --omit=dev` 20. 11. 2026 hlási 0 zraniteľností. Plný audit vrátane vývojových nástrojov ešte hlási 3 nálezy. Referencie: [Next.js](https://github.com/advisories/GHSA-f3mh-rxg3-f5g2), [Effect](https://github.com/advisories/GHSA-7589-6fvf-x4pw). Produkčný runtime tým ešte nebol aktualizovaný.
 
 ## Podmienky januárového prechodu
 
