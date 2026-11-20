@@ -6,6 +6,7 @@ import type {
   InvoicePaymentStatus,
 } from "./contracts";
 import { lineNetCents } from "@/lib/precise-price";
+import { parseFmcgLine } from "./einvoice/fmcg";
 
 export type FinanceDomainErrorCode =
   | "INVALID_CURRENCY"
@@ -75,6 +76,7 @@ export function calculateInvoice(input: CalculateInvoiceInput): InvoiceCalculati
     const totalVat = Math.round((totalNet * line.vatRate) / 100);
     assertSafeCents(totalVat, `DPH na riadku ${index + 1}`);
     const totalGross = addSafeCents(totalNet, totalVat, `Suma na riadku ${index + 1}`);
+    const fmcg = line.fmcg === undefined ? undefined : parseFmcgLine(line.fmcg, index + 1, totalVat);
 
     totalNetCents = addSafeCents(totalNetCents, totalNet, "Celkový základ");
     totalVatCents = addSafeCents(totalVatCents, totalVat, "Celková DPH");
@@ -82,6 +84,7 @@ export function calculateInvoice(input: CalculateInvoiceInput): InvoiceCalculati
 
     return {
       ...line,
+      ...(fmcg ? { fmcg } : {}),
       description: line.description.trim(),
       unit: line.unit.trim(),
       taxCategory: line.taxCategory ?? "STANDARD",

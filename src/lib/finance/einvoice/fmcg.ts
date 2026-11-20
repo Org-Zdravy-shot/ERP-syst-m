@@ -73,11 +73,19 @@ export const fmcgLineSchema = z.object({
 
 export type FmcgLineMetadata = z.infer<typeof fmcgLineSchema>;
 
-export function parseFmcgLine(value: unknown, lineNumber: number): FmcgLineMetadata {
+export function parseFmcgLine(value: unknown, lineNumber: number, totalVatCents?: number): FmcgLineMetadata {
   const parsed = fmcgLineSchema.safeParse(value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new Error(`Riadok ${lineNumber}, FMCG ${issue.path.join(".") || "údaje"}: ${issue.message}`);
+  }
+  const amount = parsed.data.properties.vat_amount;
+  if (amount !== undefined && totalVatCents !== undefined) {
+    const [whole, fraction = ""] = amount.split(".");
+    const metadataTax = BigInt(whole) * BigInt(10_000) + BigInt(fraction.padEnd(4, "0")) * (whole.startsWith("-") ? BigInt(-1) : BigInt(1));
+    if (metadataTax !== BigInt(totalVatCents) * BigInt(100)) {
+      throw new Error(`Riadok ${lineNumber}: FMCG vat_amount nesedí s DPH položky.`);
+    }
   }
   return parsed.data;
 }

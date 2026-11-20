@@ -1125,6 +1125,7 @@ model InvoiceItem {
   totalVatCents   Int?
   totalGrossCents Int?
   taxCategory     String? // napr. "STANDARD" | "EXEMPT"
+  fmcgSnapshot    Json? // Validated GS1 SK FMCG v1.9 metadata captured on this invoice line.
 
   @@index([invoiceId, lineNumber])
 }
