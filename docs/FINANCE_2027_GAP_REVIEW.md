@@ -1,6 +1,6 @@
 # Fakturácia 2027: Peppol, 101 Drogerie a pracovné postupy SuperFaktúry
 
-Overené 20. 11. 2026 na `origin/main` b45a28e. Toto je implementačný stav, nie potvrdenie produkčnej pripravenosti.
+Základ overený 20. 11. 2026 na `origin/main` b45a28e; editor a hlavičkové referencie doplnené 21. 11. 2026. Toto je implementačný stav, nie potvrdenie produkčnej pripravenosti.
 
 ## Pripojenie vlastného ERP
 
@@ -44,7 +44,7 @@ Priamo prezreté prihlásené obrazovky účtu Kurgi: prehľad, zoznam faktúr, 
 
 | Oblasť | ERP stav a potrebná práca |
 |---|---|
-| Faktúry a koncepty | Existujú. Doplnený výber firmy podľa názvu/IČO a inline uloženie klienta. Zostáva editovanie konceptu, duplikácia a kontrola pred vystavením. |
+| Faktúry a koncepty | Doplnený výber firmy, inline klient, úprava ručného konceptu a kópia vydanej faktúry do nového konceptu. Úprava vystavených, importovaných, historických, objednávkových a dobropisových dokladov je zablokovaná. Zostáva úplná kontrola workflow pred vystavením. |
 | Dobropisy | Existujú v doméne. Overiť čiastočné dobropisy, PDF, Peppol a úhrady v E2E. |
 | Zálohy a vyúčtovanie | Historická predfaktúra nie je plnohodnotné vystavovanie záloh, daňový doklad k prijatej platbe ani vyúčtovanie. Doplniť celý reťazec. |
 | Ponuky a nadväzujúce doklady | Samostatná všeobecná agenda ponúk s platnosťou/schválením a konverziou chýba. Vianočná kalkulačka ju nenahrádza. |
@@ -62,6 +62,16 @@ Referencie: [funkcie](https://www.superfaktura.sk/funkcie/), [ponuky](https://po
 
 Rozhranie má zachovať pracovné postupy, slovenské názvy a žlto-čiernu identitu ERP. Cieľom je funkčná zhoda; úplná zhoda sa nesmie tvrdiť pred akceptačným testom každého workflow.
 
+## Úprava konceptu, kopírovanie a referencia odberateľa
+
+Migrácia `20261121090000_invoice_buyer_reference` pridáva explicitný `Invoice.buyerReference`, bez dopĺňania starších faktúr interným číslom objednávky. UBL a validačný panel čítajú iba uloženú referenciu dodanú odberateľom; plný dobropis ju preberie z pôvodnej faktúry. Bez nej sa príprava Peppol zastaví konkrétnou chybou. Riadkové čísla objednávok FMCG sú samostatné údaje. Automatické získavanie hlavičkovej referencie pri faktúre z objednávky ostáva otvorené.
+
+Úprava ručného konceptu uzamkne faktúru v transakcii a kontroluje `updatedAt`. Pri staršej verzii, vystavenom čísle, finalizácii, väzbe na objednávku alebo naviazaných úhradách/dokumentoch/prenosoch nič neprepíše. Hlavička, položky, presné ceny, FMCG a audit sa uložia v jednej transakcii. Nová verzia času je striktne vyššia než pôvodná. Existujúce snapshoty partnerov/dane sa pri úprave konceptu vyprázdnia a znovu vzniknú pri finalizácii.
+
+Kópia je najprv vyplnený formulár, bez zápisu. Zachová klienta, popisy, jednotky, presné ceny, sadzby, produktové väzby, poznámku a stabilné GTIN/typ/kusov v kartóne. Nastaví nové dátumy podľa Bratislavy a vyprázdni variabilný symbol, externé číslo, referenciu odberateľa a všetky predošlé dodacie referencie/šarže/exspirácie/poplatky. Používateľ nové dodanie skontroluje pred uložením. Kópia nemá platby ani väzbu na pôvodnú objednávku.
+
+Vstupy formulára sú riadené stavom, aby po chybe servera nezmizli rozpísané dátumy a poznámka. Validácia odmieta aj normalizáciu neplatného dátumu (napríklad 30. február) a zachová označenie chybného riadka.
+
 ## Databáza firiem
 
 [Autoform API](https://ekosystem.slovensko.digital/sluzby/autoform/integracny-manual) poskytuje názov/IČO/DIČ/IČ DPH/adresu pre firmy aj SZČO. Vyhľadávanie ide cez server, privátny API kľúč zostáva v `AUTOFORM_API_KEY`. Bez kľúča fungujú uložené ERP kontakty a ručný vstup. [Cenník](https://ekosystem.slovensko.digital/cennik): 9 EUR/mesiac pre 1–255 požiadaviek, 36 EUR pre 256–1000, prvých 30 dní bezplatne; aktuálne podmienky overiť pri registrácii. Predplatné ani účet sa v tejto práci nezakladali.
@@ -74,9 +84,10 @@ Vyhľadávanie má 650 ms oneskorenie, ochranu proti zastaraným odpovediam a p�
 
 ## Lokálna validácia a nasadenie
 
-- Celá sada po rozšírení: 332 úspešných testov, 2 preskočené; produkčný build prešiel s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
+- Celá sada po rozšírení 21. 11.: 356 úspešných testov, 2 preskočené; TypeScript a produkčný build prešli s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
 - Na samostatnom lokálnom PostgreSQL 18 prešlo všetkých 20 migrácií vrátane FMCG. Integračná skúška overila súbežné vytvorenie jedného klienta, JSONB roundtrip konceptu a súm, odmietnutie neobjektového snapshotu databázou, prenos uloženého snapshotu do UBL a jeho zachovanie v plnom dobropise. Zistila aj návratový typ void pri advisory locku; query má teraz explicitný cast na text pre Prisma. Všetky dáta boli syntetické. Vystavená faktúra bola lokálna fixture, nie test celej finalizácie alebo skutočné odoslanie.
 - Lokálny `/api/health` vrátil 200/ok. Manuálna vizuálna kontrola neprebehla: browser host bol nedostupný, natívne Chrome hlásilo chýbajúce okno/timeout. Testovací web aj databáza boli po kontrole zastavené.
+- Dňa 21. 11. prešla aj 21. migrácia nad predchádzajúcou lokálnou databázou. Reálne súbežné úpravy rovnakého konceptu skončili jedným uložením a jedným odmietnutím starej verzie. Chyba cudzieho kľúča pri nahradení riadkov vrátila späť hlavičku, položky aj verziu. Vystavený doklad sa odmietol upraviť a staré referencie zostali NULL. Opakovaný pokus o vizuálne QA znovu zablokovalo nedostupné okno Chrome.
 - Živé Autoform ani doručenie Peppol neboli testované. Žiadna produkčná zmena ani odoslanie faktúry.
 - Samostatná vetva opravy závislostí aktualizuje Next.js 16.4.2 → 16.4.6 a override effect 3.22.1 bez zmeny verzie Prisma. Po oprave `npm audit --omit=dev` 20. 11. 2026 hlási 0 zraniteľností. Plný audit vrátane vývojových nástrojov ešte hlási 3 nálezy. Referencie: [Next.js](https://github.com/advisories/GHSA-f3mh-rxg3-f5g2), [Effect](https://github.com/advisories/GHSA-7589-6fvf-x4pw). Produkčný runtime tým ešte nebol aktualizovaný.
 

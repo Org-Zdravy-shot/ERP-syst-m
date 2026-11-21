@@ -10,21 +10,14 @@ import Link from "next/link";
 import { legalEntityLabels } from "@/lib/zod-schemas";
 import { InvoiceCustomerPicker } from "./InvoiceCustomerPicker";
 import { FmcgFields, fmcgLabels } from "../fmcg-fields";
-import { fmcgLineSchema, type FmcgLineMetadata } from "@/lib/finance/einvoice/fmcg";
+import { fmcgLineSchema } from "@/lib/finance/einvoice/fmcg";
+import type { InvoiceFormInitial, InvoiceFormLine as Line } from "../invoice-form-data";
+import { slovakDateKey } from "../../../objednavky/pricing";
 
 interface ClientOption {
   id: string;
   name: string;
   type: string;
-}
-
-interface Line {
-  description: string;
-  quantity: string;
-  unit: string;
-  unitPrice: string; // EUR text, napr. "1,80"
-  vatRate: string;
-  fmcg?: FmcgLineMetadata;
 }
 
 const EMPTY_LINE: Line = { description: "", quantity: "1", unit: "ks", vatRate: "0", unitPrice: "" };
@@ -52,13 +45,24 @@ function lineGrossCents(line: Line): number | null {
   return parsed ? parsed.netCents + Math.round((parsed.netCents * parsed.vatRate) / 100) : null;
 }
 
-export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
+export function InvoiceForm({ clients, initial, action = createManualInvoice, editing = false }: {
+  clients: ClientOption[]; initial?: InvoiceFormInitial; editing?: boolean;
+  action?: (state: InvoiceFormState, data: FormData) => Promise<InvoiceFormState>;
+}) {
+  const today = slovakDateKey();
+  const in14days = new Date(new Date(`${today}T12:00:00.000Z`).getTime() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   const [state, formAction, pending] = useActionState<InvoiceFormState, FormData>(
-    createManualInvoice,
+    action,
     {},
   );
-  const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
+  const [lines, setLines] = useState<Line[]>(initial?.lines.length ? initial.lines : [{ ...EMPTY_LINE }]);
   const [savingClient, setSavingClient] = useState(false);
+  const [header, setHeader] = useState(() => ({
+    legalEntity: initial?.legalEntity ?? "", issueDate: initial?.issueDate ?? today,
+    dueDate: initial?.dueDate ?? in14days, deliveryDate: initial?.deliveryDate ?? today,
+    variableSymbol: initial?.variableSymbol ?? "", externalNumber: initial?.externalNumber ?? "",
+    buyerReference: initial?.buyerReference ?? "", note: initial?.note ?? "",
+  }));
 
   const updateLine = (index: number, patch: Partial<Line>) => {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
@@ -85,11 +89,14 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
           if (quantity <= 0) return null;
           return {
             description: line.description.trim(),
+            productId: line.productId,
+            productSku: line.productSku,
             quantity,
             unit: line.unit,
             unitPriceCents: unitPriceCents(exact),
             unitPriceExact: exact,
             vatRate: Number.parseInt(line.vatRate, 10) || 0,
+            taxCategory: line.taxCategory,
             ...(line.fmcg ? { fmcg: line.fmcg } : {}),
           };
         } catch {
@@ -101,6 +108,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
   const invalidPriceRows = lines.map((line) => {
     try { parseUnitPrice(line.unitPrice); return false; } catch { return true; }
   });
+  const invalidQuantityRows = lines.map((line) => parseQty(line.quantity) <= 0);
   const fmcgErrors = lines.map((line) => {
     if (!line.fmcg) return "";
     const result = fmcgLineSchema.safeParse(line.fmcg);
@@ -110,19 +118,17 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
     return `${fmcgLabels[key] ?? "Údaje pre reťazec"}: ${issue.message}`;
   });
 
-  const today = new Date().toISOString().slice(0, 10);
-  const in14days = new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-
   return (
     <form action={formAction} className="max-w-6xl space-y-5">
       <input type="hidden" name="items" value={itemsJson} />
+      {editing && <input type="hidden" name="expectedUpdatedAt" value={initial?.expectedUpdatedAt ?? ""} />}
       <div className="space-y-5">
       <div className="rounded-[14px] border border-stone-200 bg-white p-5">
         <div className="-mx-5 -mt-5 mb-5 rounded-t-[14px] bg-stone-100 px-5 py-4">
           <h2 className="text-xs font-bold uppercase tracking-wide text-stone-700">Všeobecné informácie</h2>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div><label className={label}>Právny subjekt *</label><select name="legalEntity" required defaultValue="" className={input}><option value="" disabled>— vyberte subjekt —</option>{Object.entries(legalEntityLabels).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select></div>
+          <div><label className={label}>Právny subjekt *</label><select name="legalEntity" required value={header.legalEntity} onChange={(e) => setHeader({ ...header, legalEntity: e.target.value })} className={input}><option value="" disabled>— vyberte subjekt —</option>{Object.entries(legalEntityLabels).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select></div>
           <div>
             <label className={label}>Druh dokladu</label>
             <input type="hidden" name="direction" value="VYDANA" />
@@ -131,7 +137,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
           <div><label className={label}>Číslo faktúry</label><p className="rounded-[10px] border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500">Pridelí sa pri finalizácii</p></div>
 
           <div className="sm:col-span-2 lg:col-span-3">
-              <InvoiceCustomerPicker clients={clients} onSavingChange={setSavingClient} />
+              <InvoiceCustomerPicker clients={clients} initialClientId={initial?.clientId} onSavingChange={setSavingClient} />
             </div>
           <p className="text-sm sm:col-span-2 lg:col-span-3"><Link href="/financie/faktury/historicka" className="font-medium text-stone-700 underline">Zaevidovať prijatú faktúru alebo predfaktúru →</Link></p>
 
@@ -145,31 +151,36 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className={label}>Dátum vystavenia</label>
-            <input name="issueDate" type="date" defaultValue={today} required className={input} />
+            <input name="issueDate" type="date" value={header.issueDate} onChange={(e) => setHeader({ ...header, issueDate: e.target.value })} required className={input} />
           </div>
           <div>
             <label className={label}>Dátum splatnosti</label>
-            <input name="dueDate" type="date" defaultValue={in14days} required className={input} />
+            <input name="dueDate" type="date" value={header.dueDate} onChange={(e) => setHeader({ ...header, dueDate: e.target.value })} required className={input} />
           </div>
           <div>
             <label className={label}>Dátum dodania</label>
-            <input name="deliveryDate" type="date" defaultValue={today} required className={input} />
+            <input name="deliveryDate" type="date" value={header.deliveryDate} onChange={(e) => setHeader({ ...header, deliveryDate: e.target.value })} required className={input} />
           </div>
           <div>
             <label className={label}>
               Variabilný symbol <span className="font-normal text-stone-400">(inak auto)</span>
             </label>
-            <input name="variableSymbol" className={input} />
+            <input name="variableSymbol" value={header.variableSymbol} onChange={(e) => setHeader({ ...header, variableSymbol: e.target.value })} className={input} />
           </div>
           <div>
             <label className={label}>
-              Externé číslo <span className="font-normal text-stone-400">(číslo od dodávateľa)</span>
+              Externé číslo <span className="font-normal text-stone-400">(voliteľné)</span>
             </label>
-            <input name="externalNumber" className={input} />
+            <input name="externalNumber" value={header.externalNumber} onChange={(e) => setHeader({ ...header, externalNumber: e.target.value })} className={input} />
+          </div>
+          <div>
+            <label htmlFor="buyer-reference" className={label}>Referencia odberateľa</label>
+            <input id="buyer-reference" name="buyerReference" maxLength={140} value={header.buyerReference} onChange={(e) => setHeader({ ...header, buyerReference: e.target.value })} className={input} placeholder="Údaj, ktorý vám poskytol odberateľ" />
+            <p className="mt-1 text-xs text-stone-500">Potrebná pre elektronickú faktúru. Použite referenciu od odberateľa, napríklad číslo jeho objednávky.</p>
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
             <label className={label}>Poznámka</label>
-            <textarea name="note" rows={4} className={input} placeholder="Text, ktorý sa má zobraziť pri doklade" />
+            <textarea name="note" rows={4} value={header.note} onChange={(e) => setHeader({ ...header, note: e.target.value })} className={input} placeholder="Text, ktorý sa má zobraziť pri doklade" />
           </div>
         </div>
       </div>
@@ -200,7 +211,9 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
                   value={line.quantity}
                   onChange={(e) => updateLine(index, { quantity: e.target.value })}
                   className={input}
+                  aria-invalid={invalidQuantityRows[index]}
                 />
+                {invalidQuantityRows[index] && <p className="mt-1 text-xs text-red-700">Zadajte kladné množstvo s najviac 6 desatinnými miestami.</p>}
               </div>
               <div className="sm:col-span-2 xl:col-span-1">
                 <label htmlFor={`item-unit-${index}`} className="mb-1 block text-xs text-stone-500">Jednotka</label>
@@ -210,7 +223,7 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
                   onChange={(e) => updateLine(index, { unit: e.target.value })}
                   className={input}
                 >
-                  {["ks", "kg", "l", "g", "ml"].map((u) => (
+                  {[...new Set(["ks", "kg", "l", "g", "ml", "hod", ...(line.unit ? [line.unit] : [])])].map((u) => (
                     <option key={u} value={u}>
                       {u}
                     </option>
@@ -234,14 +247,12 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
                 <label htmlFor={`item-vat-${index}`} className="mb-1 block text-xs text-stone-500">DPH</label>
                 <select
                   id={`item-vat-${index}`}
-                  value={line.vatRate}
-                  onChange={(e) => updateLine(index, { vatRate: e.target.value })}
+                  value={line.taxCategory === "EXEMPT" ? "EXEMPT" : line.vatRate}
+                  onChange={(e) => updateLine(index, { vatRate: e.target.value === "EXEMPT" ? "0" : e.target.value, taxCategory: e.target.value === "EXEMPT" ? "EXEMPT" : "STANDARD" })}
                   className={input}
                 >
-                  <option value="23">23 %</option>
-                  <option value="19">19 %</option>
-                  <option value="5">5 %</option>
-                  <option value="0">0 %</option>
+                  {[...new Set(["23", "19", "5", "0", line.vatRate])].map((rate) => <option key={rate} value={rate}>{rate} %</option>)}
+                  {line.taxCategory === "EXEMPT" && <option value="EXEMPT">0 % — oslobodené</option>}
                 </select>
               </div>
               <div className="sm:col-span-2 xl:col-span-2">
@@ -291,9 +302,9 @@ export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
       {state.error && <p className={errorBox}>{state.error}</p>}
 
       <div className="flex flex-wrap items-center justify-end gap-4">
-      <p className="text-xs text-stone-500">Uložením vznikne koncept. Faktúra sa tým ešte nefinalizuje ani neodošle.</p>
-      <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean) || fmcgErrors.some(Boolean)} className={btnPrimary}>
-        {pending ? "Ukladám…" : "Uložiť koncept"}
+      <p className="text-xs text-stone-500">{editing ? "Uložia sa zmeny konceptu. Faktúra sa tým nevystaví ani neodošle." : "Uložením vznikne koncept. Faktúra sa tým ešte nefinalizuje ani neodošle."}</p>
+      <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean) || invalidQuantityRows.some(Boolean) || fmcgErrors.some(Boolean)} className={btnPrimary}>
+        {pending ? "Ukladám…" : editing ? "Uložiť zmeny konceptu" : "Uložiť koncept"}
       </button>
       </div>
       </div>
