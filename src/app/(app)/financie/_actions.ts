@@ -190,6 +190,8 @@ export async function issueInvoiceFromOrder(
 // ---------- Ručná faktúra ----------
 
 const invoiceItemSchema = z.object({
+  productId: z.string().min(1).max(100).optional(),
+  productSku: z.string().max(100).optional(),
   description: z.string().trim().min(1, "Popis položky je povinný").max(500),
   quantity: z.number().positive("Množstvo musí byť kladné").max(1_000_000),
   unit: z.string().trim().min(1).max(20),
@@ -198,6 +200,7 @@ const invoiceItemSchema = z.object({
     try { parseUnitPrice(value); return true; } catch { return false; }
   }, "Zadajte platnú jednotkovú cenu s najviac 4 desatinnými miestami.").transform(parseUnitPrice).optional(),
   vatRate: z.number().int().min(0).max(100),
+  taxCategory: z.enum(["STANDARD", "EXEMPT"]).optional(),
   fmcg: fmcgLineSchema.optional(),
 }).refine((item) => !item.unitPriceExact || unitPriceCents(item.unitPriceExact) === item.unitPriceCents, {
   message: "Jednotková cena nesúhlasí s presnou cenou.",
@@ -215,6 +218,7 @@ const manualInvoiceSchema = z
     dueDate: z.date(),
     deliveryDate: z.date().optional(),
     variableSymbol: z.string().max(30).optional(),
+    buyerReference: z.string().trim().max(140, "Referencia odberateľa môže mať najviac 140 znakov.").optional(),
     note: z.string().max(2_000).optional(),
     items: z.array(invoiceItemSchema).min(1, "Pridajte aspoň jednu položku").max(200),
   })
@@ -229,6 +233,18 @@ export async function createManualInvoice(
   _prev: InvoiceFormState,
   formData: FormData,
 ): Promise<InvoiceFormState> {
+  return saveManualInvoice(formData);
+}
+
+export async function updateManualInvoice(
+  invoiceId: string,
+  _prev: InvoiceFormState,
+  formData: FormData,
+): Promise<InvoiceFormState> {
+  return saveManualInvoice(formData, invoiceId);
+}
+
+async function saveManualInvoice(formData: FormData, invoiceIdToUpdate?: string): Promise<InvoiceFormState> {
   const user = await requireFinancePermission("CREATE_DRAFT");
 
   let items: unknown;
@@ -240,7 +256,10 @@ export async function createManualInvoice(
 
   const dateOf = (name: string) => {
     const raw = String(formData.get(name) ?? "").trim();
-    return raw ? new Date(raw) : undefined;
+    if (!raw) return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(NaN);
+    const date = new Date(`${raw}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === raw ? date : new Date(NaN);
   };
 
   const parsed = manualInvoiceSchema.safeParse({
@@ -249,45 +268,57 @@ export async function createManualInvoice(
     clientId: String(formData.get("clientId") ?? "").trim() || undefined,
     supplierName: String(formData.get("supplierName") ?? "").trim() || undefined,
     externalNumber: String(formData.get("externalNumber") ?? "").trim() || undefined,
-    issueDate: dateOf("issueDate") ?? new Date(),
-    dueDate: dateOf("dueDate") ?? new Date(Date.now() + 14 * 24 * 3600 * 1000),
+    issueDate: dateOf("issueDate"),
+    dueDate: dateOf("dueDate"),
     deliveryDate: dateOf("deliveryDate"),
     variableSymbol: String(formData.get("variableSymbol") ?? "").trim() || undefined,
+    buyerReference: String(formData.get("buyerReference") ?? "").trim() || undefined,
     note: String(formData.get("note") ?? "").trim() || undefined,
     items,
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
+    const dateLabels: Record<string, string> = { issueDate: "Dátum vystavenia", dueDate: "Dátum splatnosti", deliveryDate: "Dátum dodania" };
+    if (dateLabels[String(issue.path[0])]) return { error: `${dateLabels[String(issue.path[0])]}: zadajte platný dátum.` };
     const row = issue.path[0] === "items" && typeof issue.path[1] === "number" ? `Riadok ${issue.path[1] + 1}, ${issue.path.slice(2).join(".") || "položka"}: ` : "";
     return { error: `${row}${issue.message}` };
   }
 
   const data = parsed.data;
   if (data.direction === "PRIJATA") return { error: "Prijatú faktúru zaevidujte ako historický originál; ERP dodávateľovi nevystavuje novú faktúru." };
+  let expectedUpdatedAt: Date | undefined;
+  if (invoiceIdToUpdate) {
+    const version = z.iso.datetime().safeParse(String(formData.get("expectedUpdatedAt") ?? ""));
+    if (!version.success) return { error: "Chýba platná verzia konceptu. Obnovte formulár a skúste uloženie znova." };
+    expectedUpdatedAt = new Date(version.data);
+  }
   let invoiceId: string;
   try {
-    const created = await invoiceService.createDraft({
-      direction: data.direction,
+    const payload = {
       legalEntity: data.legalEntity,
-      source: "INTERNA",
       externalNumber: data.externalNumber,
       clientId: data.clientId,
       issueDate: data.issueDate,
       dueDate: data.dueDate,
       deliveryDate: data.deliveryDate,
-      currency: "EUR",
+      currency: "EUR" as const,
       variableSymbol: data.variableSymbol,
+      buyerReference: data.buyerReference,
       note: data.note,
       items: data.items,
       actorId: user.userId,
-    });
-    invoiceId = created.id;
+    };
+    const saved = invoiceIdToUpdate
+      ? await invoiceService.updateDraft(invoiceIdToUpdate, { ...payload, expectedUpdatedAt: expectedUpdatedAt! })
+      : await invoiceService.createDraft({ ...payload, direction: data.direction, source: "INTERNA" });
+    invoiceId = saved.id;
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Koncept faktúry sa nepodarilo vytvoriť." };
+    return { error: e instanceof Error ? e.message : "Koncept faktúry sa nepodarilo uložiť." };
   }
 
   revalidatePath("/financie");
   revalidatePath("/financie/faktury");
+  revalidatePath(`/financie/faktury/${invoiceId}`);
   redirect(`/financie/faktury/${invoiceId}`);
 }
 

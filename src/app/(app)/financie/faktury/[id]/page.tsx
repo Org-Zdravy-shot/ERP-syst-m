@@ -26,6 +26,8 @@ import { InvoiceEInvoice } from "./InvoiceEInvoice";
 import { InvoiceWorkflowActions } from "./InvoiceStatusActions";
 import { VerifyHistoricalButton } from "./VerifyHistoricalButton";
 import { FmcgSummary } from "../fmcg-fields";
+import { canCopyInvoice, canEditManualDraft } from "../invoice-form-data";
+import { btnSecondary } from "@/components/ui";
 
 export default async function FakturaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -109,7 +111,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
     invoice.source !== "HISTORICAL" &&
     invoice.direction === "VYDANA" &&
     invoice.source !== "HISTORICAL" && invoice.documentStatus === "ISSUED" &&
-    Boolean(invoice.order?.orderNumber) &&
+    Boolean(invoice.buyerReference?.trim()) &&
     eInvoiceConfigurationReady;
   const eInvoiceDisabledReason = !eInvoiceConfigurationReady
     ? "Sandbox eFaktúry ešte nie je zapnutý. Produkčné odosielanie zostáva zablokované."
@@ -117,8 +119,8 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
       ? "eFaktúra sa v tomto paneli pripravuje iba pre vydané doklady."
       : invoice.documentStatus !== "ISSUED"
         ? "Doklad musí byť najskôr finalizovaný."
-        : !invoice.order?.orderNumber
-          ? "Dokladu chýba číslo objednávky kupujúceho (BuyerReference)."
+        : !invoice.buyerReference?.trim()
+          ? "Dokladu chýba referencia dodaná odberateľom (BuyerReference)."
           : !hasFinancePermission(currentUser.role, "SEND_DOCUMENT")
             ? "Na validáciu eFaktúry nemáte oprávnenie."
             : undefined;
@@ -155,6 +157,8 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           title={invoice.invoiceNumber ?? (invoice.source === "HISTORICAL" ? invoice.externalNumber ?? "Historický originál" : isCreditNote ? "Koncept dobropisu" : "Koncept faktúry")}
           subtitle={`${isCreditNote ? "Dobropis" : isIssued ? "Vydaná faktúra" : "Prijatá faktúra"} · ${INVOICE_SOURCE_LABELS[invoice.source] ?? invoice.source}`}
         >
+          {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canEditManualDraft(invoice) && <Link href={`/financie/faktury/${id}/upravit`} className={btnSecondary}>Upraviť koncept</Link>}
+          {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canCopyInvoice(invoice) && <Link href={`/financie/faktury/nova?copyFrom=${id}`} className={btnSecondary}>Vytvoriť kópiu</Link>}
           <Link
             href="/financie/faktury"
             className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
@@ -233,6 +237,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
               {infoRow("Dátum splatnosti", formatDate(invoice.dueDate))}
               {invoice.deliveryDate && infoRow("Dátum dodania", formatDate(invoice.deliveryDate))}
               {invoice.variableSymbol && infoRow("Variabilný symbol", invoice.variableSymbol)}
+              {invoice.buyerReference && infoRow("Referencia odberateľa", invoice.buyerReference)}
               {invoice.externalNumber &&
                 infoRow(`Číslo v ${INVOICE_SOURCE_LABELS[invoice.source] ?? invoice.source}`, invoice.externalNumber)}
               {invoice.order &&
