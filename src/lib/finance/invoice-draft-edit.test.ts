@@ -34,6 +34,7 @@ test("editing recalculates prices and atomically replaces lines while preserving
 test.each([
   { documentStatus: "ISSUED" }, { documentStatus: "CANCELLED" }, { invoiceNumber: "2027001" }, { finalizedAt: new Date() },
   { source: "HISTORICAL" }, { source: "SUPERFAKTURA" }, { direction: "PRIJATA" }, { documentType: "CREDIT_NOTE" }, { orderId: "order" },
+  { consolidatedFrom: new Date("2027-01-01") },
   { _count: { paymentAllocations: 1, documents: 0, eInvoiceTransmissions: 0 } },
   { _count: { paymentAllocations: 0, documents: 1, eInvoiceTransmissions: 0 } },
   { _count: { paymentAllocations: 0, documents: 0, eInvoiceTransmissions: 1 } },

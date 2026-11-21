@@ -306,6 +306,10 @@ export function renderPeppolBisUbl(input: PeppolUblInput): RenderedPeppolUbl {
   const issueDate = date(input.issueDate, "dátum vystavenia");
   const dueDate = date(input.dueDate, "dátum splatnosti");
   const deliveryDate = date(input.tax.deliveryDate, "dátum dodania");
+  const period = input.consolidatedPeriod ? {
+    from: date(input.consolidatedPeriod.from, "začiatok obdobia"), to: date(input.consolidatedPeriod.to, "koniec obdobia"),
+  } : undefined;
+  if (period && (period.from > period.to || period.from.slice(0, 7) !== period.to.slice(0, 7))) throw new UblGenerationError("Súhrnná faktúra musí pokrývať platné obdobie jedného kalendárneho mesiaca.");
   const iban = text(issuer.iban, "IBAN predávajúceho").replaceAll(" ", "").toUpperCase();
   if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) throw new UblGenerationError("IBAN predávajúceho má neplatný formát.");
   if (issuer.bic && !/^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(issuer.bic.trim().toUpperCase())) {
@@ -355,6 +359,10 @@ export function renderPeppolBisUbl(input: PeppolUblInput): RenderedPeppolUbl {
     ...(input.note?.trim() ? [element("cbc:Note", input.note.trim())] : []),
     element("cbc:DocumentCurrencyCode", "EUR"),
     element("cbc:BuyerReference", buyerReference),
+    ...(period ? [
+      "<cac:InvoicePeriod>", element("cbc:StartDate", period.from), element("cbc:EndDate", period.to), "</cac:InvoicePeriod>",
+      "<cac:OrderReference>", element("cbc:ID", "Consolidated Invoice"), "</cac:OrderReference>",
+    ] : []),
     ...(isCreditNote
       ? [
           "<cac:BillingReference>",

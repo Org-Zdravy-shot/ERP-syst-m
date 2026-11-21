@@ -400,8 +400,8 @@ function drawDocumentHeader(
   }
   drawLabelValue(
     page,
-    "Dátum dodania",
-    date(data.tax.deliveryDate),
+    data.consolidatedPeriod ? "Obdobie dodaní" : "Dátum dodania",
+    data.consolidatedPeriod ? `${date(data.consolidatedPeriod.from)} – ${date(data.consolidatedPeriod.to)}` : date(data.tax.deliveryDate),
     MARGIN,
     detailsTop - 17,
     detailsWidth,
@@ -649,7 +649,7 @@ async function drawTotalsAndPayment(
         x: totalsX - 10,
         y: totalsY - 8,
         width: totalsWidth + 10,
-        height: 28,
+        height: 22,
         color: BRAND,
       });
     }
