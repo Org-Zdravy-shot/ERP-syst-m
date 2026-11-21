@@ -93,13 +93,15 @@ Vyhľadávanie má 650 ms oneskorenie, ochranu proti zastaraným odpovediam a p�
 
 ## Návrhy zmien na kontrolu
 
-Vetvy tvoria zásobník, nie päť nezávislých zmien. Poradie kontroly/integrácie:
+Vetvy tvoria zásobník, nie sedem nezávislých zmien. Poradie kontroly/integrácie:
 
 1. [PR #96 – UBL a Autoform adaptér](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/96)
 2. [PR #97 – vyhľadávanie a inline odberateľ](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/97)
 3. [PR #98 – perzistentné FMCG snapshoty](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/98)
 4. [PR #99 – editor a zobrazenie FMCG](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/99)
 5. [PR #100 – bezpečnostné aktualizácie závislostí](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/100)
+6. [PR #101 – doménová úprava konceptu a referencia odberateľa](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/101)
+7. [PR #102 – formulár úpravy a kópia faktúry](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/102)
 
 Všetky PR sú drafty. Hlavná vetva ani produkčné nastavenia sa nemenili. Po integrácii spodnej vetvy treba ďalšiemu PR upraviť cieľ a overiť diff. Pred prevádzkou ostáva API onboarding, vizuálne QA a integračné podmienky nižšie.
 
