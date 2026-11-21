@@ -16,6 +16,12 @@ export const consolidationSchema = z.array(z.object({
 export const sourceOrderInclude = { items: { include: { product: true }, orderBy: { id: "asc" as const } }, charges: { orderBy: { id: "asc" as const } } } satisfies Prisma.OrderInclude;
 type SourceOrder = Prisma.OrderGetPayload<{ include: typeof sourceOrderInclude }>;
 
+function localDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bratislava", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
 /** Lock in a deterministic order. Both single-order and consolidated drafts use this guard. */
 export async function lockUnbilledOrders(tx: Prisma.TransactionClient, ids: string[], direction: string): Promise<void> {
   if (new Set(ids).size !== ids.length) throw new Error("Rovnaká objednávka je vybraná viackrát.");
@@ -62,7 +68,7 @@ export function buildConsolidation(orders: SourceOrder[], raw: NonNullable<Creat
     if (order.status === "ZRUSENA") fail("zrušenú objednávku nemožno fakturovať.");
     const fmcg = parseFmcgLine({ properties: {
       delivery_date: selection.deliveryDate, buyer_order_number: selection.buyerOrderNumber,
-      supplier_order_number: order.orderNumber, supplier_order_date: order.orderDate.toISOString().slice(0, 10),
+      supplier_order_number: order.orderNumber, supplier_order_date: localDate(order.orderDate),
       ...(selection.deliveryNoteNumber ? { delivery_note_number: selection.deliveryNoteNumber } : {}),
     } }, items.length + 1);
     const firstLineNumber = items.length + 1;

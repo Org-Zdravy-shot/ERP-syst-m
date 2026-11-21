@@ -39,6 +39,10 @@ test("source fingerprint detects price changes and ignores payment tracking chan
   expect(sourceOrderHash({ ...original, platformSettlementCents: 100 })).toBe(sourceOrderHash(original));
   expect(sourceOrderHash({ ...original, items: original.items.map(i => ({ ...i, quantity: 4 })) })).not.toBe(sourceOrderHash(original));
 });
+test("supplier order date follows the Slovak calendar at midnight", () => {
+  const result = buildConsolidation([{ ...order("a"), orderDate: new Date("2027-01-01T23:30:00Z") }, order("b")], [selection("a"), selection("b")], issueDate);
+  expect(result.items[0].fmcg?.properties.supplier_order_date).toBe("2027-01-02");
+});
 test("single and summary invoice conflicts are checked under deterministic order locks", async () => {
   const findFirst = vi.fn().mockResolvedValue(null);
   const lock = vi.fn().mockResolvedValue([{ id: "order" }]);
