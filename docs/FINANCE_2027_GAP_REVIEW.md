@@ -115,6 +115,7 @@ Vetvy tvoria nadväzujúci zásobník zmien. Poradie kontroly/integrácie:
 6. [PR #101 – doménová úprava konceptu a referencia odberateľa](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/101)
 7. [PR #102 – formulár úpravy a kópia faktúry](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/102)
 8. [PR #103 – súhrnné faktúry, objednávkové väzby a DPH podľa dodaní](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/103)
+9. [PR #104 – výber objednávok a ochrana zdrojových dokladov](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/104)
 
 Všetky PR sú drafty. Hlavná vetva ani produkčné nastavenia sa nemenili. Po integrácii spodnej vetvy treba ďalšiemu PR upraviť cieľ a overiť diff. Pred prevádzkou ostáva API onboarding, vizuálne QA a integračné podmienky nižšie.
 
