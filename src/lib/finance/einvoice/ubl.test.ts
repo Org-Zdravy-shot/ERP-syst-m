@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { InvoiceLineCalculation, PartySnapshot, TaxSnapshot } from "@/lib/finance/contracts";
 import { renderPeppolBisUbl, UblGenerationError, type PeppolUblInput } from "./ubl";
 
+it("exports the consolidated period and FMCG header order reference in UBL schema order", () => {
+  const rendered = renderPeppolBisUbl(invoice({ consolidatedPeriod: { from: new Date("2026-10-01"), to: new Date("2026-10-15") } })).xml;
+  expect(rendered).toContain("<cac:InvoicePeriod><cbc:StartDate>2026-10-01</cbc:StartDate><cbc:EndDate>2026-10-15</cbc:EndDate></cac:InvoicePeriod><cac:OrderReference><cbc:ID>Consolidated Invoice</cbc:ID></cac:OrderReference>");
+  expect(rendered.indexOf("<cac:OrderReference>")).toBeLessThan(rendered.indexOf("<cac:AccountingSupplierParty>"));
+  expect(() => renderPeppolBisUbl(invoice({ consolidatedPeriod: { from: new Date("2026-09-30"), to: new Date("2026-10-15") } }))).toThrow("kalendárneho mesiaca");
+});
+
 const issuer: PartySnapshot = {
   name: "Zdravý Shot & Company s. r. o.",
   ico: "11223344",

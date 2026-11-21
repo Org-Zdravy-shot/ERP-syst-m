@@ -79,6 +79,8 @@ export interface CreateInvoiceDraftInput {
   clientId?: string;
   counterparty?: PartySnapshot;
   orderId?: string;
+  /** Complete delivered orders; source items are loaded atomically, never trusted from a form. */
+  consolidation?: { orderId: string; expectedUpdatedAt: string; deliveryDate: string; buyerOrderNumber: string; deliveryNoteNumber?: string }[];
   originalInvoiceId?: string;
   issueDate: Date;
   dueDate: Date;

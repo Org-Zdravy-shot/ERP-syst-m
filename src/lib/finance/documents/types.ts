@@ -19,6 +19,7 @@ export interface InvoicePdfData {
   variableSymbol?: string;
   /** Explicitná referencia od kupujúceho; nikdy interné číslo ERP objednávky. */
   buyerReference?: string;
+  consolidatedPeriod?: { from: Date; to: Date };
   note?: string;
   issuer: PartySnapshot;
   counterparty: PartySnapshot;

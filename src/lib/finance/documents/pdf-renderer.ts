@@ -400,8 +400,8 @@ function drawDocumentHeader(
   }
   drawLabelValue(
     page,
-    "Dátum dodania",
-    date(data.tax.deliveryDate),
+    data.consolidatedPeriod ? "Obdobie dodaní" : "Dátum dodania",
+    data.consolidatedPeriod ? `${date(data.consolidatedPeriod.from)} – ${date(data.consolidatedPeriod.to)}` : date(data.tax.deliveryDate),
     MARGIN,
     detailsTop - 17,
     detailsWidth,
