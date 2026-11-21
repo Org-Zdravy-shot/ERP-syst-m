@@ -649,7 +649,7 @@ async function drawTotalsAndPayment(
         x: totalsX - 10,
         y: totalsY - 8,
         width: totalsWidth + 10,
-        height: 28,
+        height: 22,
         color: BRAND,
       });
     }
