@@ -957,6 +957,7 @@ model Order {
   items     OrderItem[]
   charges   OrderCharge[]
   invoices  Invoice[]
+  invoiceOrders InvoiceOrder[]
   movements StockMovement[]
   wooSync   WooOrderSync?
 }
@@ -1085,6 +1086,8 @@ model Invoice {
   totalGrossCents      Int
   variableSymbol       String?
   buyerReference       String? // Reference supplied by the buyer; never an internal ERP order number.
+  consolidatedFrom     DateTime?
+  consolidatedTo       DateTime?
   issuerSnapshot       Json?
   counterpartySnapshot Json?
   taxSnapshot          Json?
@@ -1093,6 +1096,7 @@ model Invoice {
   updatedAt            DateTime  @updatedAt
 
   items                    InvoiceItem[]
+  orderLinks               InvoiceOrder[]
   paymentAllocations       PaymentAllocation[]
   documents                DocumentAsset[]
   emailDeliveries          EmailDelivery[]
@@ -1106,6 +1110,23 @@ model Invoice {
   @@index([supplierName, externalNumber])
   @@index([supplierId, issueDate])
   @@index([originalInvoiceId])
+}
+
+// Immutable source references for an invoice covering multiple complete orders.
+model InvoiceOrder {
+  invoiceId String
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sourceHash String
+  firstLineNumber Int
+  lineCount Int
+  deliveryDate DateTime
+  buyerOrderNumber String
+  deliveryNoteNumber String?
+
+  @@id([invoiceId, orderId])
+  @@index([orderId])
 }
 
 model InvoiceItem {
