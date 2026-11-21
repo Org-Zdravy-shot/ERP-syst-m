@@ -14,10 +14,10 @@ const FIELDS = [
   ["street", "Ulica a číslo", 255], ["city", "Mesto", 120], ["zip", "PSČ", 20],
 ] as const;
 
-export function InvoiceCustomerPicker({ clients, onSavingChange }: { clients: ClientOption[]; onSavingChange: (saving: boolean) => void }) {
+export function InvoiceCustomerPicker({ clients, onSavingChange, initialClientId }: { clients: ClientOption[]; onSavingChange: (saving: boolean) => void; initialClientId?: string }) {
   const id = useId();
   const [options, setOptions] = useState(clients);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(clients.some((client) => client.id === initialClientId) ? initialClientId! : "");
   const [draft, setDraft] = useState<BillingFields | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
