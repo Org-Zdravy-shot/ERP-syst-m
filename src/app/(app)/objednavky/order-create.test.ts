@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(), nextNumber: vi.fn(), nextEntityNumber: vi.fn(), revalidatePath: vi.fn(), redirect: vi.fn(),
   transaction: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), deleteItems: vi.fn(), deleteCharges: vi.fn(),
+  lockedOrder: vi.fn(), lock: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/invoicing", () => ({ nextNumber: mocks.nextNumber, nextEntityNumber: mocks.nextEntityNumber }));
@@ -26,7 +27,9 @@ beforeEach(() => {
   mocks.nextNumber.mockResolvedValue("OBJ2026-0002");
   mocks.nextEntityNumber.mockResolvedValue("OBJK2026-0001");
   mocks.create.mockResolvedValue({ id: "order-2" });
-  mocks.transaction.mockImplementation((callback) => callback({ order: { create: mocks.create, update: mocks.update, findFirst: mocks.findFirst }, orderItem: { deleteMany: mocks.deleteItems }, orderCharge: { deleteMany: mocks.deleteCharges } }));
+  mocks.lockedOrder.mockResolvedValue({ id: "order-2", status: "NOVA", invoices: [], invoiceOrders: [] });
+  mocks.lock.mockResolvedValue([{ id: "order-2" }]);
+  mocks.transaction.mockImplementation((callback) => callback({ $queryRaw: mocks.lock, order: { create: mocks.create, update: mocks.update, findFirst: mocks.findFirst, findUnique: mocks.lockedOrder }, orderItem: { deleteMany: mocks.deleteItems }, orderCharge: { deleteMany: mocks.deleteCharges } }));
 });
 
 test("uloží Gleistein s presnou cenou, dodaním a bez dohodnutej platby", async () => {
@@ -73,6 +76,15 @@ test("úprava OBJ2026-0002 nahradí dve obchádzkové položky jedinou presnou b
   expect(mocks.deleteItems).toHaveBeenCalledWith({ where: { orderId: "order-2" } });
   expect(mocks.update).toHaveBeenCalledWith({ where: { id: "order-2" }, data: expect.objectContaining({ items: { create: [expect.objectContaining({ quantity: 150, unitPriceExact: "1.8270" })] } }) });
   expect(mocks.redirect).toHaveBeenCalledWith("/objednavky/order-2?ulozene=1");
+});
+
+test("objednávka rezervovaná súhrnným konceptom sa pod zámkom odmietne upraviť", async () => {
+  mocks.findUnique.mockResolvedValueOnce({ id: "order-2", status: "NOVA", invoices: [] });
+  mocks.lockedOrder.mockResolvedValueOnce({ id: "order-2", status: "NOVA", invoices: [], invoiceOrders: [{ invoiceId: "summary" }] });
+  expect(await updateOrder("order-2", {}, orderForm())).toMatchObject({ error: expect.stringContaining("už patrí") });
+  expect(mocks.lock).toHaveBeenCalled();
+  expect(mocks.deleteItems).not.toHaveBeenCalled();
+  expect(mocks.update).not.toHaveBeenCalled();
 });
 
 test("Zľavomat eviduje cudziu dopravu mimo príjmu predajcu a historické odoslanie", async () => {

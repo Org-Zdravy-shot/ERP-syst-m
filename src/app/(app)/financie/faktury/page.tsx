@@ -123,6 +123,7 @@ export default async function FakturyPage({
           + Nová faktúra
         </Link>
         <Link href="/financie/faktury/historicka" className={btnSecondary}>+ Historický originál</Link>
+        <Link href="/financie/faktury/suhrnna" className={btnSecondary}>+ Súhrnná faktúra</Link>
       </PageHeader>
 
       <nav aria-label="Stav úhrady" className="mb-5 flex flex-wrap gap-1 border-b border-stone-200">

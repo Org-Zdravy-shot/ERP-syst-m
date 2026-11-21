@@ -39,6 +39,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
       items: true,
       paymentAllocations: { where: { reversedAt: null } },
       order: { select: { id: true, orderNumber: true } },
+      orderLinks: { include: { order: { select: { id: true, orderNumber: true } } }, orderBy: { firstLineNumber: "asc" } },
       originalInvoice: { select: { id: true, invoiceNumber: true } },
       creditNotes: {
         orderBy: { issueDate: "desc" },
@@ -240,6 +241,8 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
               {invoice.buyerReference && infoRow("Referencia odberateľa", invoice.buyerReference)}
               {invoice.externalNumber &&
                 infoRow(`Číslo v ${INVOICE_SOURCE_LABELS[invoice.source] ?? invoice.source}`, invoice.externalNumber)}
+              {invoice.consolidatedFrom && invoice.consolidatedTo && infoRow("Obdobie dodaní", `${formatDate(invoice.consolidatedFrom)} – ${formatDate(invoice.consolidatedTo)}`)}
+              {invoice.orderLinks.length > 0 && infoRow("Objednávky", <ul className="space-y-1">{invoice.orderLinks.map(link => <li key={link.orderId}><Link className="underline" href={`/objednavky/${link.orderId}`}>{link.order.orderNumber}</Link> · {link.buyerOrderNumber} · {formatDate(link.deliveryDate)}</li>)}</ul>)}
               {invoice.order &&
                 infoRow(
                   "Objednávka",

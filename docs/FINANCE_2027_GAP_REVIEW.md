@@ -36,7 +36,19 @@ Hárok AdditionalItemProperty označuje typy poplatkov num, hlavný mapovací h�
 
 **Formulár:** každá položka novej ručnej faktúry má voliteľnú sekciu „Údaje pre obchodné reťazce“. Obsahuje GTIN a všetkých 38 polí špecifikácie; základné referencie a šarža sú oddelené od rozšírených polí. Prázdne voliteľné hodnoty sa vynechávajú, desatinná čiarka sa normalizuje, validácia označí konkrétny riadok/pole. Detail faktúry zobrazuje uložené metadáta pri každej položke.
 
-**Zostáva:** automatické napojenie z objednávok/expedície, súhrnná fakturácia viacerých dodaní, štandardné hlavičkové referencie, kontrola PDF do 10 MB a validačný test BIS + slovenského overlayu + akceptácia 101ky. Súbežné EDI je alternatíva navrhnutá odberateľom, nie dôkaz existujúceho EDI pripojenia v našom ERP.
+**Zostáva:** automatické mapovanie šarží/exspirácií/GLN z expedície, delené dodania jednej objednávky, ostatné štandardné hlavičkové referencie, kontrola PDF do 10 MB a validačný test BIS + slovenského overlayu + akceptácia 101ky. Súhrnný koncept z viacerých celých doručených objednávok je doplnený nižšie. Súbežné EDI je alternatíva navrhnutá odberateľom, nie dôkaz existujúceho EDI pripojenia v našom ERP.
+
+## Súhrnné faktúry z objednávok
+
+Nová agenda `/financie/faktury/suhrnna` vyberá odberateľa a právny subjekt, potom 2–50 celých doručených objednávok. Zobrazí najnovších 200 nevyfakturovaných objednávok, pri prekročení limitu to výslovne oznámi. Používateľ potvrdí skutočný dátum dodania, číslo objednávky odberateľa a prípadný dodací list; plánovaný dátum sa nepovažuje za potvrdené dodanie. Hlavičková referencia odberateľa je samostatná. Čísla odberateľových objednávok sa neodvodzujú z interného číslovania.
+
+Migrácia `20261121120000_consolidated_invoice_orders` pridáva obdobie a nemenné väzby `InvoiceOrder` s rozsahmi riadkov a odtlačkom zdroja. Ceny, množstvá a poplatky predajcu sa načítajú zo servera pod deterministickými zámkami objednávok. Rovnaký zámok a kontrolu používajú bežné aj súhrnné koncepty. Storno uvoľní rezerváciu. Úprava objednávky kontroluje oba typy väzieb znovu pod zámkom pred mazáním položiek. Staré faktúry sa neprepisujú.
+
+Koncept uchová každé dodanie oddelene, vrátane cien na štyri desatinné miesta. Finalizácia overí nezmenené objednávky, daňové zaobchádzanie s dopravou a DPH produktu podľa dátumu konkrétneho dodania. Ak firemný/daňový profil nepokrýva celé obdobie, vyžaduje rozdelenie dokladov. UBL obsahuje obdobie, hlavičkové `Consolidated Invoice` podľa prílohy FMCG a samostatné riadkové referencie. PDF obsahuje obdobie a referencie v popise položky. Súhrnný koncept sa neupravuje ručným editorom: pri zmene zdroja sa zruší a znovu vytvorí.
+
+Rozsah tejto verzie: celé potvrdené dodania, jeden odberateľ, jeden právny subjekt, EUR a jeden kalendárny mesiac. Nezahŕňa čiastočné fakturovanie alebo delenie objednávky podľa expedovaných šarží. Pravidlo obdobia bolo overené v [informácii Finančnej správy](https://podpora.financnasprava.sk/149740-S%C3%BAhrnn%C3%A1-fakt%C3%BAra); pred prevádzkou treba overiť lehoty podľa účinného znenia od roku 2027. Formulár termín zákonnej lehoty zatiaľ nevyhodnocuje.
+
+Lokálne overenie 21. 11.: 22. migrácia prešla na izolovanom PostgreSQL 18. Reálny súbeh single/summary skončil jedným víťazom; storno uvoľnilo objednávky; zmena množstva v zdroji zablokovala finalizáciu bez čísla. Prešla skutočná lokálna finalizácia so syntetickými daňovými profilmi a dvomi sadzbami počas mesiaca, uložené dáta prešli do UBL a PDF. PDF bolo vykreslené a vizuálne skontrolované; opravené prekrytie zvýrazneného súčtu s riadkom DPH. Klikacia kontrola formulára zostáva neoverená: browser access host je nedostupný. Nič sa neposlalo odberateľovi ani do Peppol siete.
 
 ## SuperFaktúra: overené pracovné postupy a medzery
 
@@ -84,7 +96,7 @@ Vyhľadávanie má 650 ms oneskorenie, ochranu proti zastaraným odpovediam a p�
 
 ## Lokálna validácia a nasadenie
 
-- Celá sada po rozšírení 21. 11.: 356 úspešných testov, 2 preskočené; TypeScript a produkčný build prešli s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
+- Celá sada po rozšírení o súhrnné faktúry 21. 11.: 373 úspešných testov, 2 preskočené; TypeScript a produkčný build prešli s jednorazovým lokálnym SESSION_SECRET bez kopírovania produkčných poverení.
 - Na samostatnom lokálnom PostgreSQL 18 prešlo všetkých 20 migrácií vrátane FMCG. Integračná skúška overila súbežné vytvorenie jedného klienta, JSONB roundtrip konceptu a súm, odmietnutie neobjektového snapshotu databázou, prenos uloženého snapshotu do UBL a jeho zachovanie v plnom dobropise. Zistila aj návratový typ void pri advisory locku; query má teraz explicitný cast na text pre Prisma. Všetky dáta boli syntetické. Vystavená faktúra bola lokálna fixture, nie test celej finalizácie alebo skutočné odoslanie.
 - Lokálny `/api/health` vrátil 200/ok. Manuálna vizuálna kontrola neprebehla: browser host bol nedostupný, natívne Chrome hlásilo chýbajúce okno/timeout. Testovací web aj databáza boli po kontrole zastavené.
 - Dňa 21. 11. prešla aj 21. migrácia nad predchádzajúcou lokálnou databázou. Reálne súbežné úpravy rovnakého konceptu skončili jedným uložením a jedným odmietnutím starej verzie. Chyba cudzieho kľúča pri nahradení riadkov vrátila späť hlavičku, položky aj verziu. Vystavený doklad sa odmietol upraviť a staré referencie zostali NULL. Opakovaný pokus o vizuálne QA znovu zablokovalo nedostupné okno Chrome.
@@ -93,7 +105,7 @@ Vyhľadávanie má 650 ms oneskorenie, ochranu proti zastaraným odpovediam a p�
 
 ## Návrhy zmien na kontrolu
 
-Vetvy tvoria zásobník, nie sedem nezávislých zmien. Poradie kontroly/integrácie:
+Vetvy tvoria nadväzujúci zásobník zmien. Poradie kontroly/integrácie:
 
 1. [PR #96 – UBL a Autoform adaptér](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/96)
 2. [PR #97 – vyhľadávanie a inline odberateľ](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/97)
@@ -102,6 +114,8 @@ Vetvy tvoria zásobník, nie sedem nezávislých zmien. Poradie kontroly/integr�
 5. [PR #100 – bezpečnostné aktualizácie závislostí](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/100)
 6. [PR #101 – doménová úprava konceptu a referencia odberateľa](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/101)
 7. [PR #102 – formulár úpravy a kópia faktúry](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/102)
+8. [PR #103 – súhrnné faktúry, objednávkové väzby a DPH podľa dodaní](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/103)
+9. [PR #104 – výber objednávok a ochrana zdrojových dokladov](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/104)
 
 Všetky PR sú drafty. Hlavná vetva ani produkčné nastavenia sa nemenili. Po integrácii spodnej vetvy treba ďalšiemu PR upraviť cieľ a overiť diff. Pred prevádzkou ostáva API onboarding, vizuálne QA a integračné podmienky nižšie.
 

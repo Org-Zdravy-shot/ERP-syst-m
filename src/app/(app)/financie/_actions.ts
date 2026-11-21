@@ -353,6 +353,9 @@ export async function cancelInvoice(
 
   try {
     await invoiceService.cancel(invoiceId, reason, user.userId);
+    const source = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { orderId: true, orderLinks: { select: { orderId: true } } } });
+    for (const id of [source?.orderId, ...(source?.orderLinks.map(link => link.orderId) ?? [])]) if (id) revalidatePath(`/objednavky/${id}`);
+    revalidatePath("/financie/faktury/suhrnna");
     revalidatePath("/financie");
     revalidatePath("/financie/faktury");
     revalidatePath(`/financie/faktury/${invoiceId}`);
