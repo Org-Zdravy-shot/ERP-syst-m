@@ -73,7 +73,7 @@ export class OutgoingEInvoiceValidationService {
     if (!invoice) throw new Error("Faktúra sa nenašla.");
     if (!invoice.buyerReference?.trim()) {
       throw new Error(
-        "Faktúre chýba číslo objednávky kupujúceho pre Peppol BuyerReference.",
+        "Faktúre chýba referencia dodaná odberateľom pre Peppol BuyerReference. Naše interné číslo objednávky ju nenahrádza.",
       );
     }
     if (!invoice.issuer.dic || !invoice.counterparty.dic) {

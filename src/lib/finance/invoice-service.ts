@@ -16,6 +16,8 @@ import type {
   InvoiceDocumentType,
   InvoicePaymentStatus,
   InvoiceResult,
+  InvoiceLineCalculation,
+  UpdateInvoiceDraftInput,
   InvoiceService,
   PartySnapshot,
   TaxSnapshot,
@@ -99,6 +101,28 @@ function validateDraftDates(input: CreateInvoiceDraftInput): void {
   if (input.dueDate.getTime() < input.issueDate.getTime()) {
     throw new FinanceDomainError("INVALID_LINE", "Dátum splatnosti nesmie byť pred dátumom vystavenia.");
   }
+}
+
+function normalizeBuyerReference(value?: string): string | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length > 140 || /[\u0000-\u001F\uFFFE\uFFFF]/u.test(trimmed)) {
+    throw new FinanceDomainError("INVALID_LINE", "Referencia odberateľa môže mať najviac 140 znakov a nesmie obsahovať riadiace znaky.");
+  }
+  return trimmed;
+}
+
+function invoiceLineData(line: InvoiceLineCalculation) {
+  return {
+    productId: line.productId ?? null, lineNumber: line.lineNumber,
+    description: line.description, productSku: line.productSku ?? null,
+    quantity: line.quantity, unit: line.unit,
+    unitPriceCents: line.unitPriceCents, unitPriceExact: line.unitPriceExact ?? null,
+    vatRate: line.vatRate, totalNetCents: line.totalNetCents,
+    totalVatCents: line.totalVatCents, totalGrossCents: line.totalGrossCents,
+    taxCategory: line.taxCategory ?? "STANDARD",
+    ...(line.fmcg ? { fmcgSnapshot: toJson(line.fmcg) } : {}),
+  };
 }
 
 function mapInvoiceResult(
@@ -215,6 +239,7 @@ export class PrismaInvoiceService implements InvoiceService {
   async createDraft(input: CreateInvoiceDraftInput): Promise<InvoiceResult> {
     if (!input.actorId.trim()) throw new FinanceDomainError("INVALID_LINE", "Chýba používateľ operácie.");
     validateDraftDates(input);
+    const buyerReference = normalizeBuyerReference(input.buyerReference);
     if (input.documentType === "CREDIT_NOTE" && !input.originalInvoiceId) {
       throw new FinanceDomainError("INVALID_LINE", "Dobropis musí odkazovať na pôvodnú faktúru.");
     }
@@ -265,25 +290,11 @@ export class PrismaInvoiceService implements InvoiceService {
           totalVatCents: calculation.totalVatCents,
           totalGrossCents: calculation.totalGrossCents,
           variableSymbol: input.variableSymbol ?? null,
+          buyerReference: buyerReference ?? null,
           ...(counterparty ? { counterpartySnapshot: toJson(counterparty) } : {}),
           note: input.note ?? null,
           items: {
-            create: calculation.lines.map((line) => ({
-              productId: line.productId ?? null,
-              lineNumber: line.lineNumber,
-              description: line.description,
-              productSku: line.productSku ?? null,
-              quantity: line.quantity,
-              unit: line.unit,
-              unitPriceCents: line.unitPriceCents,
-              unitPriceExact: line.unitPriceExact ?? null,
-              vatRate: line.vatRate,
-              totalNetCents: line.totalNetCents,
-              totalVatCents: line.totalVatCents,
-              totalGrossCents: line.totalGrossCents,
-              taxCategory: line.taxCategory ?? "STANDARD",
-              ...(line.fmcg ? { fmcgSnapshot: toJson(line.fmcg) } : {}),
-            })),
+            create: calculation.lines.map(invoiceLineData),
           },
         },
       });
@@ -299,6 +310,54 @@ export class PrismaInvoiceService implements InvoiceService {
         },
       });
       return mapInvoiceResult(created, calculation, "UNPAID");
+    });
+  }
+
+  async updateDraft(invoiceId: string, input: UpdateInvoiceDraftInput): Promise<InvoiceResult> {
+    if (!input.actorId.trim()) throw new FinanceDomainError("INVALID_LINE", "Chýba používateľ operácie.");
+    validateDraftDates({ ...input, direction: "VYDANA" });
+    if (!(input.expectedUpdatedAt instanceof Date) || Number.isNaN(input.expectedUpdatedAt.getTime())) {
+      throw new FinanceDomainError("INVALID_LINE", "Chýba verzia upravovaného konceptu. Obnovte formulár.");
+    }
+    const buyerReference = normalizeBuyerReference(input.buyerReference);
+    const calculation = calculateInvoice({ currency: input.currency, lines: input.items });
+    return prisma.$transaction(async (tx) => {
+      await lockInvoice(tx, invoiceId);
+      const current = await tx.invoice.findUnique({ where: { id: invoiceId }, include: {
+        items: { orderBy: { lineNumber: "asc" } },
+        _count: { select: { paymentAllocations: true, documents: true, eInvoiceTransmissions: true } },
+      } });
+      if (!current) throw new FinanceDomainError("INVOICE_NOT_FOUND", "Koncept faktúry neexistuje.");
+      if (current.documentStatus !== "DRAFT" || current.invoiceNumber || current.finalizedAt) {
+        throw new FinanceDomainError("INVOICE_IMMUTABLE", "Upravovať možno iba nevystavený koncept. Vystavená faktúra zostáva nezmenená.");
+      }
+      if (current.source !== "INTERNA" || current.direction !== "VYDANA" || current.documentType !== "INVOICE" || current.orderId) {
+        throw new FinanceDomainError("INVALID_TRANSITION", "Tento editor upravuje iba ručne vytvorené vydané faktúry bez väzby na objednávku.");
+      }
+      if (current.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+        throw new FinanceDomainError("INVALID_TRANSITION", "Koncept medzitým zmenil iný používateľ. Obnovte stránku a skontrolujte aktuálnu verziu.");
+      }
+      if (Object.values(current._count).some((count) => count > 0)) {
+        throw new FinanceDomainError("INVALID_TRANSITION", "Koncept už má naviazanú úhradu, dokument alebo elektronický prenos. Úprava je zablokovaná.");
+      }
+      const data = {
+        updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)),
+        legalEntity: input.legalEntity ?? null, clientId: input.clientId ?? null,
+        issueDate: input.issueDate, dueDate: input.dueDate, deliveryDate: input.deliveryDate ?? null,
+        currency: input.currency, variableSymbol: input.variableSymbol ?? null,
+        buyerReference: buyerReference ?? null, externalNumber: input.externalNumber ?? null, note: input.note ?? null,
+        totalNetCents: calculation.totalNetCents, totalVatCents: calculation.totalVatCents, totalGrossCents: calculation.totalGrossCents,
+        // An edited draft must take fresh party/tax snapshots at finalization.
+        issuerSnapshot: Prisma.DbNull, counterpartySnapshot: Prisma.DbNull, taxSnapshot: Prisma.DbNull,
+      };
+      const updated = await tx.invoice.update({ where: { id: invoiceId }, data: {
+        ...data, items: { deleteMany: {}, create: calculation.lines.map(invoiceLineData) },
+      } });
+      await createAudit(tx, { actorId: input.actorId, action: "INVOICE_DRAFT_UPDATED", entityId: invoiceId,
+        beforeData: { updatedAt: current.updatedAt, clientId: current.clientId, legalEntity: current.legalEntity, issueDate: current.issueDate, dueDate: current.dueDate, deliveryDate: current.deliveryDate, buyerReference: current.buyerReference, note: current.note, totalGrossCents: current.totalGrossCents, items: current.items },
+        afterData: { ...input, totalGrossCents: calculation.totalGrossCents },
+      });
+      return mapInvoiceResult(updated, calculation, "UNPAID");
     });
   }
 
@@ -606,6 +665,7 @@ export class PrismaInvoiceService implements InvoiceService {
       source: "INTERNA",
       clientId: original.clientId ?? undefined,
       counterparty: snapshot,
+      buyerReference: original.buyerReference ?? undefined,
       originalInvoiceId: original.id,
       issueDate: input.issueDate,
       dueDate: input.dueDate,

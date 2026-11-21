@@ -1084,6 +1084,7 @@ model Invoice {
   totalVatCents        Int
   totalGrossCents      Int
   variableSymbol       String?
+  buyerReference       String? // Reference supplied by the buyer; never an internal ERP order number.
   issuerSnapshot       Json?
   counterpartySnapshot Json?
   taxSnapshot          Json?

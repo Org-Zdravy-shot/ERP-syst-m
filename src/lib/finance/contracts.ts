@@ -85,6 +85,7 @@ export interface CreateInvoiceDraftInput {
   deliveryDate?: Date;
   currency: Currency;
   variableSymbol?: string;
+  buyerReference?: string;
   note?: string;
   items: InvoiceLineInput[];
   actorId: string;
@@ -98,6 +99,12 @@ export interface InvoiceResult {
   documentStatus: InvoiceDocumentStatus;
   paymentStatus: InvoicePaymentStatus;
   calculation: InvoiceCalculation;
+}
+
+export interface UpdateInvoiceDraftInput extends Pick<CreateInvoiceDraftInput,
+  "legalEntity" | "clientId" | "issueDate" | "dueDate" | "deliveryDate" | "currency" | "variableSymbol" | "buyerReference" | "externalNumber" | "note" | "items" | "actorId"
+> {
+  expectedUpdatedAt: Date;
 }
 
 export interface FinalizedInvoice extends InvoiceResult {
@@ -140,6 +147,7 @@ export interface AccountingExport {
 
 export interface InvoiceService {
   createDraft(input: CreateInvoiceDraftInput): Promise<InvoiceResult>;
+  updateDraft(invoiceId: string, input: UpdateInvoiceDraftInput): Promise<InvoiceResult>;
   calculate(input: CalculateInvoiceInput): InvoiceCalculation;
   finalize(invoiceId: string, actorId: string): Promise<FinalizedInvoice>;
   createCreditNote(input: CreateCreditNoteInput): Promise<InvoiceResult>;

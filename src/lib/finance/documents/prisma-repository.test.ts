@@ -35,6 +35,7 @@ function databaseInvoice(
     dueDate: fixture.dueDate,
     finalizedAt: fixture.finalizedAt,
     variableSymbol: fixture.variableSymbol,
+    buyerReference: "BUYER-42",
     note: fixture.note,
     issuerSnapshot: fixture.issuer,
     counterpartySnapshot: fixture.counterparty,
@@ -91,17 +92,23 @@ test("dobropis prenesie číslo pôvodnej faktúry do PDF dát", async () => {
     "invoice-test-1",
   );
   expect(data?.originalInvoiceNumber).toBe("2026008");
-  expect(data?.buyerReference).toBe("OBJ2026-0041");
+  expect(data?.buyerReference).toBe("BUYER-42");
 });
 
-test("faktúra prenesie číslo objednávky kupujúceho ako BuyerReference", async () => {
+test("faktúra prenesie explicitnú referenciu odberateľa do BuyerReference", async () => {
   mocks.findUnique.mockResolvedValue(databaseInvoice());
 
   const data = await new PrismaDocumentRepository().getInvoicePdfData(
     "invoice-test-1",
   );
 
-  expect(data?.buyerReference).toBe("OBJ2026-0042");
+  expect(data?.buyerReference).toBe("BUYER-42");
+});
+
+test("interné číslo objednávky nenahradí chýbajúcu referenciu odberateľa", async () => {
+  mocks.findUnique.mockResolvedValue(databaseInvoice({ buyerReference: null }));
+  const data = await new PrismaDocumentRepository().getInvoicePdfData("invoice-test-1");
+  expect(data?.buyerReference).toBeUndefined();
 });
 
 test("PDF podklad prečíta presnú cenu položky", async () => {

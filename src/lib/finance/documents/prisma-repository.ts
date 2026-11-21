@@ -105,6 +105,7 @@ export class PrismaDocumentRepository implements DocumentRepository {
         dueDate: true,
         finalizedAt: true,
         variableSymbol: true,
+        buyerReference: true,
         note: true,
         issuerSnapshot: true,
         counterpartySnapshot: true,
@@ -112,11 +113,9 @@ export class PrismaDocumentRepository implements DocumentRepository {
         totalNetCents: true,
         totalVatCents: true,
         totalGrossCents: true,
-        order: { select: { orderNumber: true } },
         originalInvoice: {
           select: {
             invoiceNumber: true,
-            order: { select: { orderNumber: true } },
           },
         },
         items: {
@@ -276,10 +275,7 @@ export class PrismaDocumentRepository implements DocumentRepository {
       finalizedAt: invoice.finalizedAt,
       currency: "EUR",
       variableSymbol: invoice.variableSymbol ?? undefined,
-      buyerReference:
-        invoice.order?.orderNumber ??
-        invoice.originalInvoice?.order?.orderNumber ??
-        undefined,
+      buyerReference: invoice.buyerReference?.trim() || undefined,
       note: invoice.note ?? undefined,
       issuer: issuer.data,
       counterparty: counterparty.data,
