@@ -29,17 +29,19 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
       items: { include: { product: true } },
       charges: true,
       invoices: true,
+      invoiceOrders: { include: { invoice: true } },
       subscription: true,
       inboxMessage: true,
       movements: { include: { product: true, batch: { select: { batchNumber: true, expiryDate: true } } }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!order) notFound();
+  const invoices = [...new Map([...order.invoices, ...order.invoiceOrders.map(link => link.invoice)].map(invoice => [invoice.id, invoice])).values()];
 
   const totals = computeTotals([...order.items, ...order.charges.filter((charge) => charge.includedInSellerTotal).map((charge) => ({ quantity: 1, ...charge }))]);
   const taxReviewNeeded = order.charges.some((charge) => charge.includedInSellerTotal && ["UNVERIFIED", "FOREIGN"].includes(charge.taxTreatment));
   const allowedStatuses = ORDER_STATUS_TRANSITIONS[order.status] ?? [];
-  const isEditable = EDITABLE_ORDER_STATUSES.includes(order.status) && !order.invoices.some((invoice) => invoice.direction === "VYDANA" && invoice.documentStatus !== "CANCELLED");
+  const isEditable = EDITABLE_ORDER_STATUSES.includes(order.status) && !invoices.some((invoice) => invoice.direction === "VYDANA" && invoice.documentStatus !== "CANCELLED");
 
   const infoRow = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-4 py-1.5">
@@ -135,7 +137,7 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="font-semibold text-stone-900">Faktúry</h2>
               {order.status !== "ZRUSENA" &&
-                !order.invoices.some(
+                !invoices.some(
                   (i) =>
                     i.direction === "VYDANA" &&
                     i.documentType === "INVOICE" &&
@@ -144,11 +146,11 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
                   <IssueInvoiceButton action={issueInvoiceFromOrder.bind(null, order.id)} />
                 )}
             </div>
-            {order.invoices.length === 0 ? (
+            {invoices.length === 0 ? (
               <p className="text-sm text-stone-400">Zatiaľ žiadna faktúra.</p>
             ) : (
               <ul className="space-y-2">
-                {order.invoices.map((invoice) => (
+                {invoices.map((invoice) => (
                   <li key={invoice.id} className="flex items-center justify-between text-sm">
                     <Link href={`/financie/faktury/${invoice.id}`} className="font-medium text-stone-900 hover:underline">
                       {invoice.invoiceNumber ?? "Koncept faktúry"}

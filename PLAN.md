@@ -20,6 +20,8 @@ Interný ERP pre Zdravý shot. Na projekte pracujú **dvaja ľudia paralelne, ka
 
 ### Fakturácia 2027 — pracovná vetva, bez nasadenia
 
+- [x] Súhrnný koncept z celých doručených objednávok, riadkové referencie, obdobie v UBL/PDF a ochrana proti dvojitej fakturácii. Overené na izolovanom PostgreSQL; vizuálne QA formulára a akceptácia 101kou zostávajú otvorené.
+
 - [x] Preskúmať prílohu 101 Drogerie FMCG v1.9 a zdokumentovať integračné medzery v `docs/FINANCE_2027_GAP_REVIEW.md`.
 - [x] Pridať validované FMCG metadáta do UBL generátora.
 - [x] Pridať vyhľadávanie firmy a uloženie odberateľa priamo v koncepte faktúry; ochrana proti duplicitnému vytvoreniu podľa IČO.

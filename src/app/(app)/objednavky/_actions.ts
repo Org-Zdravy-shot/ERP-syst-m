@@ -253,6 +253,13 @@ export async function updateOrder(orderId: string, _prevState: OrderFormState, f
   if (existing.invoices.length) return { error: "Objednávka má vystavenú faktúru alebo koncept. Pred úpravou koncept zrušte; vystavenú faktúru treba riešiť opravou dokladu." };
 
   const updateError = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+    const current = await tx.order.findUnique({ where: { id: orderId }, include: {
+      invoices: { where: { direction: "VYDANA", documentStatus: { not: "CANCELLED" } }, select: { id: true } },
+      invoiceOrders: { where: { invoice: { direction: "VYDANA", documentStatus: { not: "CANCELLED" } } }, select: { invoiceId: true } },
+    } });
+    if (!current || !EDITABLE_ORDER_STATUSES.includes(current.status)) throw new Error("Objednávku už nemožno upravovať. Obnovte stránku.");
+    if (current.invoices.length || current.invoiceOrders.length) throw new Error("Objednávka už patrí do faktúry alebo konceptu. Najprv vyriešte naviazaný doklad.");
     if (parsed.data.externalId) {
       const duplicate = await tx.order.findFirst({ where: { id: { not: orderId }, channel: parsed.data.channel, externalId: parsed.data.externalId }, select: { orderNumber: true } });
       if (duplicate) throw new Error(`Externé číslo už patrí objednávke ${duplicate.orderNumber}.`);
