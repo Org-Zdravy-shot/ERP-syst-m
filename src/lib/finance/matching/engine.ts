@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { InvoicePaymentStatus } from "@/lib/finance/contracts";
 import { calculatePaymentStatus } from "@/lib/finance/domain";
-import { classifyPayment, type InvoiceCandidate, type MatchOutcome } from "./match";
+import { classifyPayment, normalizeIban, type InvoiceCandidate, type MatchOutcome } from "./match";
 
 type Tx = Prisma.TransactionClient;
 
@@ -90,12 +90,19 @@ export async function paymentUnallocatedCents(tx: Tx, paymentId: string): Promis
  * Kandidátske faktúry pre prichádzajúcu platbu: vydané, finalizované,
  * s kladným zostatkom vypočítaným výhradne z aktívnych alokácií.
  */
-async function openInvoiceCandidates(tx: Tx): Promise<InvoiceCandidate[]> {
+async function openInvoiceCandidates(
+  tx: Tx,
+  legalEntity: string,
+  recipientIban: string,
+  currency: string,
+): Promise<InvoiceCandidate[]> {
   const invoices = await tx.invoice.findMany({
     where: {
       direction: "VYDANA",
       documentType: "INVOICE",
       documentStatus: "ISSUED",
+      legalEntity,
+      currency,
     },
     select: {
       id: true,
@@ -103,6 +110,7 @@ async function openInvoiceCandidates(tx: Tx): Promise<InvoiceCandidate[]> {
       currency: true,
       dueDate: true,
       totalGrossCents: true,
+      issuerSnapshot: true,
       counterpartySnapshot: true,
       client: { select: { iban: true } },
       paymentAllocations: {
@@ -113,6 +121,7 @@ async function openInvoiceCandidates(tx: Tx): Promise<InvoiceCandidate[]> {
   });
 
   return invoices
+    .filter((inv) => normalizeIban(snapshotIban(inv.issuerSnapshot)) === recipientIban)
     .map((inv) => ({
       invoiceId: inv.id,
       variableSymbol: inv.variableSymbol,
@@ -140,7 +149,16 @@ export interface AutoMatchResult {
 export async function autoMatchPayment(paymentId: string): Promise<AutoMatchResult> {
   return prisma.$transaction(async (tx) => {
     await lockPayment(tx, paymentId);
-    const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    const payment = await tx.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      include: {
+        bankTransaction: {
+          select: {
+            bankAccount: { select: { iban: true, companyProfile: { select: { legalEntity: true } } } },
+          },
+        },
+      },
+    });
 
     const unallocated = await paymentUnallocatedCents(tx, paymentId);
     if (payment.direction !== "INCOMING" || unallocated <= 0) {
@@ -148,6 +166,16 @@ export async function autoMatchPayment(paymentId: string): Promise<AutoMatchResu
         paymentId,
         outcome: { type: "MANUAL", reason: "Platba už je alokovaná alebo je odchádzajúca.", candidateInvoiceIds: [] },
         skipped: true,
+      } satisfies AutoMatchResult;
+    }
+
+    const account = payment.bankTransaction?.bankAccount;
+    const legalEntity = account?.companyProfile?.legalEntity;
+    const recipientIban = normalizeIban(account?.iban);
+    if (!legalEntity || !recipientIban) {
+      return {
+        paymentId,
+        outcome: { type: "MANUAL", reason: "Účet výpisu nemá priradeného vystavovateľa.", candidateInvoiceIds: [] },
       } satisfies AutoMatchResult;
     }
 
@@ -159,7 +187,7 @@ export async function autoMatchPayment(paymentId: string): Promise<AutoMatchResu
         variableSymbol: payment.variableSymbol,
         counterpartyIban: payment.counterpartyIban,
       },
-      await openInvoiceCandidates(tx),
+      await openInvoiceCandidates(tx, legalEntity, recipientIban, payment.currency),
     );
 
     if (outcome.type === "AUTO") {

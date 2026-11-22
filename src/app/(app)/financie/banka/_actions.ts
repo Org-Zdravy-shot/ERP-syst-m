@@ -102,7 +102,7 @@ const statementRowSchema = z.object({
   remittanceInfo: z.string().max(2_000).optional(),
 });
 
-/** Dočasný import bankového výpisu — riadky parsuje klient (preview), zapisuje server. */
+/** Import riadkov z potvrdeného náhľadu výpisu. */
 export async function importStatement(_prev: BankFormState, formData: FormData): Promise<BankFormState> {
   await requireFinancePermission("CONFIGURE");
 
@@ -120,6 +120,9 @@ export async function importStatement(_prev: BankFormState, formData: FormData):
   const rows = z.array(statementRowSchema).max(2000, "Naraz možno importovať max 2000 transakcií.").safeParse(rowsRaw);
   if (!rows.success) return { error: rows.error.issues[0]?.message ?? "Neplatné riadky výpisu." };
   if (rows.data.length === 0) return { error: "Výpis neobsahuje žiadne transakcie." };
+  if (rows.data.some((row) => row.providerAccountId !== iban)) {
+    return { error: "IBAN sa od načítania výpisu zmenil. Nahrajte výpis znova." };
+  }
 
   const summary = await importStatementTransactions(
     iban,

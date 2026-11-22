@@ -198,7 +198,7 @@ Každý balík je samostatne kontrolovateľný. Najprv dokončiť jeden, zmerať
 | P10 | Opakovanie, zľavy, meny, hromadné akcie | Jednotlivo špecifikované workflow, idempotencia, zaokrúhlenie, správne PDF/XML | Silnejší model pre finančnú logiku |
 | P11 | Prechod a konečná akceptácia | Úplná matica scenárov, import bez duplicít, reconciliácia, záloha/obnova, nasadenie a prevádzkové overenie | Release review |
 
-P1–P5 prinesú vizuálne a pracovné zjednotenie existujúcej fakturácie. Samy osebe nie sú úplnou funkčnou kópiou. P6/P7 majú prioritu pre 101ku; P8–P10 ostávajú súčasťou požadovaného plného rozsahu. Termín prechodu sa nesľubuje bez splnenia funkčných a integračných kritérií.
+Prvé spustenie pokrýva domácu faktúru v EUR od výberu odberateľa cez vystavenie a PDF po evidenciu úhrady. Pre tento tok má prednosť register firiem a import bankového výpisu. Tatra Premium API, Peppol pre 101ku a zvyšné dokladové workflow majú vlastné podmienky akceptácie.
 
 ## 7. Kontrola výsledku
 
@@ -230,7 +230,10 @@ Tests voliť podľa rizika: výpočty, idempotencia, oprávnenia a databázové 
 - Oddelená lokálna vetva `feat/invoice-dispatch-batches`, commit `cd530ed`, obsahuje iba základ nullable `StockMovement.orderItemId` a migráciu `20261122090000_dispatch_order_item`. Nie je v UI vetve, nie je nasadená ani kompletná implementácia P6. Pred použitím znovu preveriť.
 - `.local-research/` obsahuje prílohu 101ky a extrakcie; necommitovať. Hlavný worktree `/Users/macbook/Documents/ERP-system` obsahuje nesúvisiace zmeny, nezasahovať doň.
 - Izolované QA: `/tmp/erp-finance-qa.Scfi5o`, PostgreSQL iba localhost:16631, Next localhost:3008. Súbor `environment.json` je súkromný, nevypisovať. Pred reštartom overiť porty; nikdy nepreberať produkčné DB poverenia do testov.
-- Autoform adaptér existuje, ale chýba používateľov API kľúč a živé overenie. Provider Peppolu vyžaduje overený onboarding, test/príjem a akceptáciu odberateľa. Údaje kľúčov alebo účtov sa nedajú doplniť vymyslenou hodnotou.
+- P4 má vyhľadávanie podľa názvu aj IČO vo verejnom RPO cez PR #106. Obe formy dopytu boli overené na živom registri. Formulár preberá názov, IČO a sídlo a nechá doplniť DIČ a IČ DPH. Autoform zostáva voliteľný pre širšie predvyplnenie.
+- Izolovaný scenár bežnej faktúry prešiel od konceptu s produktom cez vystavenie s číslom a výpočet DPH až po PDF a úhradu z CSV. Opakovaný import nevytvoril druhú platbu. Zhoda pri platbe na účet iného vystavovateľa ostala na manuálnu kontrolu.
+- Produkčné overenie k 22. 11. 2026 potvrdilo aktívny daňový profil Kurgi a primárny EUR účet. Z 13 aktívnych produktov nemal žiadny potvrdenú sadzbu k tomuto dátumu. Pred vydaním produktových faktúr treba v nastaveniach zaznamenať účtovníkom potvrdenú sadzbu s dátumom účinnosti pre fakturované produkty. Produkčné vystavovanie je vypnuté.
+- Pre priame načítavanie pohybov cez [Tatra Premium API](https://www.tatrabanka.sk/sk/business/ucty-platby/premium-api-ucty/) treba aktiváciu banky, prístupové údaje a overenie v sandboxe. Pre Peppol treba onboarding poskytovateľa a potvrdenie doručenia od 101ky. Kód oboch integrácií je v stave prípravy.
 
 ## 9. Zadanie po prepnutí modelu
 
