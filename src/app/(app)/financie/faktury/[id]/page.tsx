@@ -28,9 +28,14 @@ import { VerifyHistoricalButton } from "./VerifyHistoricalButton";
 import { FmcgSummary } from "../fmcg-fields";
 import { canCopyInvoice, canEditManualDraft } from "../invoice-form-data";
 import { btnSecondary } from "@/components/ui";
+import { invoiceListHref, parseInvoiceFilters } from "../list-filters";
+import { slovakDateKey } from "../../../objednavky/pricing";
 
-export default async function FakturaDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function FakturaDetailPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ subjekt?: string; zoznam?: string }>;
+}) {
+  const [{ id }, { subjekt, zoznam }] = await Promise.all([params, searchParams]);
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
@@ -90,7 +95,15 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   });
   if (!invoice) notFound();
 
+  const listFilters = typeof zoznam === "string" && zoznam.length <= 2000
+    ? Object.fromEntries(new URLSearchParams(zoznam))
+    : { smer: invoice.direction, subjekt };
+  const returnHref = invoiceListHref(parseInvoiceFilters(listFilters, Number(slovakDateKey().slice(0, 4))));
   const currentUser = await requireUser();
+  const canFinalize = invoice.documentStatus === "DRAFT" && hasFinancePermission(currentUser.role, "FINALIZE");
+  const canCancel = invoice.documentStatus !== "CANCELLED" && hasFinancePermission(currentUser.role, "CANCEL");
+  const canCredit = invoice.documentStatus === "ISSUED" && invoice.documentType === "INVOICE"
+    && hasFinancePermission(currentUser.role, "CREATE_DRAFT");
   const canSendEmail =
     hasFinancePermission(currentUser.role, "SEND_DOCUMENT") &&
     invoice.source !== "HISTORICAL" &&
@@ -135,14 +148,15 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   const issuer = parsedIssuer.success ? parsedIssuer.data : null;
   const allocatedCents = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
   const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocatedCents);
+  const today = slovakDateKey();
   const overdue =
     invoice.source !== "HISTORICAL" &&
+    invoice.documentType === "INVOICE" &&
     invoice.documentStatus === "ISSUED" &&
     (paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID") &&
-    invoice.dueDate.getTime() < Date.now();
+    invoice.dueDate.toISOString().slice(0, 10) < today;
   const counterparty = partner?.name ?? invoice.client?.name ?? invoice.supplierName ?? "—";
-  const today = new Date().toISOString().slice(0, 10);
-  const in14Days = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const in14Days = new Date(Date.parse(today) + 14 * 86_400_000).toISOString().slice(0, 10);
 
   const infoRow = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-4 py-1.5">
@@ -161,10 +175,10 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canEditManualDraft(invoice) && <Link href={`/financie/faktury/${id}/upravit`} className={btnSecondary}>Upraviť koncept</Link>}
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canCopyInvoice(invoice) && <Link href={`/financie/faktury/nova?copyFrom=${id}`} className={btnSecondary}>Vytvoriť kópiu</Link>}
           <Link
-            href="/financie/faktury"
+            href={returnHref}
             className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
           >
-            ← Späť na zoznam
+            {invoice.direction === "PRIJATA" ? "← Späť na náklady" : "← Späť na faktúry"}
           </Link>
         </PageHeader>
       </div>
@@ -188,8 +202,8 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 print:block">
-        <div className="space-y-6 lg:order-2 print:space-y-4">
+      <div className="finance-detail-layout grid grid-cols-1 gap-6 print:block">
+        <div className="finance-detail-sidebar space-y-6 print:space-y-4">
           <section className="rounded-[14px] border border-stone-200 bg-white p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-stone-900">Údaje</h2>
@@ -332,12 +346,13 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
             />
           )}
 
-          {invoice.documentStatus !== "CANCELLED" && invoice.source !== "HISTORICAL" && (
+          {invoice.source !== "HISTORICAL" && (canFinalize || canCancel || canCredit) && (
             <section className="rounded-[14px] border border-stone-200 bg-white p-5 print:hidden">
               <h2 className="mb-3 font-semibold text-stone-900">Akcie</h2>
               <InvoiceWorkflowActions
-                documentStatus={invoice.documentStatus}
-                documentType={invoice.documentType}
+                canFinalize={canFinalize}
+                canCancel={canCancel}
+                canCredit={canCredit}
                 defaultIssueDate={today}
                 defaultDueDate={in14Days}
                 finalizeAction={finalizeInvoice.bind(null, invoice.id)}
@@ -348,7 +363,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           )}
         </div>
 
-        <div className="lg:order-1 lg:col-span-2 print:mt-4">
+        <div className="finance-detail-paper print:mt-4">
           <section className="rounded-[14px] border border-stone-200 bg-white">
             <p className="border-b border-stone-100 px-5 py-2 text-xs font-medium text-stone-500">Pracovný prehľad ERP · oficiálny doklad je nemenné PDF po finalizácii</p>
             <div className="grid gap-5 border-b border-stone-200 p-5 sm:grid-cols-2">

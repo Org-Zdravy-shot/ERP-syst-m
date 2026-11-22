@@ -1,28 +1,41 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/PageHeader";
+import { bratislavaDateTimeToIso } from "@/lib/datetime";
+import { slovakDateKey } from "../../objednavky/pricing";
 import { formatCents, formatDate, MONTH_NAMES_SK } from "@/lib/format";
 import { btnSecondary, card, cardHeader, table, thead, tr, td, tdRight } from "@/components/ui";
 
 function monthKey(date: Date): string {
-  return `${date.getFullYear()}-${date.getMonth() + 1}`;
+  return date.toISOString().slice(0, 7);
 }
 
 export default async function CashflowPage() {
-  const now = new Date();
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const in30Days = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
+  const todayKey = slovakDateKey();
+  const today = new Date(`${todayKey}T00:00:00.000Z`);
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+  const monthStart = new Date(Date.UTC(year, month - 5, 1));
+  const sixMonthsAgo = new Date(bratislavaDateTimeToIso(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+  const nextMonth = new Date(Date.UTC(year, month + 1, 1));
+  const endOfWindow = new Date(bratislavaDateTimeToIso(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 1));
+  const in30Days = new Date(Date.UTC(year, month, today.getUTCDate() + 30));
+  const openScope = {
+    documentType: "INVOICE",
+    documentStatus: "ISSUED",
+    currency: "EUR",
+    source: { not: "HISTORICAL" },
+  };
 
   const [payments, openInvoices, dueSoon] = await Promise.all([
     prisma.payment.findMany({
-      where: { paidAt: { gte: sixMonthsAgo } },
+      where: { currency: "EUR", paidAt: { gte: sixMonthsAgo, lt: endOfWindow } },
       select: { direction: true, amountCents: true, paidAt: true },
     }),
     prisma.invoice.findMany({
       where: {
         direction: "VYDANA",
-        documentType: "INVOICE",
-        documentStatus: "ISSUED",
+        ...openScope,
       },
       include: {
         client: { select: { id: true, name: true } },
@@ -33,9 +46,8 @@ export default async function CashflowPage() {
     prisma.invoice.findMany({
       where: {
         direction: "PRIJATA",
-        documentType: "INVOICE",
-        documentStatus: "ISSUED",
-        dueDate: { gte: now, lte: in30Days },
+        ...openScope,
+        dueDate: { gte: today, lte: in30Days },
       },
       select: {
         totalGrossCents: true,
@@ -47,17 +59,17 @@ export default async function CashflowPage() {
   // Cash-flow po mesiacoch (posledných 6)
   const months: Array<{ key: string; label: string; inCents: number; outCents: number }> = [];
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(Date.UTC(year, month - i, 1));
     months.push({
       key: monthKey(d),
-      label: `${MONTH_NAMES_SK[d.getMonth()]} ${d.getFullYear()}`,
+      label: `${MONTH_NAMES_SK[d.getUTCMonth()]} ${d.getUTCFullYear()}`,
       inCents: 0,
       outCents: 0,
     });
   }
   const byKey = new Map(months.map((m) => [m.key, m]));
   for (const payment of payments) {
-    const bucket = byKey.get(monthKey(payment.paidAt));
+    const bucket = byKey.get(slovakDateKey(payment.paidAt).slice(0, 7));
     if (!bucket) continue;
     if (payment.direction === "INCOMING") bucket.inCents += payment.amountCents;
     else bucket.outCents += payment.amountCents;
@@ -79,7 +91,7 @@ export default async function CashflowPage() {
 
   const aging = { current: 0, d1to14: 0, d15to30: 0, d30plus: 0 };
   for (const inv of unpaid) {
-    const overdueDays = Math.floor((now.getTime() - inv.dueDate.getTime()) / (24 * 3600 * 1000));
+    const overdueDays = Math.floor((today.getTime() - new Date(inv.dueDate.toISOString().slice(0, 10)).getTime()) / 86_400_000);
     if (overdueDays <= 0) aging.current += inv.outstandingCents;
     else if (overdueDays <= 14) aging.d1to14 += inv.outstandingCents;
     else if (overdueDays <= 30) aging.d15to30 += inv.outstandingCents;
@@ -108,13 +120,10 @@ export default async function CashflowPage() {
     <>
       <PageHeader
         title="Cash-flow"
-        subtitle="Skutočné toky z platieb, očakávané príjmy a neuhradené faktúry"
+        subtitle="Platby, očakávané príjmy a neuhradené faktúry v EUR za všetky subjekty"
       >
         <Link href="/financie/banka" className={btnSecondary}>
           Banka
-        </Link>
-        <Link href="/financie" className={btnSecondary}>
-          ← Financie
         </Link>
       </PageHeader>
 
@@ -218,7 +227,7 @@ export default async function CashflowPage() {
                 </thead>
                 <tbody>
                   {unpaid.map((inv) => {
-                    const overdue = inv.dueDate.getTime() < now.getTime();
+                    const overdue = inv.dueDate.toISOString().slice(0, 10) < todayKey;
                     return (
                       <tr key={inv.id} className={tr}>
                         <td className={td}>
@@ -237,7 +246,7 @@ export default async function CashflowPage() {
                   {unpaid.length === 0 && (
                     <tr className={tr}>
                       <td colSpan={4} className="px-[18px] py-8 text-center text-stone-400">
-                        Všetky vydané faktúry sú uhradené 🎉
+                        Žiadne neuhradené vydané faktúry v tomto prehľade.
                       </td>
                     </tr>
                   )}

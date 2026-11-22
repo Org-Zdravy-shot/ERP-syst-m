@@ -8,17 +8,12 @@ import { lineNetCents, parseUnitPrice, unitPriceCents } from "@/lib/precise-pric
 import { btnPrimary, btnSmall, errorBox, input, label } from "@/components/ui";
 import Link from "next/link";
 import { legalEntityLabels } from "@/lib/zod-schemas";
-import { InvoiceCustomerPicker } from "./InvoiceCustomerPicker";
+import { InvoiceCustomerPicker, type ClientOption } from "./InvoiceCustomerPicker";
+import type { IssuerOption } from "../form-options";
 import { FmcgFields, fmcgLabels } from "../fmcg-fields";
 import { fmcgLineSchema } from "@/lib/finance/einvoice/fmcg";
 import type { InvoiceFormInitial, InvoiceFormLine as Line } from "../invoice-form-data";
 import { slovakDateKey } from "../../../objednavky/pricing";
-
-interface ClientOption {
-  id: string;
-  name: string;
-  type: string;
-}
 
 const EMPTY_LINE: Line = { description: "", quantity: "1", unit: "ks", vatRate: "0", unitPrice: "" };
 
@@ -45,9 +40,10 @@ function lineGrossCents(line: Line): number | null {
   return parsed ? parsed.netCents + Math.round((parsed.netCents * parsed.vatRate) / 100) : null;
 }
 
-export function InvoiceForm({ clients, initial, action = createManualInvoice, editing = false }: {
-  clients: ClientOption[]; initial?: InvoiceFormInitial; editing?: boolean;
+export function InvoiceForm({ clients, issuers = [], canConfigure = false, initial, defaultIssuer, backHref = "/financie/faktury", action = createManualInvoice, editing = false }: {
+  clients: ClientOption[]; issuers?: IssuerOption[]; canConfigure?: boolean; initial?: InvoiceFormInitial; defaultIssuer?: string; editing?: boolean;
   action?: (state: InvoiceFormState, data: FormData) => Promise<InvoiceFormState>;
+  backHref?: string;
 }) {
   const today = slovakDateKey();
   const in14days = new Date(new Date(`${today}T12:00:00.000Z`).getTime() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
@@ -58,7 +54,7 @@ export function InvoiceForm({ clients, initial, action = createManualInvoice, ed
   const [lines, setLines] = useState<Line[]>(initial?.lines.length ? initial.lines : [{ ...EMPTY_LINE }]);
   const [savingClient, setSavingClient] = useState(false);
   const [header, setHeader] = useState(() => ({
-    legalEntity: initial?.legalEntity ?? "", issueDate: initial?.issueDate ?? today,
+    legalEntity: initial?.legalEntity ?? defaultIssuer ?? "", issueDate: initial?.issueDate ?? today,
     dueDate: initial?.dueDate ?? in14days, deliveryDate: initial?.deliveryDate ?? today,
     variableSymbol: initial?.variableSymbol ?? "", externalNumber: initial?.externalNumber ?? "",
     buyerReference: initial?.buyerReference ?? "", note: initial?.note ?? "",
@@ -118,81 +114,29 @@ export function InvoiceForm({ clients, initial, action = createManualInvoice, ed
     return `${fmcgLabels[key] ?? "Údaje pre reťazec"}: ${issue.message}`;
   });
 
+  const issuer = issuers.find(p => p.legalEntity === header.legalEntity && p.validFrom <= header.deliveryDate && (!p.validTo || p.validTo >= header.deliveryDate));
   return (
-    <form action={formAction} className="max-w-6xl space-y-5">
+    <form action={formAction} className="finance-invoice-editor">
       <input type="hidden" name="items" value={itemsJson} />
+      <input type="hidden" name="direction" value="VYDANA" />
       {editing && <input type="hidden" name="expectedUpdatedAt" value={initial?.expectedUpdatedAt ?? ""} />}
-      <div className="space-y-5">
-      <div className="rounded-[14px] border border-stone-200 bg-white p-5">
-        <div className="-mx-5 -mt-5 mb-5 rounded-t-[14px] bg-stone-100 px-5 py-4">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-stone-700">Všeobecné informácie</h2>
+      <div className="finance-document">
+        <div className="finance-document-title"><h2>Faktúra</h2><span>Koncept · číslo sa pridelí pri vystavení</span></div>
+        <div className="finance-parties">
+          <section><h3>Dodávateľ</h3><label className={label} htmlFor="invoice-issuer">Vaša firma *</label><select id="invoice-issuer" name="legalEntity" required value={header.legalEntity} onChange={e => setHeader({ ...header, legalEntity: e.target.value })} className={input}><option value="" disabled>Vyberte právny subjekt</option>{Object.entries(legalEntityLabels).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select>
+            <div className="finance-issuer-address">{issuer ? <><strong>{issuer.legalName}</strong><p>{issuer.street}</p><p>{issuer.zip} {issuer.city}</p><p>IČO: {issuer.ico}</p><p>DIČ: {issuer.dic}</p>{issuer.icDph && <p>IČ DPH: {issuer.icDph}</p>}</> : <p>{header.legalEntity ? "Pre dátum dodania chýba platný firemný profil." : "Po výbere firmy sa zobrazia vaše fakturačné údaje."}</p>}{canConfigure && <Link href="/financie/nastavenia">Firemné údaje a bankové účty</Link>}</div>
+          </section>
+          <section><h3>Odberateľ</h3><InvoiceCustomerPicker clients={clients} initialClientId={initial?.clientId} onSavingChange={setSavingClient} /></section>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div><label className={label}>Právny subjekt *</label><select name="legalEntity" required value={header.legalEntity} onChange={(e) => setHeader({ ...header, legalEntity: e.target.value })} className={input}><option value="" disabled>— vyberte subjekt —</option>{Object.entries(legalEntityLabels).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select></div>
-          <div>
-            <label className={label}>Druh dokladu</label>
-            <input type="hidden" name="direction" value="VYDANA" />
-            <p className="rounded-[10px] border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">Vydaná faktúra</p>
-          </div>
-          <div><label className={label}>Číslo faktúry</label><p className="rounded-[10px] border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500">Pridelí sa pri finalizácii</p></div>
-
-          <div className="sm:col-span-2 lg:col-span-3">
-              <InvoiceCustomerPicker clients={clients} initialClientId={initial?.clientId} onSavingChange={setSavingClient} />
-            </div>
-          <p className="text-sm sm:col-span-2 lg:col-span-3"><Link href="/financie/faktury/historicka" className="font-medium text-stone-700 underline">Zaevidovať prijatú faktúru alebo predfaktúru →</Link></p>
-
-          </div>
-        </div>
-
-      <div className="rounded-[14px] border border-stone-200 bg-white p-5">
-        <div className="-mx-5 -mt-5 mb-5 rounded-t-[14px] bg-stone-100 px-5 py-4">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-stone-700">Dátumy a platba</h2>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <label className={label}>Dátum vystavenia</label>
-            <input name="issueDate" type="date" value={header.issueDate} onChange={(e) => setHeader({ ...header, issueDate: e.target.value })} required className={input} />
-          </div>
-          <div>
-            <label className={label}>Dátum splatnosti</label>
-            <input name="dueDate" type="date" value={header.dueDate} onChange={(e) => setHeader({ ...header, dueDate: e.target.value })} required className={input} />
-          </div>
-          <div>
-            <label className={label}>Dátum dodania</label>
-            <input name="deliveryDate" type="date" value={header.deliveryDate} onChange={(e) => setHeader({ ...header, deliveryDate: e.target.value })} required className={input} />
-          </div>
-          <div>
-            <label className={label}>
-              Variabilný symbol <span className="font-normal text-stone-400">(inak auto)</span>
-            </label>
-            <input name="variableSymbol" value={header.variableSymbol} onChange={(e) => setHeader({ ...header, variableSymbol: e.target.value })} className={input} />
-          </div>
-          <div>
-            <label className={label}>
-              Externé číslo <span className="font-normal text-stone-400">(voliteľné)</span>
-            </label>
-            <input name="externalNumber" value={header.externalNumber} onChange={(e) => setHeader({ ...header, externalNumber: e.target.value })} className={input} />
-          </div>
-          <div>
-            <label htmlFor="buyer-reference" className={label}>Referencia odberateľa</label>
-            <input id="buyer-reference" name="buyerReference" maxLength={140} value={header.buyerReference} onChange={(e) => setHeader({ ...header, buyerReference: e.target.value })} className={input} placeholder="Údaj, ktorý vám poskytol odberateľ" />
-            <p className="mt-1 text-xs text-stone-500">Potrebná pre elektronickú faktúru. Použite referenciu od odberateľa, napríklad číslo jeho objednávky.</p>
-          </div>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <label className={label}>Poznámka</label>
-            <textarea name="note" rows={4} value={header.note} onChange={(e) => setHeader({ ...header, note: e.target.value })} className={input} placeholder="Text, ktorý sa má zobraziť pri doklade" />
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[14px] border border-stone-200 bg-white">
-        <div className="rounded-t-[14px] bg-stone-100 px-5 py-4">
+        <div className="finance-editor-section"><h3>Dátumy dokladu</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['issueDate','Vystavenie'],['deliveryDate','Dodanie'],['dueDate','Splatnosť']] as const).map(([key,title]) => <label className={label} key={key}>{title}<input name={key} type="date" value={header[key]} onChange={e => setHeader({ ...header, [key]: e.target.value })} required className={input} /></label>)}</div></div>
+      <div className="finance-editor-section">
+        <div className="mb-3 border-b border-stone-200 pb-3">
           <h2 className="text-xs font-bold uppercase tracking-wide text-stone-700">Položky faktúry</h2>
         </div>
-        <p className="px-5 pt-3 text-xs text-stone-500">Cena je bez DPH a môže mať najviac 4 desatinné miesta.</p>
-        <div className="space-y-3 p-5">
+        <p className="mb-4 text-xs text-stone-500">Cena je bez DPH a môže mať najviac 4 desatinné miesta.</p>
+        <div className="space-y-3">
           {lines.map((line, index) => (
-            <div key={index} className="grid grid-cols-2 gap-3 sm:grid-cols-6 xl:grid-cols-12">
+            <div key={index} className="finance-invoice-row grid grid-cols-2 gap-3 sm:grid-cols-6 xl:grid-cols-12">
               <div className="col-span-2 sm:col-span-6 xl:col-span-4">
                 <label htmlFor={`item-description-${index}`} className="mb-1 block text-xs text-stone-500">Popis</label>
                 <input
@@ -299,15 +243,18 @@ export function InvoiceForm({ clients, initial, action = createManualInvoice, ed
         </div>
       </div>
 
-      {state.error && <p className={errorBox}>{state.error}</p>}
-
-      <div className="flex flex-wrap items-center justify-end gap-4">
-      <p className="text-xs text-stone-500">{editing ? "Uložia sa zmeny konceptu. Faktúra sa tým nevystaví ani neodošle." : "Uložením vznikne koncept. Faktúra sa tým ešte nefinalizuje ani neodošle."}</p>
-      <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean) || invalidQuantityRows.some(Boolean) || fmcgErrors.some(Boolean)} className={btnPrimary}>
-        {pending ? "Ukladám…" : editing ? "Uložiť zmeny konceptu" : "Uložiť koncept"}
-      </button>
+      <div className="finance-editor-section"><h3>Platba a doplňujúce údaje</h3><div className="grid gap-4 sm:grid-cols-2">
+        <label className={label}>Variabilný symbol<input name="variableSymbol" value={header.variableSymbol} onChange={e => setHeader({ ...header, variableSymbol: e.target.value })} placeholder="Vyplní sa automaticky" className={input} /></label>
+        <label className={label}>Referencia odberateľa<input name="buyerReference" maxLength={140} value={header.buyerReference} onChange={e => setHeader({ ...header, buyerReference: e.target.value })} placeholder="Napríklad číslo objednávky odberateľa" className={input} /></label>
+        <label className={label}>Externé číslo<input name="externalNumber" value={header.externalNumber} onChange={e => setHeader({ ...header, externalNumber: e.target.value })} className={input} /></label>
+        <div className="text-xs text-stone-500">Referencia odberateľa je potrebná pre elektronickú faktúru. Použite údaj, ktorý vám poskytol odberateľ.</div>
+      </div><label className={`${label} mt-4`}>Poznámka na doklade<textarea name="note" rows={3} value={header.note} onChange={e => setHeader({ ...header, note: e.target.value })} className={input} placeholder="Text pre odberateľa" /></label></div>
       </div>
-      </div>
+      <aside className="finance-editor-sidebar"><h3>Súhrn konceptu</h3><dl><div><dt>Mena</dt><dd>EUR</dd></div><div><dt>Položky</dt><dd>{lines.length}</dd></div><div><dt>Základ dane</dt><dd>{formatCents(totals.net)}</dd></div><div><dt>DPH</dt><dd>{formatCents(totals.vat)}</dd></div><div className="finance-editor-grand"><dt>Celkom</dt><dd>{formatCents(totals.gross)}</dd></div></dl>
+        {state.error && <div role="alert" className={`${errorBox} mb-3`}>{state.error}</div>}
+        <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean) || invalidQuantityRows.some(Boolean) || fmcgErrors.some(Boolean)} className={btnPrimary}>{pending ? "Ukladám…" : editing ? "Uložiť zmeny konceptu" : "Uložiť koncept"}</button>
+        <p>Po uložení môžete faktúru skontrolovať a vystaviť. Číslo sa pridelí pri vystavení.</p><Link href={backHref}>Zrušiť úpravy</Link>
+      </aside>
     </form>
   );
 }

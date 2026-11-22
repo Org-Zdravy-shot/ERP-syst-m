@@ -8,12 +8,12 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="mb-7 flex items-start justify-between gap-4">
+    <div className="page-header mb-7 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="font-display text-[26px] font-bold text-stone-950">{title}</h1>
         {subtitle && <p className="mt-1.5 text-sm text-stone-500">{subtitle}</p>}
       </div>
-      {children && <div className="flex shrink-0 gap-2">{children}</div>}
+      {children && <div className="page-header-actions flex flex-wrap gap-2">{children}</div>}
     </div>
   );
 }
