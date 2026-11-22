@@ -28,12 +28,14 @@ import { VerifyHistoricalButton } from "./VerifyHistoricalButton";
 import { FmcgSummary } from "../fmcg-fields";
 import { canCopyInvoice, canEditManualDraft } from "../invoice-form-data";
 import { btnSecondary } from "@/components/ui";
+import { invoiceListHref, parseInvoiceFilters } from "../list-filters";
+import { slovakDateKey } from "../../../objednavky/pricing";
 
 export default async function FakturaDetailPage({ params, searchParams }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ subjekt?: string }>;
+  searchParams: Promise<{ subjekt?: string; zoznam?: string }>;
 }) {
-  const [{ id }, { subjekt }] = await Promise.all([params, searchParams]);
+  const [{ id }, { subjekt, zoznam }] = await Promise.all([params, searchParams]);
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
@@ -93,10 +95,10 @@ export default async function FakturaDetailPage({ params, searchParams }: {
   });
   if (!invoice) notFound();
 
-  const listParams = new URLSearchParams({ smer: invoice.direction });
-  if (subjekt === "KURGI" || subjekt === "SOLE_TRADER" || subjekt === "UNASSIGNED") {
-    listParams.set("subjekt", subjekt);
-  }
+  const listFilters = typeof zoznam === "string" && zoznam.length <= 2000
+    ? Object.fromEntries(new URLSearchParams(zoznam))
+    : { smer: invoice.direction, subjekt };
+  const returnHref = invoiceListHref(parseInvoiceFilters(listFilters, Number(slovakDateKey().slice(0, 4))));
   const currentUser = await requireUser();
   const canFinalize = invoice.documentStatus === "DRAFT" && hasFinancePermission(currentUser.role, "FINALIZE");
   const canCancel = invoice.documentStatus !== "CANCELLED" && hasFinancePermission(currentUser.role, "CANCEL");
@@ -146,14 +148,15 @@ export default async function FakturaDetailPage({ params, searchParams }: {
   const issuer = parsedIssuer.success ? parsedIssuer.data : null;
   const allocatedCents = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
   const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocatedCents);
+  const today = slovakDateKey();
   const overdue =
     invoice.source !== "HISTORICAL" &&
+    invoice.documentType === "INVOICE" &&
     invoice.documentStatus === "ISSUED" &&
     (paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID") &&
-    invoice.dueDate.getTime() < Date.now();
+    invoice.dueDate.toISOString().slice(0, 10) < today;
   const counterparty = partner?.name ?? invoice.client?.name ?? invoice.supplierName ?? "—";
-  const today = new Date().toISOString().slice(0, 10);
-  const in14Days = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const in14Days = new Date(Date.parse(today) + 14 * 86_400_000).toISOString().slice(0, 10);
 
   const infoRow = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-4 py-1.5">
@@ -172,7 +175,7 @@ export default async function FakturaDetailPage({ params, searchParams }: {
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canEditManualDraft(invoice) && <Link href={`/financie/faktury/${id}/upravit`} className={btnSecondary}>Upraviť koncept</Link>}
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canCopyInvoice(invoice) && <Link href={`/financie/faktury/nova?copyFrom=${id}`} className={btnSecondary}>Vytvoriť kópiu</Link>}
           <Link
-            href={`/financie/faktury?${listParams}`}
+            href={returnHref}
             className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
           >
             {invoice.direction === "PRIJATA" ? "← Späť na náklady" : "← Späť na faktúry"}

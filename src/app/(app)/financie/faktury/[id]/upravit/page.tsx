@@ -21,6 +21,6 @@ export default async function UpravitFakturuPage({ params }: { params: Promise<{
       <Link href={`/financie/faktury/${id}`} className={btnSecondary}>← Späť na koncept</Link>
     </PageHeader>
     {initial.clientId && !clients.some((client) => client.id === initial.clientId) && <p className="mb-4 text-sm text-amber-800">Pôvodný klient nie je aktívny. Vyberte odberateľa z dostupného adresára.</p>}
-    <InvoiceForm clients={clients} issuers={issuers} canConfigure={hasFinancePermission(user.role, "CONFIGURE")} initial={initial} action={updateManualInvoice.bind(null, id)} editing />
+    <InvoiceForm clients={clients} issuers={issuers} backHref={`/financie/faktury/${id}`} canConfigure={hasFinancePermission(user.role, "CONFIGURE")} initial={initial} action={updateManualInvoice.bind(null, id)} editing />
   </>;
 }

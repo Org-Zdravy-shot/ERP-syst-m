@@ -23,6 +23,8 @@ Interný ERP pre Zdravý shot. Na projekte pracujú **dvaja ľudia paralelne, ka
 - [x] Navrhnúť fakturačné prostredie, pracovné postupy a overenie balíkov P1–P11. [Implementačný plán](docs/FINANCE_WORKSPACE_BLUEPRINT.md)
 - [x] Implementovať spoločnú navigáciu, výber firmy v podporovaných agendách a zobrazenie akcií podľa roly. P1 prešiel kontrolou stránok na izolovanej databáze.
 - [x] Overiť hlavné scenáre P1 v Chrome na desktope a pri mobilnej šírke 390 px. Výber firmy sa zachoval pri otvorení novej faktúry aj pri návrate z detailu do Nákladov.
+- [x] Overiť prehľad a zoznamy na lokálnych dátach: čiastočné úhrady, dobropisy, záväzky, splatnosť, stránkovanie a zachovanie filtrov. Vytvorenie, úprava a kópia konceptu prešli cez lokálne formuláre.
+- [ ] Vizuálne overiť doladené zoznamy a celý tok editora v prehliadači. Produkčný prechod vyžaduje funkčné integrácie a splnenie podmienok vo `FINANCE_2027_GAP_REVIEW.md`.
 - [ ] Dokončiť a vizuálne overiť nové rozhranie podľa P1–P5; následne dorobiť doménové a integračné workflow P6–P11. Kompletná parita ani produkčné nasadenie zatiaľ nie sú hotové.
 
 - [x] Súhrnný koncept z celých doručených objednávok, riadkové referencie, obdobie v UBL/PDF a ochrana proti dvojitej fakturácii. Overené na izolovanom PostgreSQL; vizuálne QA formulára a akceptácia 101kou zostávajú otvorené.

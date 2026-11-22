@@ -4,9 +4,10 @@ export interface OverviewDocument {
 }
 export function buildOverview(documents: OverviewDocument[], year: number) {
   const months = Array.from({ length: 12 }, (_, month) => ({ month, revenueNet: 0, revenueGross: 0, expensesNet: 0, expensesGross: 0 }));
-  let unpaidRevenue = 0, unpaidExpenses = 0;
+  let unpaidRevenue = 0, unpaidExpenses = 0, documentCount = 0;
   for (const doc of documents) {
     if (doc.issueDate.getUTCFullYear() !== year) continue;
+    documentCount++;
     const month = months[doc.issueDate.getUTCMonth()], sign = doc.documentType === "CREDIT_NOTE" ? -1 : 1;
     const revenue = doc.direction === "VYDANA";
     if (revenue) { month.revenueNet += sign * doc.totalNetCents; month.revenueGross += sign * doc.totalGrossCents; }
@@ -16,5 +17,5 @@ export function buildOverview(documents: OverviewDocument[], year: number) {
       if (revenue) unpaidRevenue += remaining; else unpaidExpenses += remaining;
     }
   }
-  return { months, unpaidRevenue, unpaidExpenses };
+  return { months, unpaidRevenue, unpaidExpenses, documentCount };
 }

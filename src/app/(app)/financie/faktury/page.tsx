@@ -13,28 +13,32 @@ import {
   invoicePaymentStatusLabels,
 } from "@/lib/zod-schemas";
 import { calculatePaymentStatus } from "@/lib/finance/domain";
-import { btnPrimary, btnSecondary, filterPill } from "@/components/ui";
-import { legalEntityLabels } from "@/lib/zod-schemas";
+import { btnPrimary, btnSecondary, input, label } from "@/components/ui";
+import { slovakDateKey } from "../../objednavky/pricing";
+import { parseInvoiceFilters, invoiceListHref, invoiceListParams, overviewInvoiceScope } from "./list-filters";
+
+const PAGE_SIZE = 50;
 
 const DIRECTION_LABELS: Record<string, string> = { VYDANA: "Vydané", PRIJATA: "Prijaté" };
 
 export default async function FakturyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ smer?: string; zdroj?: string; stav?: string; subjekt?: string; q?: string | string[]; uhrada?: string; rok?: string; typ?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { smer, zdroj, stav, subjekt, q, uhrada, rok, typ } = await searchParams;
-  const typeFilter = typ === "INVOICE" || typ === "CREDIT_NOTE" ? typ : undefined;
-  const smerFilter = smer === "VYDANA" || smer === "PRIJATA" ? smer : undefined;
-  const zdrojFilter = zdroj && zdroj in INVOICE_SOURCE_LABELS ? zdroj : undefined;
-  const stavFilter = stav && stav in invoiceDocumentStatusLabels ? stav : undefined;
-  const entityFilter = subjekt === "UNASSIGNED" || (subjekt && subjekt in legalEntityLabels) ? subjekt : undefined;
-  const query = typeof q === "string" ? q.trim().slice(0, 100) : "";
-  const paymentFilter = uhrada === "PAID" || uhrada === "UNPAID" || uhrada === "OVERDUE" ? uhrada : undefined;
-  const currentYear = new Date().getFullYear();
-  const yearFilter = /^\d{4}$/.test(rok ?? "") && Number(rok) >= 2010 && Number(rok) <= currentYear + 1 ? Number(rok) : undefined;
+  const today = slovakDateKey();
+  const currentYear = Number(today.slice(0, 4));
+  const filters = parseInvoiceFilters(await searchParams, currentYear);
+  const {
+    smer: smerFilter, zdroj: zdrojFilter, stav: stavFilter, subjekt: entityFilter,
+    q: query, uhrada: paymentFilter, typ: typeFilter, rozsah: reportScope,
+  } = filters;
+  const yearFilter = filters.rok ? Number(filters.rok) : undefined;
+  const expenses = smerFilter === "PRIJATA";
 
-  const invoices = await prisma.invoice.findMany({
+  // Keep the full scan limited to amounts and payment state. Fetch display
+  // fields only for the selected page, after applying the payment filter.
+  const candidates = await prisma.invoice.findMany({
     where: {
       ...(smerFilter ? { direction: smerFilter } : {}),
       ...(zdrojFilter ? { source: zdrojFilter } : {}),
@@ -42,43 +46,35 @@ export default async function FakturyPage({
       ...(typeFilter ? { documentType: typeFilter } : {}),
       ...(entityFilter ? { legalEntity: entityFilter === "UNASSIGNED" ? null : entityFilter } : {}),
       ...(yearFilter ? { issueDate: { gte: new Date(Date.UTC(yearFilter, 0, 1)), lt: new Date(Date.UTC(yearFilter + 1, 0, 1)) } } : {}),
-      ...(query ? { OR: [
-        { invoiceNumber: { contains: query, mode: "insensitive" as const } },
-        { externalNumber: { contains: query, mode: "insensitive" as const } },
-        { variableSymbol: { contains: query, mode: "insensitive" as const } },
-        { supplierName: { contains: query, mode: "insensitive" as const } },
-        { client: { name: { contains: query, mode: "insensitive" as const } } },
-      ] } : {}),
+      AND: [
+        ...(reportScope ? [overviewInvoiceScope] : []),
+        ...(query ? [{
+          OR: [
+            { invoiceNumber: { contains: query, mode: "insensitive" as const } },
+            { externalNumber: { contains: query, mode: "insensitive" as const } },
+            { variableSymbol: { contains: query, mode: "insensitive" as const } },
+            { supplierName: { contains: query, mode: "insensitive" as const } },
+            { client: { name: { contains: query, mode: "insensitive" as const } } },
+          ],
+        }] : []),
+      ],
     },
     select: {
       id: true,
-      invoiceNumber: true,
-      externalNumber: true,
       source: true,
       direction: true,
       documentType: true,
       documentStatus: true,
-      historicalKind: true,
-      paymentConfirmation: true,
-      supplierName: true,
-      counterpartySnapshot: true,
-      issueDate: true,
       dueDate: true,
       totalGrossCents: true,
       currency: true,
-      client: { select: { id: true, name: true } },
       paymentAllocations: { where: { reversedAt: null }, select: { amountCents: true } },
     },
-    orderBy: [{ issueDate: "desc" }, { invoiceNumber: "desc" }],
+    orderBy: [{ issueDate: "desc" }, { invoiceNumber: "desc" }, { id: "desc" }],
   });
 
-  const filterHref = (patch: Record<string, string | undefined>) => {
-    const params = new URLSearchParams();
-    const merged = { smer: smerFilter, zdroj: zdrojFilter, stav: stavFilter, subjekt: entityFilter, q: query || undefined, uhrada: paymentFilter, rok: yearFilter?.toString(), typ: typeFilter, ...patch };
-    for (const [key, value] of Object.entries(merged)) if (value) params.set(key, value);
-    const qs = params.toString();
-    return qs ? `/financie/faktury?${qs}` : "/financie/faktury";
-  };
+  const filterHref = (patch: Record<string, string | undefined>) =>
+    invoiceListHref({ ...filters, strana: undefined, ...patch });
 
   const exportHref = () => {
     const params = new URLSearchParams();
@@ -90,36 +86,65 @@ export default async function FakturyPage({
     return qs ? `/financie/export?${qs}` : "/financie/export";
   };
 
-  const now = Date.now();
-  const invoiceRows = invoices.map((invoice) => {
+  const invoiceRows = candidates.map((invoice) => {
     const allocatedCents = invoice.paymentAllocations.reduce((sum, allocation) => sum + allocation.amountCents, 0);
-    const paymentStatus = calculatePaymentStatus(invoice.totalGrossCents, allocatedCents);
-    const overdue = invoice.source !== "HISTORICAL" && invoice.documentStatus === "ISSUED" &&
-      (paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID") && invoice.dueDate.getTime() < now;
-    return { invoice, paymentStatus, overdue, remainingCents: Math.max(0, invoice.totalGrossCents - allocatedCents) };
+    const remainingCents = Math.max(0, invoice.totalGrossCents - allocatedCents);
+    const paymentEligible = invoice.documentType === "INVOICE" &&
+      invoice.source !== "HISTORICAL" && invoice.documentStatus === "ISSUED";
+    const overdue = paymentEligible && remainingCents > 0 && invoice.dueDate.toISOString().slice(0, 10) < today;
+    const paymentStatus = paymentEligible ? calculatePaymentStatus(invoice.totalGrossCents, allocatedCents) : null;
+    return { invoice, paymentEligible, paymentStatus, overdue, remainingCents };
   });
-  const activeIssued = invoiceRows.filter(({ invoice }) => invoice.direction === "VYDANA" && invoice.documentType === "INVOICE" && invoice.documentStatus === "ISSUED" && invoice.source !== "HISTORICAL" && invoice.currency === "EUR");
-  const unpaid = activeIssued.filter(({ remainingCents }) => remainingCents > 0);
-  const overdue = unpaid.filter(({ overdue }) => overdue);
-  const draftCount = invoiceRows.filter(({ invoice }) => invoice.documentStatus === "DRAFT").length;
-  const unpaidCents = unpaid.reduce((sum, row) => sum + row.remainingCents, 0);
-  const filteredRows = invoiceRows.filter(({ invoice, paymentStatus, overdue }) => {
+  const filteredRows = invoiceRows.filter((row) => {
     if (!paymentFilter) return true;
-    if (invoice.documentStatus !== "ISSUED" || invoice.source === "HISTORICAL") return false;
-    if (paymentFilter === "PAID") return paymentStatus === "PAID" || paymentStatus === "OVERPAID";
-    if (paymentFilter === "OVERDUE") return overdue;
-    return paymentStatus === "UNPAID" || paymentStatus === "PARTIALLY_PAID";
+    if (!row.paymentEligible) return false;
+    if (paymentFilter === "PAID") return row.paymentStatus === "PAID" || row.paymentStatus === "OVERPAID";
+    if (paymentFilter === "OVERDUE") return row.overdue;
+    return row.remainingCents > 0;
   });
-  const visibleRows = filteredRows.slice(0, 200);
+  const outstanding = filteredRows.filter(({ invoice, paymentEligible, remainingCents }) =>
+    paymentEligible && (!smerFilter ? invoice.direction === "VYDANA" : true) &&
+    invoice.currency === "EUR" && remainingCents > 0,
+  );
+  const overdue = outstanding.filter((row) => row.overdue);
+  const draftCount = filteredRows.filter(({ invoice }) =>
+    invoice.documentStatus === "DRAFT" && invoice.source !== "HISTORICAL",
+  ).length;
+  const unpaidCents = outstanding.reduce((sum, row) => sum + row.remainingCents, 0);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const page = Math.min(Number(filters.strana ?? 1), pageCount);
+  const offset = (page - 1) * PAGE_SIZE;
+  const pageRows = filteredRows.slice(offset, offset + PAGE_SIZE);
+  const pageDetails = pageRows.length ? await prisma.invoice.findMany({
+    where: { id: { in: pageRows.map(({ invoice }) => invoice.id) } },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      externalNumber: true,
+      historicalKind: true,
+      paymentConfirmation: true,
+      supplierName: true,
+      counterpartySnapshot: true,
+      issueDate: true,
+      client: { select: { id: true, name: true } },
+    },
+  }) : [];
+  const detailsById = new Map(pageDetails.map((invoice) => [invoice.id, invoice]));
+  const visibleRows = pageRows.flatMap((row) => {
+    const details = detailsById.get(row.invoice.id);
+    return details ? [{ ...row, invoice: { ...row.invoice, ...details } }] : [];
+  });
+  const listContext = invoiceListParams({ ...filters, strana: page > 1 ? String(page) : undefined });
+  const pageHref = (target: number) => filterHref({ strana: target > 1 ? String(target) : undefined });
 
   return (
     <>
-      <PageHeader title={smerFilter === "PRIJATA" ? "Náklady" : "Faktúry"} subtitle={smerFilter === "PRIJATA" ? "Prijaté doklady a ich úhrady" : "Vystavené doklady, koncepty a úhrady"}>
+      <PageHeader title={expenses ? "Náklady" : "Faktúry"} subtitle={expenses ? "Prijaté doklady a ich úhrady" : smerFilter === "VYDANA" ? "Vydané doklady, koncepty a úhrady" : "Vydané a prijaté doklady, koncepty a úhrady"}>
         <a href={exportHref()} className={btnSecondary} download title="Export finalizovaných dokladov pre účtovníka; vyhľadávanie a stav zoznamu sa naň nevzťahujú">
           ⬇ Účtovný export
         </a>
         <Link href="/financie/import" className={btnSecondary}>
-          Import
+          Historická migrácia
         </Link>
         {smerFilter === "PRIJATA" ? (
           <Link href="/financie/faktury/historicka?smer=PRIJATA" className={btnPrimary}>+ Historický doklad</Link>
@@ -133,11 +158,11 @@ export default async function FakturyPage({
       </PageHeader>
 
       <nav className="finance-document-tabs" aria-label="Druhy dokladov">
-        <Link href={filterHref({ typ: undefined, stav: undefined })} aria-current={!typeFilter && !stavFilter ? "page" : undefined}>Všetky doklady</Link>
-        <Link href={filterHref({ typ: "INVOICE", stav: "ISSUED" })} aria-current={typeFilter === "INVOICE" && stavFilter === "ISSUED" ? "page" : undefined}>Faktúry</Link>
-        <Link href={filterHref({ typ: "CREDIT_NOTE", stav: undefined })} aria-current={typeFilter === "CREDIT_NOTE" ? "page" : undefined}>Dobropisy</Link>
-        <Link href={filterHref({ typ: undefined, stav: "DRAFT" })} aria-current={stavFilter === "DRAFT" ? "page" : undefined}>Koncepty</Link>
-        <Link href={filterHref({ typ: undefined, stav: "CANCELLED" })} aria-current={stavFilter === "CANCELLED" ? "page" : undefined}>Stornované</Link>
+        <Link href={filterHref({ typ: undefined, stav: undefined, rozsah: undefined })} aria-current={!typeFilter && !stavFilter && !reportScope ? "page" : undefined}>Všetky doklady</Link>
+        <Link href={filterHref({ typ: "INVOICE", stav: "ISSUED", rozsah: undefined })} aria-current={typeFilter === "INVOICE" && stavFilter === "ISSUED" ? "page" : undefined}>Faktúry</Link>
+        <Link href={filterHref({ typ: "CREDIT_NOTE", stav: undefined, rozsah: undefined, uhrada: undefined })} aria-current={typeFilter === "CREDIT_NOTE" ? "page" : undefined}>Dobropisy</Link>
+        <Link href={filterHref({ typ: undefined, stav: "DRAFT", rozsah: undefined, uhrada: undefined })} aria-current={stavFilter === "DRAFT" ? "page" : undefined}>Koncepty</Link>
+        <Link href={filterHref({ typ: undefined, stav: "CANCELLED", rozsah: undefined, uhrada: undefined })} aria-current={stavFilter === "CANCELLED" ? "page" : undefined}>Stornované</Link>
       </nav>
 
 
@@ -156,12 +181,12 @@ export default async function FakturyPage({
         <div className="rounded-[14px] border border-stone-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Na úhradu</p>
           <p className="mt-2 font-display text-2xl font-bold tabular-nums text-stone-950">{formatCents(unpaidCents)}</p>
-          <p className="mt-1 text-xs text-stone-500">{unpaid.length} vydaných faktúr v EUR</p>
+          <p className="mt-1 text-xs text-stone-500">{outstanding.length} {expenses ? "prijatých" : "vydaných"} faktúr v EUR</p>
         </div>
         <div className="rounded-[14px] border border-stone-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Po splatnosti</p>
           <p className={`mt-2 font-display text-2xl font-bold tabular-nums ${overdue.length ? "text-red-700" : "text-stone-950"}`}>{overdue.length}</p>
-          <p className="mt-1 text-xs text-stone-500">vydaných faktúr na preverenie</p>
+          <p className="mt-1 text-xs text-stone-500">{expenses ? "prijatých" : "vydaných"} faktúr v EUR</p>
         </div>
         <div className="rounded-[14px] border border-stone-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Koncepty</p>
@@ -172,61 +197,51 @@ export default async function FakturyPage({
 
       <div className="finance-list-layout">
       <aside className="finance-list-filters">
-        <form action="/financie/faktury" className="mb-4 flex flex-wrap items-end gap-2">
-          {smerFilter && <input type="hidden" name="smer" value={smerFilter} />}
-          {zdrojFilter && <input type="hidden" name="zdroj" value={zdrojFilter} />}
-          {stavFilter && <input type="hidden" name="stav" value={stavFilter} />}
+        <form action="/financie/faktury" key={listContext.toString()}>
           {entityFilter && <input type="hidden" name="subjekt" value={entityFilter} />}
           {paymentFilter && <input type="hidden" name="uhrada" value={paymentFilter} />}
-          {yearFilter && <input type="hidden" name="rok" value={yearFilter} />}
+          {stavFilter && <input type="hidden" name="stav" value={stavFilter} />}
           {typeFilter && <input type="hidden" name="typ" value={typeFilter} />}
-          <div className="min-w-[220px] flex-1">
-            <label htmlFor="invoice-search" className="mb-1.5 block text-xs font-semibold text-stone-700">Hľadať faktúru</label>
-            <input id="invoice-search" type="search" name="q" defaultValue={query} placeholder="Číslo, VS, klient alebo dodávateľ" className="w-full rounded-[10px] border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-950 focus:ring-[3px] focus:ring-brand/35" />
+          {reportScope && <input type="hidden" name="rozsah" value={reportScope} />}
+          <div>
+            <label htmlFor="invoice-search" className={label}>Hľadať doklad</label>
+            <input id="invoice-search" type="search" name="q" defaultValue={query ?? ""} maxLength={100} placeholder="Číslo, firma alebo VS" className={input} />
           </div>
-          <button type="submit" className={btnSecondary}>Hľadať</button>
-          {query && <Link href={filterHref({ q: undefined })} className={btnSecondary}>Vymazať</Link>}
+          <div>
+            <label htmlFor="invoice-year" className={label}>Rok vystavenia</label>
+            <select id="invoice-year" name="rok" defaultValue={filters.rok ?? ""} className={input}>
+              <option value="">Všetky roky</option>
+              {Array.from({ length: currentYear - 2008 }, (_, index) => currentYear + 1 - index).map(year =>
+                <option value={year} key={year}>{year}</option>
+              )}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="invoice-direction" className={label}>Smer</label>
+            <select id="invoice-direction" name="smer" defaultValue={smerFilter ?? ""} className={input}>
+              <option value="">Všetky smery</option>
+              {Object.entries(DIRECTION_LABELS).map(([value, title]) => <option value={value} key={value}>{title}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="invoice-source" className={label}>Zdroj</label>
+            <select id="invoice-source" name="zdroj" defaultValue={zdrojFilter ?? ""} className={input}>
+              <option value="">Všetky zdroje</option>
+              {Object.entries(INVOICE_SOURCE_LABELS).map(([value, title]) => <option value={value} key={value}>{title}</option>)}
+            </select>
+          </div>
+          <div className="finance-filter-actions">
+            <button type="submit" className={btnSecondary}>Použiť filtre</button>
+            <Link href={invoiceListHref({ smer: smerFilter, subjekt: entityFilter })} className="underline">Zrušiť filtre</Link>
+          </div>
         </form>
-        <div className="mb-3 flex gap-2 border-b border-stone-100 pb-3">
-          <Link href={filterHref({ rok: undefined })} className={filterPill(!yearFilter)}>Všetky roky</Link>
-          <Link href={filterHref({ rok: String(currentYear) })} className={filterPill(yearFilter === currentYear)}>Tento rok</Link>
-        </div>
-        <div className="mb-2 flex flex-wrap gap-2">
-        <Link href={filterHref({ smer: undefined })} className={filterPill(!smerFilter)}>
-          Všetky smery
-        </Link>
-        {Object.entries(DIRECTION_LABELS).map(([value, label]) => (
-          <Link key={value} href={filterHref({ smer: value })} className={filterPill(smerFilter === value)}>
-            {label}
-          </Link>
-        ))}
-        <span className="mx-1 self-center text-stone-300">·</span>
-        <Link href={filterHref({ zdroj: undefined })} className={filterPill(!zdrojFilter)}>
-          Všetky zdroje
-        </Link>
-        {Object.entries(INVOICE_SOURCE_LABELS).map(([value, label]) => (
-          <Link key={value} href={filterHref({ zdroj: value })} className={filterPill(zdrojFilter === value)}>
-            {label}
-          </Link>
-        ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-        <Link href={filterHref({ subjekt: undefined })} className={filterPill(!entityFilter)}>Všetky subjekty</Link>
-        {Object.entries(legalEntityLabels).map(([value, title]) => <Link key={value} href={filterHref({ subjekt: value })} className={filterPill(entityFilter === value)}>{title}</Link>)}
-        <Link href={filterHref({ subjekt: "UNASSIGNED" })} className={filterPill(entityFilter === "UNASSIGNED")}>Nepriradené</Link>
-        <Link href={filterHref({ stav: undefined })} className={filterPill(!stavFilter)}>
-          Všetky stavy
-        </Link>
-        {Object.entries(invoiceDocumentStatusLabels).map(([value, label]) => (
-          <Link key={value} href={filterHref({ stav: value })} className={filterPill(stavFilter === value)}>
-            {label}
-          </Link>
-        ))}
-        </div>
       </aside>
 
       <div className="finance-list-results">
-      <p className="mb-2 text-xs text-stone-500">Zobrazených {visibleRows.length} z {filteredRows.length} dokladov. Súhrn vyššie zohľadňuje ostatné zvolené filtre a všetky zodpovedajúce doklady.</p>
+      <p className="mb-2 text-xs text-stone-600">
+        {filteredRows.length ? `${offset + 1}–${offset + visibleRows.length} z ${filteredRows.length} dokladov` : "0 dokladov"}
+        {reportScope && " · Rozsah prehľadu: vystavené doklady v EUR bez predfaktúr"}
+      </p>
 
       <div className="overflow-x-auto rounded-[14px] border border-stone-200 bg-white">
         <table className="w-full min-w-[760px] text-sm">
@@ -247,12 +262,12 @@ export default async function FakturyPage({
                 </td>
               </tr>
             )}
-            {visibleRows.map(({ invoice: inv, paymentStatus, overdue }) => {
-              const displayedNumber = inv.invoiceNumber ?? (inv.source === "HISTORICAL" ? inv.externalNumber ?? "Historický originál" : "Koncept");
+            {visibleRows.map(({ invoice: inv, paymentStatus, overdue, remainingCents }) => {
+              const displayedNumber = inv.invoiceNumber ?? inv.externalNumber ?? (inv.documentStatus === "DRAFT" ? "Koncept" : "Bez čísla");
               return (
                 <tr key={inv.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
                   <td className="px-4 py-3">
-                    <Link href={`/financie/faktury/${inv.id}?${new URLSearchParams({ smer: inv.direction, ...(entityFilter ? { subjekt: entityFilter } : {}) })}`} className="font-medium text-stone-950 hover:underline">
+                    <Link href={`/financie/faktury/${inv.id}?${new URLSearchParams({ smer: inv.direction, ...(entityFilter ? { subjekt: entityFilter } : {}), zoznam: listContext.toString() })}`} className="font-medium text-stone-950 hover:underline">
                       {displayedNumber}
                     </Link>
                     {inv.externalNumber && inv.externalNumber !== displayedNumber && <div className="mt-0.5 text-xs text-stone-500">Externé č. {inv.externalNumber}</div>}
@@ -275,12 +290,17 @@ export default async function FakturyPage({
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-stone-900">
                     {formatCurrencyMinor(inv.totalGrossCents, inv.currency)}
+                    {paymentStatus === "PARTIALLY_PAID" && <div className="mt-1 text-xs font-normal text-stone-600">Zostáva {formatCurrencyMinor(remainingCents, inv.currency)}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="mb-1 text-stone-700">{formatDate(inv.issueDate)} / <span className={overdue ? "font-semibold text-red-700" : ""}>{formatDate(inv.dueDate)}</span></div>
-                    <Badge color={overdue ? "red" : INVOICE_PAYMENT_STATUS_COLORS[paymentStatus]}>
-                      {inv.source === "HISTORICAL" ? inv.paymentConfirmation ? "Potvrdená mimo ERP" : "Neoverená" : overdue ? "Po splatnosti" : invoicePaymentStatusLabels[paymentStatus]}
-                    </Badge>
+                    {inv.source === "HISTORICAL" ? (
+                      <Badge color="gray">{inv.paymentConfirmation ? "Potvrdená mimo ERP" : "Neoverená"}</Badge>
+                    ) : paymentStatus && (
+                      <Badge color={overdue ? "red" : INVOICE_PAYMENT_STATUS_COLORS[paymentStatus]}>
+                        {overdue ? "Po splatnosti" : invoicePaymentStatusLabels[paymentStatus]}
+                      </Badge>
+                    )}
                   </td>
                 </tr>
               );
@@ -288,6 +308,13 @@ export default async function FakturyPage({
           </tbody>
         </table>
       </div>
+      {pageCount > 1 && (
+        <nav aria-label="Stránky dokladov" className="finance-pagination">
+          {page > 1 && <Link href={pageHref(page - 1)} className={btnSecondary}>← Predchádzajúca</Link>}
+          <span>Strana {page} z {pageCount}</span>
+          {page < pageCount && <Link href={pageHref(page + 1)} className={btnSecondary}>Nasledujúca →</Link>}
+        </nav>
+      )}
       </div></div>
     </>
   );

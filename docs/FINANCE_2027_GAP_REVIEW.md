@@ -116,10 +116,13 @@ Vetvy tvoria nadväzujúci zásobník zmien. Poradie kontroly/integrácie:
 7. [PR #102 – formulár úpravy a kópia faktúry](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/102)
 8. [PR #103 – súhrnné faktúry, objednávkové väzby a DPH podľa dodaní](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/103)
 9. [PR #104 – výber objednávok a ochrana zdrojových dokladov](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/104)
+10. [PR #105 – prostredie fakturácie, prehľady a zoznamy](https://github.com/Org-Zdravy-shot/ERP-syst-m/pull/105)
 
 Všetky PR sú drafty. Hlavná vetva ani produkčné nastavenia sa nemenili. Po integrácii spodnej vetvy treba ďalšiemu PR upraviť cieľ a overiť diff. Pred prevádzkou ostáva API onboarding, vizuálne QA a integračné podmienky nižšie.
 
 ## Podmienky januárového prechodu
+
+Pri kontrole 22. 11. 2026 produkčný health endpoint odpovedal `ok`. V službe ERP-syst-m je produkčné vystavovanie vypnuté a chýba kľúč Autoform aj nastavenie poskytovateľa eFaktúry. Lokálny build prešiel, 375 testov prešlo a 2 zostali preskočené. Skúška na izolovanom PostgreSQL overila stránkovanie, záväzky, create/edit/copy konceptu aj lokálnu finalizáciu súhrnnej faktúry do PDF a UBL. Produkčný prechod vyžaduje integráciu troch migrácií zo zásobníka, overenie nastavení a skúšku doručenia s 101kou.
 
 1. Dokončiť dátový model dokladov a FMCG, zachovať čísla, presné ceny a nemennosť.
 2. Doplniť pracovné funkcie a import posledných dokladov zo SuperFaktúry bez duplikátov.

@@ -40,9 +40,10 @@ function lineGrossCents(line: Line): number | null {
   return parsed ? parsed.netCents + Math.round((parsed.netCents * parsed.vatRate) / 100) : null;
 }
 
-export function InvoiceForm({ clients, issuers = [], canConfigure = false, initial, defaultIssuer, action = createManualInvoice, editing = false }: {
+export function InvoiceForm({ clients, issuers = [], canConfigure = false, initial, defaultIssuer, backHref = "/financie/faktury", action = createManualInvoice, editing = false }: {
   clients: ClientOption[]; issuers?: IssuerOption[]; canConfigure?: boolean; initial?: InvoiceFormInitial; defaultIssuer?: string; editing?: boolean;
   action?: (state: InvoiceFormState, data: FormData) => Promise<InvoiceFormState>;
+  backHref?: string;
 }) {
   const today = slovakDateKey();
   const in14days = new Date(new Date(`${today}T12:00:00.000Z`).getTime() + 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
@@ -248,11 +249,11 @@ export function InvoiceForm({ clients, issuers = [], canConfigure = false, initi
         <label className={label}>Externé číslo<input name="externalNumber" value={header.externalNumber} onChange={e => setHeader({ ...header, externalNumber: e.target.value })} className={input} /></label>
         <div className="text-xs text-stone-500">Referencia odberateľa je potrebná pre elektronickú faktúru. Použite údaj, ktorý vám poskytol odberateľ.</div>
       </div><label className={`${label} mt-4`}>Poznámka na doklade<textarea name="note" rows={3} value={header.note} onChange={e => setHeader({ ...header, note: e.target.value })} className={input} placeholder="Text pre odberateľa" /></label></div>
-      {state.error && <p role="alert" className={`${errorBox} mt-4`}>{state.error}</p>}
       </div>
-      <aside className="finance-editor-sidebar"><h3>Nová vydaná faktúra</h3><dl><div><dt>Mena</dt><dd>EUR</dd></div><div><dt>Položky</dt><dd>{lines.length}</dd></div><div><dt>Základ dane</dt><dd>{formatCents(totals.net)}</dd></div><div><dt>DPH</dt><dd>{formatCents(totals.vat)}</dd></div><div className="finance-editor-grand"><dt>Celkom</dt><dd>{formatCents(totals.gross)}</dd></div></dl>
+      <aside className="finance-editor-sidebar"><h3>Súhrn konceptu</h3><dl><div><dt>Mena</dt><dd>EUR</dd></div><div><dt>Položky</dt><dd>{lines.length}</dd></div><div><dt>Základ dane</dt><dd>{formatCents(totals.net)}</dd></div><div><dt>DPH</dt><dd>{formatCents(totals.vat)}</dd></div><div className="finance-editor-grand"><dt>Celkom</dt><dd>{formatCents(totals.gross)}</dd></div></dl>
+        {state.error && <div role="alert" className={`${errorBox} mb-3`}>{state.error}</div>}
         <button type="submit" disabled={pending || savingClient || invalidPriceRows.some(Boolean) || invalidQuantityRows.some(Boolean) || fmcgErrors.some(Boolean)} className={btnPrimary}>{pending ? "Ukladám…" : editing ? "Uložiť zmeny konceptu" : "Uložiť koncept"}</button>
-        <p>Po uložení môžete faktúru skontrolovať a vystaviť. Číslo sa pridelí pri vystavení.</p><Link href="/financie/faktury">Zrušiť a späť na zoznam</Link>
+        <p>Po uložení môžete faktúru skontrolovať a vystaviť. Číslo sa pridelí pri vystavení.</p><Link href={backHref}>Zrušiť úpravy</Link>
       </aside>
     </form>
   );
