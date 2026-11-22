@@ -163,22 +163,30 @@ export function FinanceSettingsForms({
           <label className={label}>Platnosť sadzieb od</label>
           <input name="validFrom" type="date" required defaultValue={suggestedValidFrom} className={input} />
         </div>
+        <div className="mb-4 max-w-2xl">
+          <label htmlFor="vat-source-note" className={label}>Podklad potvrdenia</label>
+          <input id="vat-source-note" name="sourceNote" maxLength={500} className={input} />
+          <p className="mt-1 text-xs text-stone-500">Pri potvrdenej sadzbe povinné. Uloží sa len k vybraným produktom.</p>
+        </div>
         <div className="overflow-x-auto rounded-[10px] border border-stone-200">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50 text-left text-xs uppercase text-stone-500">
+                <th className="px-4 py-3">Uložiť</th>
                 <th className="px-4 py-3">Produkt</th>
                 <th className="px-4 py-3">Sadzba %</th>
-                <th className="px-4 py-3">Potvrdené účtovníkom</th>
+                <th className="px-4 py-3">Sadzba overená pre fakturáciu</th>
               </tr>
             </thead>
             <tbody>
               {products.map((product) => (
                 <tr key={product.id} className="border-b border-stone-100 last:border-0">
+                  <td className="px-4 py-3"><input name="selectedProductId" type="checkbox" value={product.id} aria-label={`Uložiť sadzbu: ${product.name}`} className="size-4" /></td>
                   <td className="px-4 py-3 font-medium text-stone-900">{product.name}</td>
                   <td className="px-4 py-3">
                     <input
                       name={`rate:${product.id}`}
+                      aria-label={`Sadzba DPH pre ${product.name}`}
                       type="number"
                       min={0}
                       max={100}
@@ -191,15 +199,16 @@ export function FinanceSettingsForms({
                     <input
                       name={`confirmed:${product.id}`}
                       type="checkbox"
-                      defaultChecked={product.confirmed}
+                      aria-label={`Potvrdiť zadanú sadzbu pre ${product.name}`}
                       className="size-4"
                     />
+                    {product.confirmed && <span className="ml-2 text-xs text-stone-500">Aktuálna sadzba potvrdená</span>}
                   </td>
                 </tr>
               ))}
               {products.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-stone-400">
+                  <td colSpan={4} className="px-4 py-8 text-center text-stone-400">
                     Nie sú vytvorené žiadne aktívne produkty.
                   </td>
                 </tr>

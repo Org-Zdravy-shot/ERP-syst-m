@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -760,14 +761,21 @@ export async function saveProductVatRates(
   const validFrom = formDate(formData, "validFrom");
   if (!validFrom) return { error: "Začiatok platnosti sadzieb je povinný." };
 
+  const selectedIds = new Set(formData.getAll("selectedProductId").map(String));
+  if (selectedIds.size === 0) return { error: "Vyberte aspoň jeden produkt, ktorého sadzbu chcete uložiť." };
+  const sourceNote = String(formData.get("sourceNote") ?? "").trim();
+  if (sourceNote.length > 500) return { error: "Podklad potvrdenia môže mať najviac 500 znakov." };
+
   const products = await prisma.product.findMany({
-    where: { isActive: true },
+    where: { id: { in: [...selectedIds] }, isActive: true },
     select: { id: true, name: true },
+    orderBy: { id: "asc" },
   });
   const rates: Array<{ productId: string; name: string; rate: number; confirmed: boolean }> = [];
   for (const product of products) {
-    const rate = Number.parseInt(String(formData.get(`rate:${product.id}`) ?? ""), 10);
-    if (!Number.isInteger(rate) || rate < 0 || rate > 100) {
+    const rawRate = String(formData.get(`rate:${product.id}`) ?? "").trim();
+    const rate = Number(rawRate);
+    if (!/^\d{1,3}$/.test(rawRate) || rate > 100) {
       return { error: `Produkt ${product.name} má neplatnú sadzbu DPH.` };
     }
     rates.push({
@@ -777,11 +785,25 @@ export async function saveProductVatRates(
       confirmed: formData.get(`confirmed:${product.id}`) === "on",
     });
   }
+  if (rates.length !== selectedIds.size) return { error: "Výber obsahuje neexistujúci alebo neaktívny produkt." };
+  if (rates.some((rate) => rate.confirmed) && !sourceNote) {
+    return { error: "Pri potvrdenej sadzbe uveďte podklad, podľa ktorého bola overená." };
+  }
 
   try {
     await prisma.$transaction(async (tx) => {
       const previousEnd = new Date(validFrom.getTime() - 1);
       for (const rate of rates) {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`SELECT id FROM "Product" WHERE id = ${rate.productId} AND "isActive" FOR UPDATE`,
+        );
+        if (!locked.length) throw new Error(`Produkt ${rate.name} už nie je aktívny.`);
+        const next = await tx.productVatRate.findFirst({
+          where: { productId: rate.productId, validFrom: { gt: validFrom } },
+          orderBy: { validFrom: "asc" },
+          select: { validFrom: true },
+        });
+        const validTo = next ? new Date(next.validFrom.getTime() - 1) : null;
         await tx.productVatRate.updateMany({
           where: {
             productId: rate.productId,
@@ -796,17 +818,21 @@ export async function saveProductVatRates(
             productId: rate.productId,
             rate: rate.rate,
             validFrom,
+            validTo,
             confirmedAt: rate.confirmed ? new Date() : null,
             confirmedBy: rate.confirmed ? user.email : null,
-            sourceNote: "Nastavenie Financie v2",
+            sourceNote: sourceNote || "Nepotvrdená sadzba z nastavení financií",
           },
           update: {
             rate: rate.rate,
+            validTo,
             confirmedAt: rate.confirmed ? new Date() : null,
             confirmedBy: rate.confirmed ? user.email : null,
+            sourceNote: sourceNote || "Nepotvrdená sadzba z nastavení financií",
           },
         });
-        if (validFrom.getTime() <= Date.now()) {
+        const now = Date.now();
+        if (validFrom.getTime() <= now && (!validTo || validTo.getTime() >= now)) {
           await tx.product.update({ where: { id: rate.productId }, data: { vatRate: rate.rate } });
         }
       }
@@ -818,6 +844,7 @@ export async function saveProductVatRates(
           entityType: "ProductVatRate",
           entityId: validFrom.toISOString(),
           afterData: rates,
+          metadata: { sourceNote },
         },
       });
     });
