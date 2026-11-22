@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireFinancePermission } from "@/lib/finance/permissions";
-import { lookupAutoform, type CompanyMatch } from "@/lib/company-lookup";
+import { lookupCompanyRegistry, type CompanyMatch } from "@/lib/company-lookup";
 import { findClientByIcoForCreation } from "./client-identity";
 
 // Bounded process-local cache limits repeated paid requests while typing/backtracking.
@@ -26,10 +26,13 @@ export async function searchCompanies(query: string): Promise<{ companies: Compa
     id: row.id, clientId: row.id, name: row.name, ico: row.ico ?? "", dic: row.dic ?? "", icDph: row.icDph ?? "",
     street: row.street ?? "", city: row.city ?? "", zip: row.zip ?? "", country: row.country, source: "ERP",
   }));
+  // A complete IČO already present in ERP needs no external request.
+  const compact = term.replace(/\s/g, "");
+  if (/^\d{8}$/.test(compact) && companies.some((row) => row.ico.replace(/\s/g, "") === compact)) return { companies };
   try {
     const cacheKey = term.toLocaleLowerCase("sk").replace(/\s+/g, " ");
     const cached = registryCache.get(cacheKey);
-    const remote = cached && cached.expires > Date.now() ? cached.companies : await lookupAutoform(term);
+    const remote = cached && cached.expires > Date.now() ? cached.companies : await lookupCompanyRegistry(term);
     if (!cached || cached.expires <= Date.now()) {
       if (registryCache.size >= 100) registryCache.delete(registryCache.keys().next().value!);
       registryCache.set(cacheKey, { companies: remote, expires: Date.now() + 5 * 60_000 });

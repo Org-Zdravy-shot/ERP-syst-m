@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lookupRpo } from "./rpo-company-lookup";
 
 export interface CompanyMatch {
   id: string;
@@ -11,7 +12,7 @@ export interface CompanyMatch {
   city: string;
   zip: string;
   country: string;
-  source: "ERP" | "AUTOFORM";
+  source: "ERP" | "AUTOFORM" | "RPO";
   updatedAt?: string;
 }
 
@@ -66,4 +67,17 @@ export async function lookupAutoform(query: string, options: { apiKey?: string; 
     // A fetch error can contain the URL with the private token. Never return it.
     throw new Error("Online register firiem je dočasne nedostupný. Údaje môžete vyplniť ručne.");
   }
+}
+
+
+export async function lookupCompanyRegistry(query: string): Promise<CompanyMatch[]> {
+  if (process.env.AUTOFORM_API_KEY?.trim()) {
+    try {
+      const companies = await lookupAutoform(query);
+      if (companies.length) return companies;
+    } catch {
+      // Keep the public register available if the paid provider is unavailable.
+    }
+  }
+  return lookupRpo(query);
 }

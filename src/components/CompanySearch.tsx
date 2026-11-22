@@ -48,10 +48,17 @@ export function CompanySearch({ onSelect }: { onSelect: (company: CompanyMatch) 
       {results.map((row, index) => <li key={row.id} role="option" id={`${id}-${index}`} aria-selected={active === index}>
         <button type="button" onClick={() => choose(row)} className={`w-full border-b border-stone-100 px-3 py-3 text-left text-sm hover:bg-amber-50 ${active === index ? "bg-amber-100" : ""}`}>
           <span className="block font-semibold text-stone-950">{row.name}</span>
-          <span className="block text-xs text-stone-600">IČO {row.ico || "—"} · {[row.street, row.city].filter(Boolean).join(", ")} · {row.source === "ERP" ? "Uložený klient" : "Autoform"}</span>
+          <span className="block text-xs text-stone-600">IČO {row.ico || "—"} · {[row.street, row.city].filter(Boolean).join(", ")} · {({ ERP: "Uložený klient", AUTOFORM: "Autoform", RPO: "Verejný register RPO" })[row.source]}</span>
         </button>
       </li>)}
     </ul>}
+    {results.some((row) => row.source === "RPO") && (
+      <p className="mt-2 text-xs text-stone-500">
+        Zdroj: <a href="https://rpo.minv.sk/new/" target="_blank" rel="noreferrer" className="underline">RPO, Ministerstvo vnútra SR</a>
+        {" · "}<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer" className="underline">CC BY 4.0</a>.
+        {" ERP vyberá aktuálny záznam a formátuje adresu. DIČ a IČ DPH doplňte podľa potreby."}
+      </p>
+    )}
     {results.some((row) => row.source === "AUTOFORM") && <p className="mt-2 text-xs text-stone-500">Údaje: <a href="https://ekosystem.slovensko.digital/sluzby/autoform" target="_blank" rel="noreferrer" className="underline">Slovensko.Digital – Autoform</a>. Pred uložením skontrolujte ich aktuálnosť.</p>}
   </div>;
 }
