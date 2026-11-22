@@ -5,16 +5,18 @@ import type { InvoiceFormState } from "../../_actions";
 import { btnPrimary, btnDanger, errorBox } from "@/components/ui";
 
 export function InvoiceWorkflowActions({
-  documentStatus,
-  documentType,
+  canFinalize,
+  canCancel,
+  canCredit,
   defaultIssueDate,
   defaultDueDate,
   finalizeAction,
   cancelAction,
   creditNoteAction,
 }: {
-  documentStatus: string;
-  documentType: string;
+  canFinalize: boolean;
+  canCancel: boolean;
+  canCredit: boolean;
   defaultIssueDate: string;
   defaultDueDate: string;
   finalizeAction: (prevState: InvoiceFormState, formData: FormData) => Promise<InvoiceFormState>;
@@ -27,18 +29,18 @@ export function InvoiceWorkflowActions({
 
   return (
     <div className="space-y-4 print:hidden">
-      {documentStatus === "DRAFT" && (
+      {canFinalize && (
         <form action={finalizeFormAction}>
           <button type="submit" disabled={finalizePending} className={btnPrimary}>
-            {finalizePending ? "Finalizujem…" : "Skontrolovať a finalizovať"}
+            {finalizePending ? "Vystavujem…" : "Skontrolovať a vystaviť doklad"}
           </button>
           <p className="mt-2 text-xs text-stone-500">
-            Finalizácia pridelí číslo, uzamkne údaje a zaradí vytvorenie PDF.
+            Vystavením sa pridelí číslo dokladu a uložia sa údaje pre PDF.
           </p>
         </form>
       )}
 
-      {documentStatus === "ISSUED" && documentType === "INVOICE" && (
+      {canCredit && (
         <form action={creditFormAction} className="space-y-3 border-t border-stone-100 pt-4">
           <h3 className="text-sm font-semibold text-stone-900">Vytvoriť plný dobropis</h3>
           <div>
@@ -52,7 +54,7 @@ export function InvoiceWorkflowActions({
               className="mt-1 w-full rounded-[10px] border border-stone-300 px-3 py-2 text-sm"
             />
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid gap-2">
             <div>
               <label className="block text-xs text-stone-600" htmlFor="credit-issue-date">Vystavenie</label>
               <input
@@ -93,7 +95,7 @@ export function InvoiceWorkflowActions({
         </form>
       )}
 
-      {(documentStatus === "DRAFT" || documentStatus === "ISSUED") && (
+      {canCancel && (
         <form action={cancelFormAction} className="space-y-2 border-t border-stone-100 pt-4">
           <label className="block text-xs font-medium text-stone-600" htmlFor="cancel-reason">
             Dôvod storna

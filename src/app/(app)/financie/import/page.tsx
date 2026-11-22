@@ -1,17 +1,20 @@
 import Link from "next/link";
+import { requireUser } from "@/lib/auth";
+import { hasFinancePermission } from "@/lib/finance/permissions";
 import { PageHeader } from "@/components/PageHeader";
 import { btnSecondary } from "@/components/ui";
 
-export default function ImportPage() {
+export default async function ImportPage() {
+  const user = await requireUser();
   return (
     <>
       <PageHeader
         title="Historická migrácia"
         subtitle="ERP je jediný systém pre nové faktúry; staré systémy sú vyradené"
       >
-        <Link href="/financie/nastavenia" className={btnSecondary}>
-          Nastavenia financií
-        </Link>
+        {hasFinancePermission(user.role, "CONFIGURE") && (
+          <Link href="/financie/nastavenia" className={btnSecondary}>Nastavenia financií</Link>
+        )}
         <Link href="/financie/ekasa" className={btnSecondary}>
           eKasa import
         </Link>

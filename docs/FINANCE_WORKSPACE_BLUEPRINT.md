@@ -1,10 +1,10 @@
 # Fakturácia v ERP — návrh celého prostredia a zadanie pre implementáciu
 
-22. 11. 2026 · Návrh na základe požiadavky používateľa. Vývoj aplikácie je na jeho žiadosť pozastavený do prepnutia modelu. Tento dokument definuje cieľ, neoznačuje ho za implementovaný.
+22. 11. 2026 · Návrh fakturačného prostredia. Stav implementácie je v kapitole 8.
 
 ## 1. Výsledok pre používateľa
 
-Používateľ otvorí fakturáciu a nájde známe členenie SuperFaktúry, podobnú hustotu informácií, umiestnenie ovládania a poradie krokov. Farby, logo a identita patria Zdravému Shotu. Vlastné skladové, výrobné a obchodné dáta zostávajú prepojené s dokladmi. Nejde len o prefarbenie existujúcich kariet.
+Používateľ otvorí fakturáciu a nájde známe pracovné postupy zo SuperFaktúry v samostatnom rozhraní Zdravého Shotu. Vlastné skladové, výrobné a obchodné dáta sú prepojené s dokladmi.
 
 Celý cieľ zahŕňa prehľady, všetky typy obchodných dokladov, ich vytváranie a nadväznosť, náklady, kontakty, platby, odosielanie, exporty, nastavenia a Peppol. Jednotlivé funkcie sa sprístupnia až s fungujúcim backendom. Žiadne tlačidlá predstierajúce uloženie, platbu alebo doručenie.
 
@@ -37,7 +37,7 @@ Veľký počet podsekcií faktúr nezapĺňa jediný vodorovný riadok: hlavné 
 ## 3. Vizuálny systém
 
 - Pozadie `#F5F5F4`, biely dokument a tabuľky, čierna `#202020`, žltá `#FFD52E`. Žltá pre hlavnú akciu a aktívny prvok, nie pre celé pozadie.
-- Maximum obsahu 1380 px, okraje 32 px na desktope / 18 px na mobile. Hlavička približne 92 px, navigácia 50 px, čierny pás pod ňou 19 px.
+- Maximum obsahu 1380 px, okraje 32 px na desktope a 18 px na mobile. Tmavá pracovná lišta s označením ZS, vyhľadávaním a profilom má na desktope 74 px. Pod ňou sú svetlé záložky agend a žltá hlavná akcia.
 - Nadpis stránky 23–26 px, bežný text 13–14 px, popisky 11–12 px; číselné stĺpce zarovnané doprava a číslice s rovnakou šírkou. Dlhé čísla a mená sa nesmú prekrývať.
 - Polia a panely s rohmi 4–5 px, jemné oddeľovače, minimálne tiene. Husté pracovné tabuľky, nie veľké marketingové karty. Jeden dominantný primárny úkon na obrazovku.
 - Výstrahy a chyby môžu používať červenú; úspech zelenú. Vždy aj text/ikona, nie iba farba. Žlté tlačidlo má tmavý text.
@@ -222,10 +222,9 @@ Tests voliť podľa rizika: výpočty, idempotencia, oprávnenia a databázové 
 ## 8. Presný odovzdávací stav k 22. 11. 2026
 
 - Pracovný adresár: `/Users/macbook/Documents/ERP-finance-2027`, vetva `feat/finance-workspace-ui`, východiskový commit `cfe85d3` nad PR #104.
-- UI je **rozpracovaná, necommitnutá zmena**: nový AppShell/CSS, nový prehľad a graf, presun starých marží, navigácia Nástroje/Náklady, preusporiadaný editor/detail/zoznam. Tieto súbory zachovať a dokončiť, nie začať od nuly. Produkcia sa touto prácou nemenila.
-- Plánovanie zastavilo práve pripravené lokálne vizuálne QA. Nový vzhľad zatiaľ nemá dokončenú klikaciu ani vizuálnu kontrolu. Časť skoršej UI verzie prešla typecheckom; posledné všetky zmeny ešte nemajú kompletný test/build.
-- Základ pred UI mal 373 úspešných testov, 2 preskočené, typecheck/build a lokálne PostgreSQL integračné testy. Tieto výsledky neprezentovať ako test novej UI.
-- Známe úlohy P1–P3: presun marží ešte odkazuje filtrami na `/financie`; list je príliš rozvláčny v bočných filtroch; Náklady majú nesprávne vydané KPI/CTA; historický formulár nie je nový náklad; aktuálny výber firmy sa neprenáša celým prostredím; dokončiť detail/kontakty/cashflow; pridať tests `overview-data.ts`; preveriť nullable filtrovanie historických predfaktúr a časové hranice splatnosti.
+- P1 má spoločnú hlavičku, záložky agend, prepínač firmy v podporovaných prehľadoch a zozname, kontext prijatých dokladov a akcie podľa roly. Sklad a ostatné agendy používajú pôvodnú navigáciu. Rozpracovaný prehľad, graf, editor a zoznam sú vo vetve zachované.
+- Overenie P1 na izolovanom PostgreSQL pokrylo 18 obrazoviek, dostupnosť CSS, aktívnu navigáciu, prenesenie firmy a roka a prístup pre správcu, operátora, sklad a neprihláseného používateľa. Vizuálna a klikacia kontrola na desktope a mobile čaká na dostupné okno prehliadača.
+- Známe úlohy P2–P3 zahŕňajú kompaktnejšie filtre a stránkovanie, správne záväzky pre Náklady, rozsah cash flow, kontrolu súčtov a splatnosti, náhľad a klikacie overenie editora. Historický doklad je evidenčný formulár. Nový nákladový editor patrí do P5.
 - Existujúce draft PR #96–#104 sú závislý zásobník, nie nasadené zmeny. Ich poradie a dôkazy sú v `FINANCE_2027_GAP_REVIEW.md`. Nemergovať celú vetvu bez kontroly tohto zásobníka a aktuálneho main.
 - Oddelená lokálna vetva `feat/invoice-dispatch-batches`, commit `cd530ed`, obsahuje iba základ nullable `StockMovement.orderItemId` a migráciu `20261122090000_dispatch_order_item`. Nie je v UI vetve, nie je nasadená ani kompletná implementácia P6. Pred použitím znovu preveriť.
 - `.local-research/` obsahuje prílohu 101ky a extrakcie; necommitovať. Hlavný worktree `/Users/macbook/Documents/ERP-system` obsahuje nesúvisiace zmeny, nezasahovať doň.

@@ -108,13 +108,10 @@ export default async function CashflowPage() {
     <>
       <PageHeader
         title="Cash-flow"
-        subtitle="Skutočné toky z platieb, očakávané príjmy a neuhradené faktúry"
+        subtitle="Platby, očakávané príjmy a neuhradené faktúry za všetky subjekty"
       >
         <Link href="/financie/banka" className={btnSecondary}>
           Banka
-        </Link>
-        <Link href="/financie" className={btnSecondary}>
-          ← Financie
         </Link>
       </PageHeader>
 

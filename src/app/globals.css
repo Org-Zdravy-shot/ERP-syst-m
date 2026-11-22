@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./finance-workspace.css";
 
 /* Brand tokeny podľa zdravyshot.sk (docs/DESIGN_BRIEF.md) */
 @theme {

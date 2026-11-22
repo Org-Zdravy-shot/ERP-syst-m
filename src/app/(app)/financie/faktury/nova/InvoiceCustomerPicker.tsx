@@ -6,7 +6,7 @@ import { btnSmall, input, label } from "@/components/ui";
 import type { CompanyMatch } from "@/lib/company-lookup";
 import { saveInvoiceClient } from "../../../klienti/company-actions";
 
-interface ClientOption { id: string; name: string; type: string }
+export interface ClientOption { id: string; name: string; type: string; ico?: string | null; dic?: string | null; icDph?: string | null; street?: string | null; city?: string | null; zip?: string | null; country?: string }
 type BillingFields = Pick<CompanyMatch, "name" | "ico" | "dic" | "icDph" | "street" | "city" | "zip" | "country">;
 const EMPTY: BillingFields = { name: "", ico: "", dic: "", icDph: "", street: "", city: "", zip: "", country: "SK" };
 const FIELDS = [
@@ -26,7 +26,7 @@ export function InvoiceCustomerPicker({ clients, onSavingChange, initialClientId
     setError("");
     if (company.clientId) {
       const clientId = company.clientId;
-      setOptions((previous) => previous.some((row) => row.id === clientId) ? previous : [...previous, { id: clientId, name: company.name, type: "B2B" }]);
+      setOptions((previous) => previous.some((row) => row.id === clientId) ? previous : [...previous, { ...company, id: clientId, type: "B2B" }]);
       setSelected(clientId); setDraft(null);
     } else {
       setSelected(""); setDraft(company);
@@ -40,7 +40,7 @@ export function InvoiceCustomerPicker({ clients, onSavingChange, initialClientId
       const result = await saveInvoiceClient(draft);
       if (!result.client) { setError(result.error ?? "Klienta sa nepodarilo uložiť."); return; }
       const client = result.client;
-      setOptions((previous) => previous.some((row) => row.id === client.id) ? previous : [...previous, client]);
+      setOptions((previous) => previous.some((row) => row.id === client.id) ? previous : [...previous, { ...draft, ...client }]);
       setSelected(client.id); setDraft(null);
     } catch { setError("Klienta sa nepodarilo uložiť. Skúste to znova."); }
     finally { setSaving(false); onSavingChange(false); }
@@ -56,6 +56,7 @@ export function InvoiceCustomerPicker({ clients, onSavingChange, initialClientId
           {options.map((client) => <option key={client.id} value={client.id}>{client.name} ({client.type})</option>)}
         </select>
       </div>
+      {selected && !draft && (() => { const client = options.find(c => c.id === selected); return client ? <div className="finance-issuer-address"><strong>{client.name}</strong>{client.street && <p>{client.street}</p>}{client.city && <p>{client.zip} {client.city}</p>}{client.ico && <p>IČO: {client.ico}</p>}{client.dic && <p>DIČ: {client.dic}</p>}{client.icDph && <p>IČ DPH: {client.icDph}</p>}</div> : null; })()}
       {!draft && <button type="button" className={btnSmall} onClick={() => { setDraft({ ...EMPTY }); setSelected(""); setError(""); }}>+ Zadať novú firmu ručne</button>}
       {draft && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
         <p className="text-sm font-semibold">Fakturačné údaje novej firmy</p>

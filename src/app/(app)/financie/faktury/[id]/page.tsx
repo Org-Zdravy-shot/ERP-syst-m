@@ -91,6 +91,10 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   if (!invoice) notFound();
 
   const currentUser = await requireUser();
+  const canFinalize = invoice.documentStatus === "DRAFT" && hasFinancePermission(currentUser.role, "FINALIZE");
+  const canCancel = invoice.documentStatus !== "CANCELLED" && hasFinancePermission(currentUser.role, "CANCEL");
+  const canCredit = invoice.documentStatus === "ISSUED" && invoice.documentType === "INVOICE"
+    && hasFinancePermission(currentUser.role, "CREATE_DRAFT");
   const canSendEmail =
     hasFinancePermission(currentUser.role, "SEND_DOCUMENT") &&
     invoice.source !== "HISTORICAL" &&
@@ -161,10 +165,10 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canEditManualDraft(invoice) && <Link href={`/financie/faktury/${id}/upravit`} className={btnSecondary}>Upraviť koncept</Link>}
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canCopyInvoice(invoice) && <Link href={`/financie/faktury/nova?copyFrom=${id}`} className={btnSecondary}>Vytvoriť kópiu</Link>}
           <Link
-            href="/financie/faktury"
+            href={`/financie/faktury?smer=${invoice.direction}`}
             className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
           >
-            ← Späť na zoznam
+            {invoice.direction === "PRIJATA" ? "← Späť na náklady" : "← Späť na faktúry"}
           </Link>
         </PageHeader>
       </div>
@@ -188,8 +192,8 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 print:block">
-        <div className="space-y-6 lg:order-2 print:space-y-4">
+      <div className="finance-detail-layout grid grid-cols-1 gap-6 print:block">
+        <div className="finance-detail-sidebar space-y-6 print:space-y-4">
           <section className="rounded-[14px] border border-stone-200 bg-white p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-stone-900">Údaje</h2>
@@ -332,12 +336,13 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
             />
           )}
 
-          {invoice.documentStatus !== "CANCELLED" && invoice.source !== "HISTORICAL" && (
+          {invoice.source !== "HISTORICAL" && (canFinalize || canCancel || canCredit) && (
             <section className="rounded-[14px] border border-stone-200 bg-white p-5 print:hidden">
               <h2 className="mb-3 font-semibold text-stone-900">Akcie</h2>
               <InvoiceWorkflowActions
-                documentStatus={invoice.documentStatus}
-                documentType={invoice.documentType}
+                canFinalize={canFinalize}
+                canCancel={canCancel}
+                canCredit={canCredit}
                 defaultIssueDate={today}
                 defaultDueDate={in14Days}
                 finalizeAction={finalizeInvoice.bind(null, invoice.id)}
@@ -348,7 +353,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           )}
         </div>
 
-        <div className="lg:order-1 lg:col-span-2 print:mt-4">
+        <div className="finance-detail-paper print:mt-4">
           <section className="rounded-[14px] border border-stone-200 bg-white">
             <p className="border-b border-stone-100 px-5 py-2 text-xs font-medium text-stone-500">Pracovný prehľad ERP · oficiálny doklad je nemenné PDF po finalizácii</p>
             <div className="grid gap-5 border-b border-stone-200 p-5 sm:grid-cols-2">

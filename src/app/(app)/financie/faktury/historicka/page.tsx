@@ -3,10 +3,16 @@ import { PageHeader } from "@/components/PageHeader";
 import { btnSecondary } from "@/components/ui";
 import { HistoricalInvoiceForm } from "./HistoricalInvoiceForm";
 
-export default function HistoricalInvoicePage() {
+export default async function HistoricalInvoicePage({
+  searchParams,
+}: { searchParams: Promise<{ smer?: string }> }) {
+  const { smer } = await searchParams;
+  const fromExpenses = smer === "PRIJATA";
   return <>
     <PageHeader title="Historický doklad" subtitle="Evidencia prijatého alebo vydaného originálu bez vystavenia novej faktúry">
-      <Link href="/financie/faktury" className={btnSecondary}>← Späť na faktúry</Link>
+      <Link href={fromExpenses ? "/financie/faktury?smer=PRIJATA" : "/financie/faktury"} className={btnSecondary}>
+        {fromExpenses ? "← Späť na náklady" : "← Späť na faktúry"}
+      </Link>
     </PageHeader>
     <HistoricalInvoiceForm />
   </>;
