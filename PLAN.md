@@ -20,6 +20,9 @@ Interný ERP pre Zdravý shot. Na projekte pracujú **dvaja ľudia paralelne, ka
 
 ### Fakturácia 2027 — pracovná vetva, bez nasadenia
 
+- [x] Navrhnúť celé fakturačné prostredie a odovzdanie pre lacnejší implementačný model: [`docs/FINANCE_WORKSPACE_BLUEPRINT.md`](docs/FINANCE_WORKSPACE_BLUEPRINT.md). Návrh obsahuje obrazovky, workflow, balíky P1–P11 a akceptáciu; implementácia UI je rozpracovaná. Kódovanie 22. 11. pozastavené na žiadosť používateľa do prepnutia modelu.
+- [ ] Dokončiť a vizuálne overiť nové rozhranie podľa P1–P5; následne dorobiť doménové a integračné workflow P6–P11. Kompletná parita ani produkčné nasadenie zatiaľ nie sú hotové.
+
 - [x] Súhrnný koncept z celých doručených objednávok, riadkové referencie, obdobie v UBL/PDF a ochrana proti dvojitej fakturácii. Overené na izolovanom PostgreSQL; vizuálne QA formulára a akceptácia 101kou zostávajú otvorené.
 
 - [x] Preskúmať prílohu 101 Drogerie FMCG v1.9 a zdokumentovať integračné medzery v `docs/FINANCE_2027_GAP_REVIEW.md`.
