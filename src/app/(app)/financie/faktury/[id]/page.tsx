@@ -29,8 +29,11 @@ import { FmcgSummary } from "../fmcg-fields";
 import { canCopyInvoice, canEditManualDraft } from "../invoice-form-data";
 import { btnSecondary } from "@/components/ui";
 
-export default async function FakturaDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function FakturaDetailPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ subjekt?: string }>;
+}) {
+  const [{ id }, { subjekt }] = await Promise.all([params, searchParams]);
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
@@ -90,6 +93,10 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
   });
   if (!invoice) notFound();
 
+  const listParams = new URLSearchParams({ smer: invoice.direction });
+  if (subjekt === "KURGI" || subjekt === "SOLE_TRADER" || subjekt === "UNASSIGNED") {
+    listParams.set("subjekt", subjekt);
+  }
   const currentUser = await requireUser();
   const canFinalize = invoice.documentStatus === "DRAFT" && hasFinancePermission(currentUser.role, "FINALIZE");
   const canCancel = invoice.documentStatus !== "CANCELLED" && hasFinancePermission(currentUser.role, "CANCEL");
@@ -165,7 +172,7 @@ export default async function FakturaDetailPage({ params }: { params: Promise<{ 
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canEditManualDraft(invoice) && <Link href={`/financie/faktury/${id}/upravit`} className={btnSecondary}>Upraviť koncept</Link>}
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canCopyInvoice(invoice) && <Link href={`/financie/faktury/nova?copyFrom=${id}`} className={btnSecondary}>Vytvoriť kópiu</Link>}
           <Link
-            href={`/financie/faktury?smer=${invoice.direction}`}
+            href={`/financie/faktury?${listParams}`}
             className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
           >
             {invoice.direction === "PRIJATA" ? "← Späť na náklady" : "← Späť na faktúry"}
