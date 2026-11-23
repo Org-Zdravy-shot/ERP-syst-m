@@ -1,21 +1,23 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { InvoiceCustomerPicker, type ClientOption } from "../../faktury/nova/InvoiceCustomerPicker";
+import { InvoiceCustomerPicker, type ClientOption } from "./faktury/nova/InvoiceCustomerPicker";
 import { legalEntityLabels } from "@/lib/zod-schemas";
 import { btnPrimary, btnSmall, errorBox, input, label } from "@/components/ui";
-import { issueDeliveryNoteAction, type DeliveryFormState } from "../_actions";
+import { issueDeliveryNoteAction, type DeliveryFormState } from "./dodacie-listy/_actions";
 
 interface Line { key: number; productId?: string; description: string; quantity: string; unit: string; price: string }
 const emptyLine = { description: "", quantity: "1", unit: "ks", price: "" };
 type Product = { id: string; name: string; sku: string; unit: string };
-type OrderSource = { id: string; number: string; client: string; version: string; legalEntity: string; rows: { id: string; description: string; quantity: number; unit: string }[] };
+type DocumentSource = { kind: "order" | "invoice" | "quote"; id: string; number: string; client: string; version: string; legalEntity: string; rows: { id: string; description: string; quantity: number; unit: string }[] };
 
-export function DeliveryNoteForm({ clients, products, order, today, deliveryDate, defaultIssuer, submissionKey }: {
-  clients: ClientOption[]; products: Product[]; order?: OrderSource; today: string;
-  deliveryDate: string; defaultIssuer?: string; submissionKey: string;
+export function CommercialDocumentForm({ clients, products, source, today, deliveryDate, defaultIssuer, submissionKey, mode = "delivery", saveAction = issueDeliveryNoteAction }: {
+  clients: ClientOption[]; products: Product[]; source?: DocumentSource; today: string;
+  deliveryDate: string; defaultIssuer?: string; submissionKey: string; mode?: "delivery" | "quote";
+  saveAction?: (state: DeliveryFormState, data: FormData) => Promise<DeliveryFormState>;
 }) {
-  const [state, action, pending] = useActionState<DeliveryFormState, FormData>(issueDeliveryNoteAction, {});
+  const [state, action, pending] = useActionState<DeliveryFormState, FormData>(saveAction, {});
+  const quote = mode === "quote";
   const [lines, setLines] = useState<Line[]>([{ ...emptyLine, key: 0 }]);
   const [nextKey, setNextKey] = useState(1);
   const [savingClient, setSavingClient] = useState(false);
@@ -30,11 +32,11 @@ export function DeliveryNoteForm({ clients, products, order, today, deliveryDate
     <form action={action} className="space-y-5">
       <input name="submissionKey" type="hidden" value={submissionKey} />
       <div className="finance-document">
-        <div className="finance-document-title"><h2>Nový dodací list</h2><span>EUR</span></div>
-        {order ? <>
-          <input name="orderId" type="hidden" value={order.id} />
-          <input name="expectedOrderUpdatedAt" type="hidden" value={order.version} />
-          <section className="finance-editor-section"><h3>Dodanie z objednávky {order.number}</h3><p>{legalEntityLabels[order.legalEntity]} · {order.client}</p></section>
+        <div className="finance-document-title"><h2>{quote ? "Nová cenová ponuka" : "Nový dodací list"}</h2><span>EUR</span></div>
+        {source ? <>
+          <input name={`${source.kind}Id`} type="hidden" value={source.id} />
+          {source.kind === "order" && <input name="expectedOrderUpdatedAt" type="hidden" value={source.version} />}
+          <section className="finance-editor-section"><h3>{({ order: "Objednávka", invoice: "Faktúra", quote: "Cenová ponuka" })[source.kind]} {source.number}</h3><p>{legalEntityLabels[source.legalEntity]} · {source.client}</p></section>
         </> : <>
           <input name="lines" type="hidden" value={JSON.stringify(rows)} />
           <div className="finance-parties">
@@ -49,13 +51,13 @@ export function DeliveryNoteForm({ clients, products, order, today, deliveryDate
         </>}
         <div className="finance-editor-section grid gap-4 sm:grid-cols-2">
           <label className={label}>Dátum vystavenia<input type="date" className={input} name="issueDate" value={header.issueDate} onChange={event => setHeader({ ...header, issueDate: event.target.value })} required /></label>
-          <label className={label}>Dátum dodania<input type="date" className={input} name="deliveryDate" value={header.deliveryDate} onChange={event => setHeader({ ...header, deliveryDate: event.target.value })} required /></label>
-          <label className={label}>Objednávka odberateľa<input className={input} name="buyerOrderNumber" maxLength={140} value={header.buyerOrderNumber} onChange={event => setHeader({ ...header, buyerOrderNumber: event.target.value })} /></label>
-          <label className={label}>Adresa dodania<input className={input} name="deliveryAddress" maxLength={500} value={header.deliveryAddress} onChange={event => setHeader({ ...header, deliveryAddress: event.target.value })} placeholder={order ? "Preberie sa z objednávky" : "Ak sa líši od sídla odberateľa"} /></label>
+          <label className={label}>{quote ? "Platnosť do" : "Dátum dodania"}<input type="date" className={input} name={quote ? "validUntil" : "deliveryDate"} min={quote ? header.issueDate : undefined} value={header.deliveryDate} onChange={event => setHeader({ ...header, deliveryDate: event.target.value })} required /></label>
+          {!quote && <label className={label}>Objednávka odberateľa<input className={input} name="buyerOrderNumber" maxLength={140} value={header.buyerOrderNumber} onChange={event => setHeader({ ...header, buyerOrderNumber: event.target.value })} /></label>}
+          {!quote && <label className={label}>Adresa dodania<input className={input} name="deliveryAddress" maxLength={500} value={header.deliveryAddress} onChange={event => setHeader({ ...header, deliveryAddress: event.target.value })} placeholder={source?.kind === "order" ? "Preberie sa z objednávky" : "Ak sa líši od sídla odberateľa"} /></label>}
         </div>
         <section className="finance-editor-section">
-          <h3>Dodané položky</h3>
-          {order ? <ul className="divide-y divide-stone-200">{order.rows.map(row => <li key={row.id} className="flex justify-between gap-4 py-2"><span>{row.description}</span><span className="shrink-0">{row.quantity} {row.unit}</span></li>)}</ul>
+          <h3>{quote ? "Položky ponuky" : "Dodané položky"}</h3>
+          {source ? <ul className="divide-y divide-stone-200">{source.rows.map(row => <li key={row.id} className="flex justify-between gap-4 py-2"><span>{row.description}</span><span className="shrink-0">{row.quantity} {row.unit}</span></li>)}</ul>
           : <>
             <div className="space-y-3">
               {lines.map((row, index) => (
@@ -74,7 +76,7 @@ export function DeliveryNoteForm({ clients, products, order, today, deliveryDate
                     <label className={label}>Popis<input className={input} value={row.description} required maxLength={300} onChange={event => update(row.key, { description: event.target.value })} /></label>
                     <label className={label}>Množstvo<input className={input} inputMode="decimal" required value={row.quantity} onChange={event => update(row.key, { quantity: event.target.value })} /></label>
                     <label className={label}>Jednotka<input className={input} required maxLength={20} value={row.unit} onChange={event => update(row.key, { unit: event.target.value })} /></label>
-                    <label className={label}>Cena bez DPH<input className={input} inputMode="decimal" placeholder="Voliteľná" value={row.price} onChange={event => update(row.key, { price: event.target.value })} /></label>
+                    <label className={label}>Cena bez DPH<input className={input} inputMode="decimal" placeholder={quote ? undefined : "Voliteľná"} required={quote} value={row.price} onChange={event => update(row.key, { price: event.target.value })} /></label>
                   </div>
                   {lines.length > 1 && <button type="button" className="mt-2 text-sm text-red-700 hover:underline" onClick={() => setLines(previous => previous.filter(line => line.key !== row.key))}>Odstrániť</button>}
                 </fieldset>
@@ -87,11 +89,11 @@ export function DeliveryNoteForm({ clients, products, order, today, deliveryDate
           </>}
         </section>
         <section className="finance-editor-section">
-          <label className={label}>Poznámka na dodacom liste<textarea className={input} name="note" maxLength={1000} rows={3} value={header.note} onChange={event => setHeader({ ...header, note: event.target.value })} /></label>
+          <label className={label}>Poznámka<textarea className={input} name="note" maxLength={1000} rows={3} value={header.note} onChange={event => setHeader({ ...header, note: event.target.value })} /></label>
         </section>
         <section className="finance-editor-section space-y-3">
           {state.error && <p role="alert" className={errorBox}>{state.error}</p>}
-          <button type="submit" className={btnPrimary} disabled={pending || savingClient}>{pending ? "Vystavujem…" : "Vystaviť dodací list"}</button>
+          <button type="submit" className={btnPrimary} disabled={pending || savingClient}>{pending ? "Vystavujem…" : quote ? "Vystaviť cenovú ponuku" : "Vystaviť dodací list"}</button>
         </section>
       </div>
     </form>

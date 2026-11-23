@@ -18,6 +18,8 @@ const money = z.string().trim().min(1).max(40);
 export const issueDeliveryNoteSchema = z.object({
   submissionKey: z.uuid(),
   orderId: id.optional(),
+  invoiceId: id.optional(),
+  quoteId: id.optional(),
   expectedOrderUpdatedAt: z.iso.datetime().optional(),
   legalEntity: z.enum(["KURGI", "SOLE_TRADER"]).optional(),
   clientId: id.optional(),
@@ -27,7 +29,7 @@ export const issueDeliveryNoteSchema = z.object({
   deliveryAddress: z.string().trim().max(500).optional(),
   note: z.string().trim().max(1000).optional(),
   lines: deliveryLinesSchema.optional(),
-});
+}).refine(value => [value.orderId, value.invoiceId, value.quoteId].filter(Boolean).length <= 1, "Vyberte jeden zdroj dodacieho listu.");
 export const deliveryNoteIdsSchema = z.array(id).min(1, "Vyberte aspoň jeden dodací list.").max(50, "Vyberte najviac 50 dodacích listov.");
 export const invoiceDeliveryNotesSchema = z.object({
   ids: deliveryNoteIdsSchema,

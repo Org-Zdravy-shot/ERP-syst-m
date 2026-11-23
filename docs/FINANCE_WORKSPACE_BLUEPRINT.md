@@ -262,5 +262,13 @@ Odporúčanie modelov je pracovný postup: Sol pre bežnú implementáciu ucelen
 
 - Samostatný dodací list alebo list z celej expedovanej objednávky dostane vlastné číslo podľa subjektu a uloží údaje dodávateľa, odberateľa a položky. PDF možno stiahnuť s cenami alebo bez nich. Pohyby skladu eviduje pôvodná expedícia.
 - Z detailu alebo výberu v zozname vznikne koncept faktúry. Vybrané dodacie listy musia patriť rovnakému dodávateľovi, odberateľovi a mesiacu dodania. Pri položke bez ceny ju doplní používateľ pred vytvorením konceptu. Konverzia prenáša riadkové referencie do PDF a podkladov Peppol.
-- Zrušenie nevystaveného konceptu uvoľní dodacie listy pre nový koncept. Vystavený doklad zostáva evidovaný ako fakturácia dodania aj po storne. Čiastočné dodania z jednej objednávky a vystavenie dodacieho listu z už vydanej faktúry vyžadujú ďalší samostatný tok.
-- Lokálne overenie na PostgreSQL pokrylo migráciu, uloženie cez obe obrazovky, súhrnnú faktúru a presné ceny, ochranu proti súbehu, PDF a podklady UBL. Na ďalšie kroky v dokladovom workflow nadväzujú cenové ponuky, zálohy a vyúčtovanie a pravidelná fakturácia.
+- Zrušenie nevystaveného konceptu uvoľní dodacie listy pre nový koncept. Vystavený doklad zostáva evidovaný ako fakturácia dodania aj po storne. Čiastočné dodania z jednej objednávky vyžadujú ďalší samostatný tok.
+- Lokálne overenie na PostgreSQL pokrylo migráciu, uloženie cez obe obrazovky, súhrnnú faktúru a presné ceny, ochranu proti súbehu, PDF a podklady UBL.
+
+## Cenové ponuky a pravidelné faktúry
+
+- Cenová ponuka má vlastný číselný rad, dátum platnosti, zmrazené údaje subjektov a ceny. Schválenú ponuku možno bez prepisovania premeniť na objednávku, dodací list alebo koncept faktúry. Objednávka využije existujúci skladový model a vyžaduje produkty s celým množstvom. Zámok na ponuke bráni súbežným nezávislým konverziám toho istého plnenia.
+- Z riadnej vystavenej faktúry s úplnými snapshotmi možno vytvoriť dodací list pripojený k pôvodnej faktúre. Ten už patrí k fakturovanému dodaniu a opätovná konverzia na faktúru je blokovaná.
+- Plán pravidelnej faktúry má dátum prvého termínu, interval, splatnosť, voliteľný počet konceptov a pozastavenie. Každý termín má práve jeden záznam behu. Po kratšom mesiaci sa opakovanie vráti k pôvodnému dňu. Koncepty využívajú aktuálny daňový profil a nepreberajú referencie zo starého dodania.
+- Plán možno spustiť ručne zo zoznamu. Pre denný beh nakonfigurovať autorizovaný POST na `/api/cron/recurring-invoices` s hlavičkou `x-cron-secret` v produkčnom projekte. Úloha vytvára koncepty na kontrolu používateľom.
+- Pred uzatvorením zhody bežných dokladov zostáva evidovať zálohu, daňový doklad k prijatej platbe a vyúčtovanie, vrátane čiastočnej a viacnásobnej úhrady. Existujúce historické proformy sú evidenciou importovaného originálu. Banka a Peppol majú samostatné integračné workflow.

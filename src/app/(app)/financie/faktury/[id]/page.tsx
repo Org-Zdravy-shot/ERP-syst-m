@@ -27,6 +27,8 @@ import { InvoiceWorkflowActions } from "./InvoiceStatusActions";
 import { VerifyHistoricalButton } from "./VerifyHistoricalButton";
 import { FmcgSummary } from "../fmcg-fields";
 import { canCopyInvoice, canEditManualDraft } from "../invoice-form-data";
+import { canCreateDeliveryFromInvoice } from "@/lib/finance/delivery/service";
+import { canScheduleFrom } from "@/lib/finance/recurring/schedule";
 import { btnSecondary } from "@/components/ui";
 import { invoiceListHref, parseInvoiceFilters } from "../list-filters";
 import { slovakDateKey } from "../../../objednavky/pricing";
@@ -44,6 +46,8 @@ export default async function FakturaDetailPage({ params, searchParams }: {
       items: true,
       paymentAllocations: { where: { reversedAt: null } },
       order: { select: { id: true, orderNumber: true } },
+      quote: { select: { id: true, number: true } },
+      recurringRun: { select: { schedule: { select: { id: true, title: true } } } },
       orderLinks: { include: { order: { select: { id: true, orderNumber: true } } }, orderBy: { firstLineNumber: "asc" } },
       deliveryNoteLinks: { include: { deliveryNote: { select: { id: true, number: true } } }, orderBy: { firstLineNumber: "asc" } },
       originalInvoice: { select: { id: true, invoiceNumber: true } },
@@ -175,6 +179,10 @@ export default async function FakturaDetailPage({ params, searchParams }: {
         >
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canEditManualDraft(invoice) && <Link href={`/financie/faktury/${id}/upravit`} className={btnSecondary}>Upraviť koncept</Link>}
           {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canCopyInvoice(invoice) && <Link href={`/financie/faktury/nova?copyFrom=${id}`} className={btnSecondary}>Vytvoriť kópiu</Link>}
+          {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && !invoice.deliveryNoteLinks.length && canCreateDeliveryFromInvoice(invoice) &&
+            <Link href={`/financie/dodacie-listy/novy?invoice=${id}`} className={btnSecondary}>Vytvoriť dodací list</Link>}
+          {hasFinancePermission(currentUser.role, "CREATE_DRAFT") && canScheduleFrom(invoice) &&
+            <Link href={`/financie/pravidelne/novy?faktura=${id}`} className={btnSecondary}>Naplánovať opakovanie</Link>}
           <Link
             href={returnHref}
             className="rounded-[10px] border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
@@ -281,6 +289,8 @@ export default async function FakturaDetailPage({ params, searchParams }: {
                 {invoice.note}
               </p>
             )}
+            {invoice.quote && <Link className="mt-3 block text-sm underline" href={`/financie/cenove-ponuky/${invoice.quote.id}`}>Cenová ponuka {invoice.quote.number}</Link>}
+            {invoice.recurringRun && <Link className="mt-3 block text-sm underline" href={`/financie/pravidelne#plan-${invoice.recurringRun.schedule.id}`}>{invoice.recurringRun.schedule.title}</Link>}
             {invoice.deliveryNoteLinks.length > 0 && (
               <div className="mt-3 border-t border-stone-100 pt-3">
                 <h3 className="mb-2 text-xs font-semibold uppercase text-stone-500">Dodacie listy</h3>

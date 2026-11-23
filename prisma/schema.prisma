@@ -61,6 +61,7 @@ model Client {
   orders        Order[]
   invoices      Invoice[]
   deliveryNotes DeliveryNote[]
+  salesQuotes SalesQuote[]
   subscriptions Subscription[]
   productPrices ClientProductPrice[]
   priceRules    ClientPriceRule[]
@@ -925,6 +926,8 @@ model Order {
   legalEntity    String?       // "SOLE_TRADER" | "KURGI"; staré objednávky bez automatického priradenia
   clientId       String
   client         Client        @relation(fields: [clientId], references: [id])
+  quoteId        String?       @unique
+  quote          SalesQuote?   @relation(fields: [quoteId], references: [id], onDelete: Restrict)
   channel        String        @default("MANUAL") // "MANUAL" | "EMAIL" | "WEB" | "SUBSCRIPTION"
   status         String        @default("NOVA") // "NOVA" | "POTVRDENA" | "VO_VYROBE" | "EXPEDOVANA" | "DORUCENA" | "ZRUSENA"
   orderDate      DateTime      @default(now())
@@ -1044,6 +1047,8 @@ model InboxMessage {
 
 model Invoice {
   id                   String    @id @default(cuid())
+  quoteId              String?
+  quote                SalesQuote? @relation(fields: [quoteId], references: [id], onDelete: Restrict)
   legalEntity          String? // "SOLE_TRADER" | "KURGI"; staré doklady zostávajú nepriradené
   direction            String // "VYDANA" | "PRIJATA"
   documentType         String    @default("INVOICE") // "INVOICE" | "CREDIT_NOTE"
@@ -1100,6 +1105,8 @@ model Invoice {
   items                    InvoiceItem[]
   orderLinks               InvoiceOrder[]
   deliveryNoteLinks        InvoiceDeliveryNote[]
+  recurringSchedules       RecurringInvoiceSchedule[] @relation("RecurringInvoiceSource")
+  recurringRun             RecurringInvoiceRun?
   paymentAllocations       PaymentAllocation[]
   documents                DocumentAsset[]
   emailDeliveries          EmailDelivery[]
@@ -1113,6 +1120,7 @@ model Invoice {
   @@index([supplierName, externalNumber])
   @@index([supplierId, issueDate])
   @@index([originalInvoiceId])
+  @@index([quoteId])
 }
 
 // Immutable source references for an invoice covering multiple complete orders.
@@ -1139,6 +1147,8 @@ model DeliveryNote {
   legalEntity          String
   clientId             String
   client               Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  quoteId              String?
+  quote                SalesQuote? @relation(fields: [quoteId], references: [id], onDelete: Restrict)
   orderId              String?
   order                Order?   @relation(fields: [orderId], references: [id], onDelete: Restrict)
   sourceOrderHash      String?
@@ -1160,6 +1170,67 @@ model DeliveryNote {
   @@index([legalEntity, deliveryDate])
   @@index([clientId, deliveryDate])
   @@index([orderId])
+  @@index([quoteId])
+}
+
+model SalesQuote {
+  id                   String     @id @default(cuid())
+  number               String     @unique
+  submissionKey        String     @unique
+  legalEntity          String
+  clientId             String
+  client               Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  issueDate            DateTime
+  validUntil           DateTime
+  status               String     @default("PENDING")
+  issuerSnapshot       Json
+  counterpartySnapshot Json
+  lines                Json
+  totalNetCents        Int
+  totalVatCents        Int
+  totalGrossCents      Int
+  note                 String?
+  createdById          String
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  order                Order?
+  deliveryNotes        DeliveryNote[]
+  invoices             Invoice[]
+
+  @@index([legalEntity, issueDate])
+  @@index([clientId, issueDate])
+}
+
+model RecurringInvoiceSchedule {
+  id              String   @id @default(cuid())
+  submissionKey   String   @unique
+  title           String
+  sourceInvoiceId String
+  sourceInvoice   Invoice  @relation("RecurringInvoiceSource", fields: [sourceInvoiceId], references: [id], onDelete: Restrict)
+  startDate       DateTime
+  nextDate        DateTime?
+  intervalMonths  Int
+  dueDays         Int
+  maxCount        Int?
+  generatedCount  Int      @default(0)
+  paused          Boolean  @default(false)
+  createdById     String
+  createdAt       DateTime @default(now())
+  runs            RecurringInvoiceRun[]
+
+  @@index([paused, nextDate])
+  @@index([sourceInvoiceId])
+}
+
+model RecurringInvoiceRun {
+  scheduleId String
+  schedule   RecurringInvoiceSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  occurrence DateTime
+  invoiceId  String @unique
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+
+  @@id([scheduleId, occurrence])
 }
 
 model InvoiceDeliveryNote {

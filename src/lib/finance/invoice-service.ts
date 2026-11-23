@@ -36,6 +36,7 @@ import { parseFmcgLine } from "./einvoice/fmcg";
 import { isPayBySquareBankAccount } from "./documents/pay-by-square";
 import { buildConsolidation, consolidationSchema, lockUnbilledOrders, sourceOrderHash, sourceOrderInclude } from "./consolidation";
 import { buildDeliveryInvoice, dateKey, validateDeliveryOrders } from "./delivery/service";
+import { quoteForConversion } from "./quotes/service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -240,6 +241,15 @@ export class PrismaInvoiceService implements InvoiceService {
   }
 
   async createDraft(input: CreateInvoiceDraftInput): Promise<InvoiceResult> {
+    const prepared = this.prepareDraft(input);
+    return prisma.$transaction(tx => this.persistDraft(tx, input, prepared));
+  }
+
+  async createDraftInTransaction(tx: Tx, input: CreateInvoiceDraftInput): Promise<InvoiceResult> {
+    return this.persistDraft(tx, input, this.prepareDraft(input));
+  }
+
+  private prepareDraft(input: CreateInvoiceDraftInput) {
     if (!input.actorId.trim()) throw new FinanceDomainError("INVALID_LINE", "Chýba používateľ operácie.");
     validateDraftDates(input);
     const buyerReference = normalizeBuyerReference(input.buyerReference);
@@ -249,78 +259,89 @@ export class PrismaInvoiceService implements InvoiceService {
     const counterparty = input.counterparty
       ? financePartySnapshotSchema.parse(input.counterparty)
       : undefined;
-    const manualCalculation = input.consolidation || input.deliveryNotes ? undefined : calculateInvoice({ currency: input.currency, lines: input.items });
-    return prisma.$transaction(async (tx) => {
-      let summary: ReturnType<typeof buildConsolidation> | undefined;
-      let delivery: Awaited<ReturnType<typeof buildDeliveryInvoice>> | undefined;
-      if (input.deliveryNotes) {
-        if (input.consolidation || input.orderId || input.direction !== "VYDANA" || (input.documentType ?? "INVOICE") !== "INVOICE" || (input.source ?? "INTERNA") !== "INTERNA" || counterparty) {
-          throw new Error("Z dodacích listov možno vytvoriť vydanú faktúru v ERP.");
-        }
-        delivery = await buildDeliveryInvoice(tx, input.deliveryNotes, input.issueDate);
-      } else if (input.consolidation) {
-        if (input.orderId || input.direction !== "VYDANA" || (input.documentType ?? "INVOICE") !== "INVOICE" || (input.source ?? "INTERNA") !== "INTERNA" || counterparty) {
-          throw new Error("Súhrnná faktúra musí byť interná vydaná faktúra zo zoznamu objednávok.");
-        }
-        const selections = consolidationSchema.parse(input.consolidation);
-        const ids = selections.map(s => s.orderId);
-        await lockUnbilledOrders(tx, ids, "VYDANA");
-        const orders = await tx.order.findMany({ where: { id: { in: ids } }, include: sourceOrderInclude });
-        summary = buildConsolidation(orders, selections, input.issueDate);
-      } else if (input.orderId && (input.documentType ?? "INVOICE") === "INVOICE") {
-        await lockUnbilledOrders(tx, [input.orderId], input.direction);
+    const manualCalculation = input.consolidation || input.deliveryNotes || input.quoteId ? undefined : calculateInvoice({ currency: input.currency, lines: input.items });
+    return { buyerReference, counterparty, manualCalculation };
+  }
+
+  private async persistDraft(tx: Tx, input: CreateInvoiceDraftInput, prepared: ReturnType<PrismaInvoiceService["prepareDraft"]>): Promise<InvoiceResult> {
+    const { buyerReference, counterparty, manualCalculation } = prepared;
+    let summary: ReturnType<typeof buildConsolidation> | undefined;
+    let delivery: Awaited<ReturnType<typeof buildDeliveryInvoice>> | undefined;
+    let quote: Awaited<ReturnType<typeof quoteForConversion>> | undefined;
+    if (input.quoteId) {
+      if (input.deliveryNotes || input.consolidation || input.orderId || input.direction !== "VYDANA" || (input.documentType ?? "INVOICE") !== "INVOICE" || (input.source ?? "INTERNA") !== "INTERNA" || counterparty || !input.deliveryDate) {
+        throw new Error("Z ponuky možno vytvoriť vydanú faktúru s dátumom dodania.");
       }
-      const calculation = manualCalculation ?? calculateInvoice({ currency: input.currency, lines: delivery?.items ?? summary!.items });
-      const created = await tx.invoice.create({
-        data: {
-          direction: input.direction,
-          legalEntity: delivery?.legalEntity ?? summary?.legalEntity ?? input.legalEntity ?? null,
-          documentType: input.documentType ?? "INVOICE",
-          documentStatus: "DRAFT",
-          source: input.source ?? "INTERNA",
-          externalId: input.externalId ?? null,
-          externalNumber: input.externalNumber ?? null,
-          invoiceNumber: null,
-          currency: input.currency,
-          clientId: delivery?.clientId ?? summary?.clientId ?? input.clientId ?? null,
-          supplierName: input.direction === "PRIJATA" ? counterparty?.name ?? null : null,
-          orderId: input.orderId ?? null,
-          originalInvoiceId: input.originalInvoiceId ?? null,
-          issueDate: input.issueDate,
-          dueDate: input.dueDate,
-          deliveryDate: delivery?.to ?? summary?.to ?? input.deliveryDate ?? null,
-          ...(summary ? { consolidatedFrom: summary.from, consolidatedTo: summary.to, orderLinks: { create: summary.links } } : {}),
-          ...(delivery ? {
-            deliveryNoteLinks: { create: delivery.links },
-            ...(delivery.links.length > 1 ? { consolidatedFrom: delivery.from, consolidatedTo: delivery.to } : {}),
-          } : {}),
-          createdById: input.actorId,
-          status: "VYSTAVENA",
-          totalNetCents: calculation.totalNetCents,
-          totalVatCents: calculation.totalVatCents,
-          totalGrossCents: calculation.totalGrossCents,
-          variableSymbol: input.variableSymbol ?? null,
-          buyerReference: buyerReference ?? null,
-          ...(counterparty ? { counterpartySnapshot: toJson(counterparty) } : {}),
-          note: input.note ?? null,
-          items: {
-            create: calculation.lines.map(invoiceLineData),
-          },
+      quote = await quoteForConversion(tx, input.quoteId);
+      if (input.issueDate < quote.issueDate || input.deliveryDate > input.issueDate) throw new Error("Skontrolujte dátum dodania a vystavenia faktúry.");
+    } else if (input.deliveryNotes) {
+      if (input.consolidation || input.orderId || input.direction !== "VYDANA" || (input.documentType ?? "INVOICE") !== "INVOICE" || (input.source ?? "INTERNA") !== "INTERNA" || counterparty) {
+        throw new Error("Z dodacích listov možno vytvoriť vydanú faktúru v ERP.");
+      }
+      delivery = await buildDeliveryInvoice(tx, input.deliveryNotes, input.issueDate);
+    } else if (input.consolidation) {
+      if (input.orderId || input.direction !== "VYDANA" || (input.documentType ?? "INVOICE") !== "INVOICE" || (input.source ?? "INTERNA") !== "INTERNA" || counterparty) {
+        throw new Error("Súhrnná faktúra musí byť interná vydaná faktúra zo zoznamu objednávok.");
+      }
+      const selections = consolidationSchema.parse(input.consolidation);
+      const ids = selections.map(s => s.orderId);
+      await lockUnbilledOrders(tx, ids, "VYDANA");
+      const orders = await tx.order.findMany({ where: { id: { in: ids } }, include: sourceOrderInclude });
+      summary = buildConsolidation(orders, selections, input.issueDate);
+    } else if (input.orderId && (input.documentType ?? "INVOICE") === "INVOICE") {
+      await lockUnbilledOrders(tx, [input.orderId], input.direction);
+    }
+    const calculation = manualCalculation ?? calculateInvoice({ currency: input.currency, lines: quote?.items ?? delivery?.items ?? summary!.items });
+    const created = await tx.invoice.create({
+      data: {
+        direction: input.direction,
+        legalEntity: quote?.legalEntity ?? delivery?.legalEntity ?? summary?.legalEntity ?? input.legalEntity ?? null,
+        documentType: input.documentType ?? "INVOICE",
+        documentStatus: "DRAFT",
+        source: input.source ?? "INTERNA",
+        externalId: input.externalId ?? null,
+        externalNumber: input.externalNumber ?? null,
+        invoiceNumber: null,
+        currency: input.currency,
+        clientId: quote?.clientId ?? delivery?.clientId ?? summary?.clientId ?? input.clientId ?? null,
+        quoteId: quote?.id ?? null,
+        supplierName: input.direction === "PRIJATA" ? counterparty?.name ?? null : null,
+        orderId: input.orderId ?? null,
+        originalInvoiceId: input.originalInvoiceId ?? null,
+        issueDate: input.issueDate,
+        dueDate: input.dueDate,
+        deliveryDate: delivery?.to ?? summary?.to ?? input.deliveryDate ?? null,
+        ...(summary ? { consolidatedFrom: summary.from, consolidatedTo: summary.to, orderLinks: { create: summary.links } } : {}),
+        ...(delivery ? {
+          deliveryNoteLinks: { create: delivery.links },
+          ...(delivery.links.length > 1 ? { consolidatedFrom: delivery.from, consolidatedTo: delivery.to } : {}),
+        } : {}),
+        createdById: input.actorId,
+        status: "VYSTAVENA",
+        totalNetCents: calculation.totalNetCents,
+        totalVatCents: calculation.totalVatCents,
+        totalGrossCents: calculation.totalGrossCents,
+        variableSymbol: input.variableSymbol ?? null,
+        buyerReference: buyerReference ?? null,
+        ...(counterparty ? { counterpartySnapshot: toJson(counterparty) } : {}),
+        note: input.note ?? quote?.note ?? null,
+        items: {
+          create: calculation.lines.map(invoiceLineData),
         },
-      });
-      await createAudit(tx, {
-        actorId: input.actorId,
-        action: "INVOICE_DRAFT_CREATED",
-        entityId: created.id,
-        afterData: {
-          direction: created.direction,
-          documentType: created.documentType,
-          documentStatus: created.documentStatus,
-          totalGrossCents: created.totalGrossCents,
-        },
-      });
-      return mapInvoiceResult(created, calculation, "UNPAID");
+      },
     });
+    await createAudit(tx, {
+      actorId: input.actorId,
+      action: "INVOICE_DRAFT_CREATED",
+      entityId: created.id,
+      afterData: {
+        direction: created.direction,
+        documentType: created.documentType,
+        documentStatus: created.documentStatus,
+        totalGrossCents: created.totalGrossCents,
+      },
+    });
+    return mapInvoiceResult(created, calculation, "UNPAID");
   }
 
   async updateDraft(invoiceId: string, input: UpdateInvoiceDraftInput): Promise<InvoiceResult> {
@@ -341,7 +362,7 @@ export class PrismaInvoiceService implements InvoiceService {
       if (current.documentStatus !== "DRAFT" || current.invoiceNumber || current.finalizedAt) {
         throw new FinanceDomainError("INVOICE_IMMUTABLE", "Upravovať možno iba nevystavený koncept. Vystavená faktúra zostáva nezmenená.");
       }
-      if (current.source !== "INTERNA" || current.direction !== "VYDANA" || current.documentType !== "INVOICE" || current.orderId || current.consolidatedFrom || current._count.deliveryNoteLinks) {
+      if (current.source !== "INTERNA" || current.direction !== "VYDANA" || current.documentType !== "INVOICE" || current.orderId || current.quoteId || current.consolidatedFrom || current._count.deliveryNoteLinks) {
         throw new FinanceDomainError("INVALID_TRANSITION", "Tento editor upravuje iba ručne vytvorené koncepty bez väzby na objednávky alebo dodacie listy.");
       }
       if (current.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {

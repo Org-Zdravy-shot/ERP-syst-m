@@ -82,6 +82,7 @@ export interface CreateInvoiceDraftInput {
   /** Complete delivered orders; source items are loaded atomically, never trusted from a form. */
   consolidation?: { orderId: string; expectedUpdatedAt: string; deliveryDate: string; buyerOrderNumber: string; deliveryNoteNumber?: string }[];
   deliveryNotes?: { ids: string[]; missingPrices: { noteId: string; index: number; price: string }[] };
+  quoteId?: string;
   originalInvoiceId?: string;
   issueDate: Date;
   dueDate: Date;
