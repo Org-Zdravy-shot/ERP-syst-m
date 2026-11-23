@@ -14,9 +14,9 @@ export interface InvoiceFormInitial {
   lines: InvoiceFormLine[];
   expectedUpdatedAt?: string;
 }
-type Source = Pick<Invoice, "source" | "direction" | "documentType" | "documentStatus" | "invoiceNumber" | "finalizedAt" | "orderId" | "currency"> & { consolidatedFrom?: Date | null };
+type Source = Pick<Invoice, "source" | "direction" | "documentType" | "documentStatus" | "invoiceNumber" | "finalizedAt" | "orderId" | "currency"> & { consolidatedFrom?: Date | null; deliveryNoteLinks?: unknown[] };
 export function canEditManualDraft(invoice: Source): boolean {
-  return invoice.source === "INTERNA" && invoice.direction === "VYDANA" && invoice.documentType === "INVOICE" && invoice.documentStatus === "DRAFT" && !invoice.invoiceNumber && !invoice.finalizedAt && !invoice.orderId && !invoice.consolidatedFrom && invoice.currency === "EUR";
+  return invoice.source === "INTERNA" && invoice.direction === "VYDANA" && invoice.documentType === "INVOICE" && invoice.documentStatus === "DRAFT" && !invoice.invoiceNumber && !invoice.finalizedAt && !invoice.orderId && !invoice.consolidatedFrom && !invoice.deliveryNoteLinks?.length && invoice.currency === "EUR";
 }
 export function canCopyInvoice(invoice: Source): boolean {
   return invoice.direction === "VYDANA" && invoice.documentType === "INVOICE" && invoice.source !== "HISTORICAL" && invoice.currency === "EUR";

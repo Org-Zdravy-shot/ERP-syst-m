@@ -45,11 +45,17 @@ test("supplier order date follows the Slovak calendar at midnight", () => {
 });
 test("single and summary invoice conflicts are checked under deterministic order locks", async () => {
   const findFirst = vi.fn().mockResolvedValue(null);
+  const findDelivery = vi.fn().mockResolvedValue(null);
   const lock = vi.fn().mockResolvedValue([{ id: "order" }]);
-  const tx = { $queryRaw: lock, invoice: { findFirst } } as unknown as Parameters<typeof lockUnbilledOrders>[0];
+  const tx = { $queryRaw: lock, invoice: { findFirst }, deliveryNote: { findFirst: findDelivery } } as unknown as Parameters<typeof lockUnbilledOrders>[0];
   await lockUnbilledOrders(tx, ["b", "a"], "VYDANA");
   expect(lock.mock.calls[0][0].values).toEqual(["a"]);
-  expect(findFirst.mock.calls[0][0].where.OR).toEqual([{ orderId: "a" }, { orderLinks: { some: { orderId: "a" } } }]);
+  expect(findFirst.mock.calls[0][0].where.OR[0].OR).toEqual([
+    { orderId: "a" }, { orderLinks: { some: { orderId: "a" } } }, { deliveryNoteLinks: { some: { deliveryNote: { orderId: "a" } } } },
+  ]);
+  findDelivery.mockResolvedValue({ number: "DLK2027001" });
+  await expect(lockUnbilledOrders(tx, ["a"], "VYDANA")).rejects.toThrow("DLK2027001");
+  await expect(lockUnbilledOrders(tx, ["a"], "VYDANA", true)).resolves.toBeUndefined();
   findFirst.mockResolvedValue({ invoiceNumber: "2027001" });
   await expect(lockUnbilledOrders(tx, ["a"], "VYDANA")).rejects.toThrow("2027001");
 });

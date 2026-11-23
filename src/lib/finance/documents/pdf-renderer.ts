@@ -65,7 +65,7 @@ let fontBytesPromise:
   | Promise<{ regular: Uint8Array; bold: Uint8Array }>
   | undefined;
 
-function loadFontBytes(): Promise<{ regular: Uint8Array; bold: Uint8Array }> {
+export function loadFontBytes(): Promise<{ regular: Uint8Array; bold: Uint8Array }> {
   fontBytesPromise ??= Promise.all([
     readFile(
       path.join(
@@ -122,7 +122,7 @@ function fitText(
   return `${fitted.trimEnd()}${ellipsis}`;
 }
 
-function wrapText(
+export function wrapText(
   text: string,
   font: PDFFont,
   size: number,
@@ -697,13 +697,13 @@ async function drawTotalsAndPayment(
     });
   }
 
-  if (data.note) {
-    const noteLines = wrapText(
-      `Poznámka: ${data.note}`,
-      fonts.regular,
-      7,
-      CONTENT_WIDTH,
-    );
+  const deliveryNumbers = [...new Set(data.lines.map(line => line.fmcg?.properties.delivery_note_number).filter(Boolean))];
+  const details = [
+    deliveryNumbers.length ? `Dodacie listy: ${deliveryNumbers.join(", ")}` : "",
+    data.note ? `Poznámka: ${data.note}` : "",
+  ].filter(Boolean);
+  if (details.length) {
+    const noteLines = details.flatMap(text => wrapText(text, fonts.regular, 7, CONTENT_WIDTH));
     if (noteLines.length <= 3) {
       let noteY = Math.max(48, Math.min(summaryY - 10, 78));
       for (const line of noteLines) {

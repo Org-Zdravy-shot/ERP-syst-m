@@ -27,7 +27,7 @@ beforeEach(() => {
   mocks.nextNumber.mockResolvedValue("OBJ2026-0002");
   mocks.nextEntityNumber.mockResolvedValue("OBJK2026-0001");
   mocks.create.mockResolvedValue({ id: "order-2" });
-  mocks.lockedOrder.mockResolvedValue({ id: "order-2", status: "NOVA", invoices: [], invoiceOrders: [] });
+  mocks.lockedOrder.mockResolvedValue({ id: "order-2", status: "NOVA", invoices: [], invoiceOrders: [], deliveryNotes: [] });
   mocks.lock.mockResolvedValue([{ id: "order-2" }]);
   mocks.transaction.mockImplementation((callback) => callback({ $queryRaw: mocks.lock, order: { create: mocks.create, update: mocks.update, findFirst: mocks.findFirst, findUnique: mocks.lockedOrder }, orderItem: { deleteMany: mocks.deleteItems }, orderCharge: { deleteMany: mocks.deleteCharges } }));
 });

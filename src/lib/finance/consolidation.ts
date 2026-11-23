@@ -23,16 +23,24 @@ function localDate(date: Date): string {
 }
 
 /** Lock in a deterministic order. Both single-order and consolidated drafts use this guard. */
-export async function lockUnbilledOrders(tx: Prisma.TransactionClient, ids: string[], direction: string): Promise<void> {
+export async function lockUnbilledOrders(tx: Prisma.TransactionClient, ids: string[], direction: string, throughDeliveryNote = false): Promise<void> {
   if (new Set(ids).size !== ids.length) throw new Error("Rovnaká objednávka je vybraná viackrát.");
   for (const id of [...ids].sort()) {
     const locked = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT "id" FROM "Order" WHERE "id" = ${id} FOR UPDATE`);
     if (locked.length !== 1) throw new Error("Vybraná objednávka neexistuje.");
+    const linkedDelivery = { deliveryNoteLinks: { some: { deliveryNote: { orderId: id } } } };
     const existing = await tx.invoice.findFirst({ where: {
-      direction, documentType: "INVOICE", documentStatus: { not: "CANCELLED" },
-      OR: [{ orderId: id }, { orderLinks: { some: { orderId: id } } }],
+      direction, documentType: "INVOICE",
+      OR: [
+        { documentStatus: { not: "CANCELLED" }, OR: [{ orderId: id }, { orderLinks: { some: { orderId: id } } }, linkedDelivery] },
+        ...(direction === "VYDANA" ? [{ documentStatus: "CANCELLED", finalizedAt: { not: null }, ...linkedDelivery }] : []),
+      ],
     }, select: { invoiceNumber: true } });
     if (existing) throw new FinanceDomainError("INVALID_TRANSITION", `K objednávke už existuje ${existing.invoiceNumber ? `faktúra ${existing.invoiceNumber}` : "koncept faktúry"}.`);
+    if (direction === "VYDANA" && !throughDeliveryNote) {
+      const deliveryNote = await tx.deliveryNote.findFirst({ where: { orderId: id, cancelledAt: null }, select: { number: true } });
+      if (deliveryNote) throw new FinanceDomainError("INVALID_TRANSITION", `Objednávka má dodací list ${deliveryNote.number}. Vytvorte faktúru z dodacieho listu.`);
+    }
   }
 }
 

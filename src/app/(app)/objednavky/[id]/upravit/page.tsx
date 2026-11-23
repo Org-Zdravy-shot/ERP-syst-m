@@ -13,7 +13,11 @@ export default async function UpravitObjednavkuPage({ params, searchParams }: { 
   const { id } = await params;
   const { produkt } = await searchParams;
   const [order, clients, products] = await Promise.all([
-    prisma.order.findUnique({ where: { id }, include: { items: true, charges: true, invoices: { where: { direction: "VYDANA", documentStatus: { not: "CANCELLED" } }, select: { id: true } } } }),
+    prisma.order.findUnique({ where: { id }, include: {
+      items: true, charges: true,
+      invoices: { where: { direction: "VYDANA", documentStatus: { not: "CANCELLED" } }, select: { id: true } },
+      deliveryNotes: { where: { cancelledAt: null }, select: { id: true }, take: 1 },
+    } }),
     prisma.client.findMany({
       where: { isActive: true },
       select: {
@@ -31,7 +35,7 @@ export default async function UpravitObjednavkuPage({ params, searchParams }: { 
       orderBy: { name: "asc" },
     }),
   ]);
-  if (!order || !EDITABLE_ORDER_STATUSES.includes(order.status) || order.invoices.length > 0) notFound();
+  if (!order || !EDITABLE_ORDER_STATUSES.includes(order.status) || order.invoices.length > 0 || order.deliveryNotes.length > 0) notFound();
   const clientsForForm = clients.map((client) => ({
     ...client,
     priceRules: client.priceRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10) })),

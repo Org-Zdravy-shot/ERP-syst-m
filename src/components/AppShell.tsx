@@ -8,6 +8,7 @@ import { Sidebar } from "./Sidebar";
 const sections = [
   { id: "overview", name: "Prehľady", href: "/financie" },
   { id: "invoices", name: "Faktúry", href: "/financie/faktury?smer=VYDANA" },
+  { id: "deliveries", name: "Dodacie listy", href: "/financie/dodacie-listy" },
   { id: "expenses", name: "Náklady", href: "/financie/faktury?smer=PRIJATA" },
   { id: "contacts", name: "Kontakty", href: "/klienti" },
   { id: "tools", name: "Nástroje", href: "/financie/nastroje" },
@@ -96,6 +97,7 @@ export function AppShell({
   if (isContact) section = "contacts";
   else if (isOverview) section = "overview";
   else if (isExpense) section = "expenses";
+  else if (pathname.startsWith("/financie/dodacie-listy")) section = "deliveries";
   else if (pathname.startsWith("/financie/faktury")) section = "invoices";
 
   const selectedCompany = companies.find(({ value }) => value === params.get("subjekt")) ?? companies[0];
@@ -119,10 +121,10 @@ export function AppShell({
               <span className="finance-brand-mark" aria-hidden>ZS</span>
               <span><strong>Fakturácia</strong><small>Zdravý Shot ERP</small></span>
             </Link>
-            <form action="/financie/faktury" className="finance-global-search" role="search">
+            <form action={section === "deliveries" ? "/financie/dodacie-listy" : "/financie/faktury"} className="finance-global-search" role="search">
               {selectedCompany.value && <input name="subjekt" type="hidden" value={selectedCompany.value} />}
-              <label className="sr-only" htmlFor="finance-global-search">Vyhľadať doklad podľa čísla, firmy alebo variabilného symbolu</label>
-              <input id="finance-global-search" name="q" type="search" placeholder="Číslo dokladu, firma alebo VS" maxLength={100} />
+              <label className="sr-only" htmlFor="finance-global-search">{section === "deliveries" ? "Vyhľadať dodací list" : "Vyhľadať doklad podľa čísla, firmy alebo variabilného symbolu"}</label>
+              <input id="finance-global-search" name="q" type="search" placeholder={section === "deliveries" ? "Dodací list, odberateľ alebo objednávka" : "Číslo dokladu, firma alebo VS"} maxLength={100} />
               <button type="submit">Hľadať</button>
             </form>
             <div className="finance-account-tools">
@@ -158,6 +160,7 @@ export function AppShell({
               <FinanceMenu label="+ Vytvoriť nový" primary>
                 <Link href={withCompany("/financie/faktury/nova", selectedCompany.value)}>Faktúra</Link>
                 <Link href={withCompany("/financie/faktury/suhrnna", selectedCompany.value)}>Súhrnná faktúra</Link>
+                <Link href={withCompany("/financie/dodacie-listy/novy", selectedCompany.value)}>Dodací list</Link>
                 <Link href="/financie/faktury/historicka">Historický doklad</Link>
                 <Link href="/klienti/novy">Kontakt</Link>
                 <Link href="/objednavky/nova">Objednávka</Link>

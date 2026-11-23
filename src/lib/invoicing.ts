@@ -22,7 +22,7 @@ export async function nextNumber(tx: Tx, kind: DocumentNumberKind, year: number)
 }
 
 /** Nové rady sú oddelené podľa subjektu; pôvodné čísla zostávajú bez zmeny. */
-export async function nextEntityNumber(tx: Tx, kind: "OBJ" | "VYDANA", year: number, entity: "SOLE_TRADER" | "KURGI"): Promise<string> {
+export async function nextEntityNumber(tx: Tx, kind: "OBJ" | "VYDANA" | "DL", year: number, entity: "SOLE_TRADER" | "KURGI"): Promise<string> {
   const marker = entity === "SOLE_TRADER" ? "Z" : "K";
   const counterId = `${kind}-${marker}-${year}`;
   const counter = await tx.docCounter.upsert({
@@ -32,7 +32,7 @@ export async function nextEntityNumber(tx: Tx, kind: "OBJ" | "VYDANA", year: num
   });
   return kind === "OBJ"
     ? `OBJ${marker}${year}-${String(counter.lastNumber).padStart(4, "0")}`
-    : `FA${marker}${year}${String(counter.lastNumber).padStart(3, "0")}`;
+    : `${kind === "DL" ? "DL" : "FA"}${marker}${year}${String(counter.lastNumber).padStart(3, "0")}`;
 }
 
 export interface LineInput {

@@ -257,9 +257,11 @@ export async function updateOrder(orderId: string, _prevState: OrderFormState, f
     const current = await tx.order.findUnique({ where: { id: orderId }, include: {
       invoices: { where: { direction: "VYDANA", documentStatus: { not: "CANCELLED" } }, select: { id: true } },
       invoiceOrders: { where: { invoice: { direction: "VYDANA", documentStatus: { not: "CANCELLED" } } }, select: { invoiceId: true } },
+      deliveryNotes: { where: { cancelledAt: null }, select: { number: true }, take: 1 },
     } });
     if (!current || !EDITABLE_ORDER_STATUSES.includes(current.status)) throw new Error("Objednávku už nemožno upravovať. Obnovte stránku.");
     if (current.invoices.length || current.invoiceOrders.length) throw new Error("Objednávka už patrí do faktúry alebo konceptu. Najprv vyriešte naviazaný doklad.");
+    if (current.deliveryNotes[0]) throw new Error(`Objednávka má vystavený dodací list ${current.deliveryNotes[0].number}. Pred úpravou skontrolujte naviazaný doklad.`);
     if (parsed.data.externalId) {
       const duplicate = await tx.order.findFirst({ where: { id: { not: orderId }, channel: parsed.data.channel, externalId: parsed.data.externalId }, select: { orderNumber: true } });
       if (duplicate) throw new Error(`Externé číslo už patrí objednávke ${duplicate.orderNumber}.`);

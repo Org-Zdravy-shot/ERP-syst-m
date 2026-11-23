@@ -60,6 +60,7 @@ model Client {
 
   orders        Order[]
   invoices      Invoice[]
+  deliveryNotes DeliveryNote[]
   subscriptions Subscription[]
   productPrices ClientProductPrice[]
   priceRules    ClientPriceRule[]
@@ -958,6 +959,7 @@ model Order {
   charges   OrderCharge[]
   invoices  Invoice[]
   invoiceOrders InvoiceOrder[]
+  deliveryNotes DeliveryNote[]
   movements StockMovement[]
   wooSync   WooOrderSync?
 }
@@ -1097,6 +1099,7 @@ model Invoice {
 
   items                    InvoiceItem[]
   orderLinks               InvoiceOrder[]
+  deliveryNoteLinks        InvoiceDeliveryNote[]
   paymentAllocations       PaymentAllocation[]
   documents                DocumentAsset[]
   emailDeliveries          EmailDelivery[]
@@ -1127,6 +1130,48 @@ model InvoiceOrder {
 
   @@id([invoiceId, orderId])
   @@index([orderId])
+}
+
+model DeliveryNote {
+  id                   String   @id @default(cuid())
+  number               String   @unique
+  submissionKey        String   @unique
+  legalEntity          String
+  clientId             String
+  client               Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  orderId              String?
+  order                Order?   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sourceOrderHash      String?
+  supplierOrderNumber  String?
+  supplierOrderDate    DateTime?
+  buyerOrderNumber     String?
+  issueDate            DateTime
+  deliveryDate         DateTime
+  issuerSnapshot       Json
+  counterpartySnapshot Json
+  deliveryAddress      String?
+  lines                Json
+  note                 String?
+  createdById          String
+  createdAt            DateTime @default(now())
+  cancelledAt          DateTime?
+  invoiceLinks         InvoiceDeliveryNote[]
+
+  @@index([legalEntity, deliveryDate])
+  @@index([clientId, deliveryDate])
+  @@index([orderId])
+}
+
+model InvoiceDeliveryNote {
+  invoiceId      String
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  deliveryNoteId String
+  deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Restrict)
+  firstLineNumber Int
+  lineCount       Int
+
+  @@id([invoiceId, deliveryNoteId])
+  @@index([deliveryNoteId])
 }
 
 model InvoiceItem {
