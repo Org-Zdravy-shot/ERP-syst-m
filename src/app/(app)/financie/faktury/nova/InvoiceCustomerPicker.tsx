@@ -2,12 +2,13 @@
 
 import { useId, useState } from "react";
 import { CompanySearch } from "@/components/CompanySearch";
+import { CustomerVatStatus } from "@/components/CustomerVatStatus";
 import { btnSmall, input, label } from "@/components/ui";
 import type { CompanyMatch } from "@/lib/company-lookup";
 import { saveInvoiceClient } from "../../../klienti/company-actions";
 
-export interface ClientOption { id: string; name: string; type: string; ico?: string | null; dic?: string | null; icDph?: string | null; street?: string | null; city?: string | null; zip?: string | null; country?: string }
-type BillingFields = Pick<CompanyMatch, "name" | "ico" | "dic" | "icDph" | "street" | "city" | "zip" | "country">;
+export interface ClientOption extends Pick<CompanyMatch, "vatStatus" | "vatCheckedOn"> { id: string; name: string; type: string; ico?: string | null; dic?: string | null; icDph?: string | null; street?: string | null; city?: string | null; zip?: string | null; country?: string }
+type BillingFields = Pick<CompanyMatch, "name" | "ico" | "dic" | "icDph" | "street" | "city" | "zip" | "country" | "vatStatus" | "vatCheckedOn">;
 const EMPTY: BillingFields = { name: "", ico: "", dic: "", icDph: "", street: "", city: "", zip: "", country: "SK" };
 const FIELDS = [
   ["name", "Názov firmy", 255], ["ico", "IČO", 8], ["dic", "DIČ", 10], ["icDph", "IČ DPH", 12],
@@ -26,7 +27,9 @@ export function InvoiceCustomerPicker({ clients, onSavingChange, initialClientId
     setError("");
     if (company.clientId) {
       const clientId = company.clientId;
-      setOptions((previous) => previous.some((row) => row.id === clientId) ? previous : [...previous, { ...company, id: clientId, type: "B2B" }]);
+      setOptions((previous) => previous.some((row) => row.id === clientId)
+        ? previous.map((row) => row.id === clientId ? { ...row, vatStatus: company.vatStatus, vatCheckedOn: company.vatCheckedOn } : row)
+        : [...previous, { ...company, id: clientId, type: "B2B" }]);
       setSelected(clientId); setDraft(null);
     } else {
       setSelected(""); setDraft(company);
@@ -56,15 +59,16 @@ export function InvoiceCustomerPicker({ clients, onSavingChange, initialClientId
           {options.map((client) => <option key={client.id} value={client.id}>{client.name} ({client.type})</option>)}
         </select>
       </div>
-      {selected && !draft && (() => { const client = options.find(c => c.id === selected); return client ? <div className="finance-issuer-address"><strong>{client.name}</strong>{client.street && <p>{client.street}</p>}{client.city && <p>{client.zip} {client.city}</p>}{client.ico && <p>IČO: {client.ico}</p>}{client.dic && <p>DIČ: {client.dic}</p>}{client.icDph && <p>IČ DPH: {client.icDph}</p>}</div> : null; })()}
+      {selected && !draft && (() => { const client = options.find(c => c.id === selected); return client ? <div className="finance-issuer-address"><strong>{client.name}</strong>{client.street && <p>{client.street}</p>}{client.city && <p>{client.zip} {client.city}</p>}{client.ico && <p>IČO: {client.ico}</p>}{client.dic && <p>DIČ: {client.dic}</p>}{client.icDph && <p>IČ DPH: {client.icDph}</p>}<CustomerVatStatus status={client.vatStatus} checkedOn={client.vatCheckedOn} /></div> : null; })()}
       {!draft && <button type="button" className={btnSmall} onClick={() => { setDraft({ ...EMPTY }); setSelected(""); setError(""); }}>+ Zadať novú firmu ručne</button>}
       {draft && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
         <p className="text-sm font-semibold">Fakturačné údaje novej firmy</p>
+        <CustomerVatStatus status={draft.vatStatus} checkedOn={draft.vatCheckedOn} />
         <p className="text-xs text-stone-600">Skontrolujte údaje a uložte firmu medzi klientov. Rozpísaná faktúra zostane zachovaná.</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {FIELDS.map(([key, title, maxLength]) => <div key={key} className={key === "name" ? "sm:col-span-2 lg:col-span-3" : ""}>
             <label htmlFor={`${id}-${key}`} className={label}>{title}{key === "name" || key === "ico" ? " *" : ""}</label>
-            <input id={`${id}-${key}`} className={input} value={draft[key]} maxLength={maxLength} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />
+            <input id={`${id}-${key}`} className={input} value={draft[key]} maxLength={maxLength} onChange={(event) => setDraft({ ...draft, [key]: event.target.value, ...(key === "ico" ? { vatStatus: undefined, vatCheckedOn: undefined } : {}) })} />
           </div>)}
         </div>
         <div className="flex flex-wrap gap-2">

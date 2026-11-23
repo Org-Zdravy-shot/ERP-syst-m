@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { searchCompanies } from "@/app/(app)/klienti/company-actions";
 import type { CompanyMatch } from "@/lib/company-lookup";
+import { CustomerVatStatus } from "./CustomerVatStatus";
 import { input, label } from "./ui";
 
 export function CompanySearch({ onSelect }: { onSelect: (company: CompanyMatch) => void }) {
@@ -49,6 +50,8 @@ export function CompanySearch({ onSelect }: { onSelect: (company: CompanyMatch) 
         <button type="button" onClick={() => choose(row)} className={`w-full border-b border-stone-100 px-3 py-3 text-left text-sm hover:bg-amber-50 ${active === index ? "bg-amber-100" : ""}`}>
           <span className="block font-semibold text-stone-950">{row.name}</span>
           <span className="block text-xs text-stone-600">IČO {row.ico || "—"} · {[row.street, row.city].filter(Boolean).join(", ")} · {({ ERP: "Uložený klient", AUTOFORM: "Autoform", RPO: "Verejný register RPO" })[row.source]}</span>
+          {(row.dic || row.icDph) && <span className="block text-xs text-stone-600">{[row.dic && `DIČ ${row.dic}`, row.icDph && `IČ DPH ${row.icDph}`].filter(Boolean).join(" · ")}</span>}
+          <CustomerVatStatus status={row.vatStatus} checkedOn={row.vatCheckedOn} />
         </button>
       </li>)}
     </ul>}
@@ -56,9 +59,10 @@ export function CompanySearch({ onSelect }: { onSelect: (company: CompanyMatch) 
       <p className="mt-2 text-xs text-stone-500">
         Zdroj: <a href="https://rpo.minv.sk/new/" target="_blank" rel="noreferrer" className="underline">RPO, Ministerstvo vnútra SR</a>
         {" · "}<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer" className="underline">CC BY 4.0</a>.
-        {" ERP vyberá aktuálny záznam a formátuje adresu. DIČ a IČ DPH doplňte podľa potreby."}
+        {" ERP vyberá aktuálny záznam a formátuje adresu."}
       </p>
     )}
     {results.some((row) => row.source === "AUTOFORM") && <p className="mt-2 text-xs text-stone-500">Údaje: <a href="https://ekosystem.slovensko.digital/sluzby/autoform" target="_blank" rel="noreferrer" className="underline">Slovensko.Digital – Autoform</a>. Pred uložením skontrolujte ich aktuálnosť.</p>}
+    {results.some((row) => row.vatStatus) && <p className="mt-2 text-xs text-stone-500">Daňové údaje z <a href="https://www.financnasprava.sk/sk/elektronicke-sluzby/verejne-sluzby/zoznamy/exporty-z-online-informacnych" target="_blank" rel="noreferrer" className="underline">informačných zoznamov Finančnej správy</a>.</p>}
   </div>;
 }

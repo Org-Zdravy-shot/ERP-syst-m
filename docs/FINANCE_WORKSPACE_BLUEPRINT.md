@@ -250,3 +250,10 @@ Odporúčanie modelov je pracovný postup: Sol pre bežnú implementáciu ucelen
 - [SuperFaktúra: prehľady](https://www.superfaktura.sk/blog/prehlady-v-superfakture-fakturacia-aj-cashflow/) — starší referenčný princíp prehľadu, nie dôkaz aktuálneho presného vzhľadu.
 - [SuperFaktúra: funkcie](https://www.superfaktura.sk/funkcie/) a [cenové ponuky](https://pomoc.superfaktura.sk/ako-funguju-cenove-ponuky/).
 - [OpenAI: modely](https://learn.chatgpt.com/docs/models), [spotreba a voľba lacnejšieho modelu](https://chatgpt.com/codex/pricing/) — overené pri návrhu; nejde o garanciu úspory pre tento projekt.
+
+## Register daňových údajov
+
+- RPO dodá názov, IČO a sídlo. Podľa celého IČO sa doplnia DIČ zo zoznamu registrácií na daň z príjmov a IČ DPH, stav a dátum jeho overenia zo zoznamu registrácií DPH. Údaje z existujúceho kontaktu sa pri vyhľadávaní neprepisujú. Registrácie podľa § 7 a § 7a sa zobrazia oddelene od platiteľov. Bez aktuálneho výpisu sa stav zobrazuje ako neoverený.
+- Zdrojom sú [oficiálne exporty Finančnej správy](https://www.financnasprava.sk/sk/elektronicke-sluzby/verejne-sluzby/zoznamy/exporty-z-online-informacnych). Kompaktné indexy obsahujú iba identifikátory a stav registrácie. Ukladajú sa pod `registry/fs/v1/` v privátnom úložisku. Pred uložením sa overuje dátum, očakávaný rozsah a úplnosť XML. Na vyhľadávanie sa používa výpis starý najviac štyri dni.
+- Po nasadení v živom projekte spustiť dennú úlohu `node scripts/refresh-tax-register.mjs` na Railway, napríklad `40 5 * * *` v UTC. Nastaviť `ERP_BASE_URL` na HTTPS adresu aplikácie a `CRON_SECRET` ako referenciu na rovnakú hodnotu vo webovej službe. Úloha končí chybou pri neúspešnej aktualizácii. Výsledok overiť cez vyhľadanie firmy podľa IČO, vrátane odlišných hodnôt DIČ a IČ DPH.
+- Overený živý produkčný cieľ je Railway projekt `16793114-d228-43d9-a257-64cbf4007933` podľa záznamu GitHub deploymentu a produkčných adries v README. Projekt `0b9ff77f-cb91-4f59-ac62-388ded748c42` je archív. Pred zápisom alebo nasadením overiť identifikátor cieľa priamo v Railway.

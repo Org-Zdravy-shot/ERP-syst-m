@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/finance/permissions", () => ({ requireFinancePermission: mocks.permission }));
 vi.mock("@/lib/company-lookup", () => ({ lookupCompanyRegistry: mocks.lookup }));
+vi.mock("@/lib/tax-register/lookup", () => ({
+  loadCustomerTaxRegister: async () => ({}),
+  lookupCustomerTax: () => ({ dic: "", icDph: "", vatStatus: "UNKNOWN" }),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("@/lib/prisma", () => ({ prisma: {
   client: { findMany: mocks.findMany },
