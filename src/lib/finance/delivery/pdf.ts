@@ -2,6 +2,7 @@ import type { DeliveryNote } from "@prisma/client";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb, type PDFPage } from "pdf-lib";
 import { formatUnitPrice } from "@/lib/precise-price";
+import { formatCents } from "@/lib/format";
 import { financePartySnapshotSchema } from "@/lib/zod-schemas";
 import { loadFontBytes, wrapText } from "../documents/pdf-renderer";
 import { deliveryLinesSchema } from "./schema";
@@ -17,7 +18,10 @@ const yellow = rgb(0.99, 0.87, 0.22);
 const date = new Intl.DateTimeFormat("sk-SK", { dateStyle: "medium", timeZone: "Europe/Bratislava" });
 const quantity = new Intl.NumberFormat("sk-SK", { maximumFractionDigits: 6 });
 
-export async function renderDeliveryNotePdf(note: DeliveryNote, showPrices: boolean): Promise<Uint8Array> {
+type PrintDocument = Pick<DeliveryNote, "number" | "issuerSnapshot" | "counterpartySnapshot" | "lines" | "issueDate" | "deliveryDate" | "note" | "cancelledAt" | "deliveryAddress" | "supplierOrderNumber" | "buyerOrderNumber">;
+type QuoteTotals = { totalNetCents: number; totalVatCents: number; totalGrossCents: number };
+
+export async function renderDeliveryNotePdf(note: PrintDocument, showPrices: boolean, quote?: QuoteTotals): Promise<Uint8Array> {
   const parties = [
     financePartySnapshotSchema.parse(note.issuerSnapshot),
     financePartySnapshotSchema.parse(note.counterpartySnapshot),
@@ -25,16 +29,17 @@ export async function renderDeliveryNotePdf(note: DeliveryNote, showPrices: bool
   const goods = deliveryLinesSchema.parse(note.lines).filter(line => line.kind === "GOODS");
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  pdf.setTitle(`Dodací list ${note.number}`);
+  const title = `${quote ? "Cenová ponuka" : "Dodací list"} ${note.number}`;
+  pdf.setTitle(title);
   const bytes = await loadFontBytes();
   const regular = await pdf.embedFont(bytes.regular, { subset: false });
   const bold = await pdf.embedFont(bytes.bold, { subset: false });
 
   function header(page: PDFPage, continuation: boolean) {
     page.drawRectangle({ x: margin, y: height - 49, width: 46, height: 5, color: yellow });
-    page.drawText(`Dodací list ${note.number}`, { x: margin, y: height - 82, font: bold, size: continuation ? 16 : 23, color: ink });
+    page.drawText(title, { x: margin, y: height - 82, font: bold, size: continuation ? 16 : 23, color: ink });
     if (note.cancelledAt) page.drawText("ZRUŠENÝ", { x: width - 117, y: height - 80, font: bold, size: 10, color: rgb(0.64, 0.13, 0.1) });
-    page.drawText(`Vystavenie ${date.format(note.issueDate)}    Dodanie ${date.format(note.deliveryDate)}`, {
+    page.drawText(`Vystavenie ${date.format(note.issueDate)}    ${quote ? "Platnosť do" : "Dodanie"} ${date.format(note.deliveryDate)}`, {
       x: margin, y: height - 104, font: regular, size: 10, color: muted,
     });
     return height - 134;
@@ -73,7 +78,7 @@ export async function renderDeliveryNotePdf(note: DeliveryNote, showPrices: bool
   const qtyX = showPrices ? 367 : 428;
   function tableHeader(top: number) {
     page.drawRectangle({ x: margin, y: top - 19, width: content, height: 23, color: rgb(0.96, 0.95, 0.92) });
-    page.drawText("Dodaná položka", { x: margin + 8, y: top - 11, font: bold, size: 9, color: ink });
+    page.drawText(quote ? "Položka ponuky" : "Dodaná položka", { x: margin + 8, y: top - 11, font: bold, size: 9, color: ink });
     page.drawText("Množstvo", { x: qtyX, y: top - 11, font: bold, size: 9, color: ink });
     if (showPrices) page.drawText("€/j. bez DPH", { x: 473, y: top - 11, font: bold, size: 9, color: ink });
     return top - 30;
@@ -107,7 +112,19 @@ export async function renderDeliveryNotePdf(note: DeliveryNote, showPrices: bool
       cursor -= 15;
     }
   }
-  if (!note.cancelledAt) {
+  if (quote) {
+    if (cursor < 128) { page = pdf.addPage([width, height]); cursor = header(page, true); }
+    cursor -= 17;
+    for (const [label, value, emphasized] of [
+      ["Základ", quote.totalNetCents, false], ["DPH", quote.totalVatCents, false], ["Celkom", quote.totalGrossCents, true],
+    ] as const) {
+      const font = emphasized ? bold : regular;
+      const text = formatCents(value);
+      page.drawText(label, { x: width - margin - 186, y: cursor, font, size: 10, color: ink });
+      page.drawText(text, { x: width - margin - font.widthOfTextAtSize(text, 10), y: cursor, font, size: 10, color: ink });
+      cursor -= 18;
+    }
+  } else if (!note.cancelledAt) {
     if (cursor < 129) { page = pdf.addPage([width, height]); cursor = header(page, true); }
     cursor -= 57;
     for (const [index, caption] of ["Odovzdal", "Prevzal"].entries()) {

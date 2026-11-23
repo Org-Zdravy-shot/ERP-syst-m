@@ -15,7 +15,7 @@ export default async function DeliveryNoteDetailPage({ params }: { params: Promi
   const { id } = await params;
   const base = `/financie/dodacie-listy/${id}`;
   const note = await prisma.deliveryNote.findUnique({
-    where: { id }, include: { invoiceLinks: {
+    where: { id }, include: { quote: { select: { id: true, number: true } }, invoiceLinks: {
       include: { invoice: { select: { id: true, invoiceNumber: true, documentStatus: true, finalizedAt: true } } },
     } },
   });
@@ -46,6 +46,7 @@ export default async function DeliveryNoteDetailPage({ params }: { params: Promi
           {note.deliveryAddress && <div><div className="text-xs text-stone-500">Adresa dodania</div>{note.deliveryAddress}</div>}
           {note.orderId && <div><div className="text-xs text-stone-500">Naša objednávka</div><Link className="underline" href={`/objednavky/${note.orderId}`}>{note.supplierOrderNumber}</Link></div>}
           {note.buyerOrderNumber && <div><div className="text-xs text-stone-500">Objednávka odberateľa</div>{note.buyerOrderNumber}</div>}
+          {note.quote && <div><div className="text-xs text-stone-500">Cenová ponuka</div><Link className="underline" href={`/financie/cenove-ponuky/${note.quote.id}`}>{note.quote.number}</Link></div>}
         </div>
         <section className="finance-editor-section">
           <h3>Položky dodania</h3>

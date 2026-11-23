@@ -7,6 +7,7 @@ import { isVatPayerAtDate } from "../domain";
 import { lockUnbilledOrders, sourceOrderHash, sourceOrderInclude } from "../consolidation";
 import { parseFmcgLine } from "../einvoice/fmcg";
 import type { InvoiceLineInput } from "../contracts";
+import { billingParty, quoteForConversion } from "../quotes/service";
 import { deliveryLinesSchema, invoiceDeliveryNotesSchema, invoiceKeepsDelivery, issueDeliveryNoteSchema, type DeliveryNoteInput, type InvoiceDeliverySelection } from "./schema";
 
 type Tx = Prisma.TransactionClient;
@@ -18,11 +19,12 @@ function deliveryOrderHash(order: SourceOrder): string {
   return sourceOrderHash({ ...order, status: "EXPEDOVANA", shipmentStatus: null });
 }
 
-function packParty(row: { name: string; ico?: string | null; dic?: string | null; icDph?: string | null; street?: string | null; city?: string | null; zip?: string | null; country: string }) {
-  return financePartySnapshotSchema.parse({
-    name: row.name, ico: row.ico || undefined, dic: row.dic || undefined, icDph: row.icDph || undefined,
-    street: row.street || undefined, city: row.city || undefined, zip: row.zip || undefined, country: row.country,
-  });
+export function canCreateDeliveryFromInvoice(invoice: {
+  direction: string; documentType: string; documentStatus: string; currency: string;
+  clientId: string | null; finalizedAt: Date | null; issuerSnapshot: unknown; counterpartySnapshot: unknown;
+}) {
+  return invoice.direction === "VYDANA" && invoice.documentType === "INVOICE" && invoice.documentStatus === "ISSUED" &&
+    invoice.currency === "EUR" && !!invoice.clientId && !!invoice.finalizedAt && !!invoice.issuerSnapshot && !!invoice.counterpartySnapshot;
 }
 
 async function lockNote(tx: Tx, id: string) {
@@ -56,16 +58,27 @@ export async function issueDeliveryNote(raw: DeliveryNoteInput, actorId: string)
       }
     }
 
-    const clientId = order ? order.clientId : input.clientId;
-    const legalEntity = order ? order.legalEntity : input.legalEntity;
+    let invoice: Prisma.InvoiceGetPayload<{ include: { items: true; deliveryNoteLinks: true } }> | null = null;
+    if (input.invoiceId) {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Invoice" WHERE "id" = ${input.invoiceId} FOR UPDATE`);
+      invoice = await tx.invoice.findUnique({ where: { id: input.invoiceId }, include: {
+        items: { orderBy: { lineNumber: "asc" } }, deliveryNoteLinks: true,
+      } });
+      if (!invoice || !canCreateDeliveryFromInvoice(invoice)) throw new Error("Vyberte vystavenú faktúru s úplnými údajmi oboch strán.");
+      if (invoice.deliveryNoteLinks.length) throw new Error("Faktúra už má naviazaný dodací list.");
+    }
+    const quote = input.quoteId ? await quoteForConversion(tx, input.quoteId) : null;
+    if (quote && issueDate < quote.issueDate) throw new Error("Dodací list nemôže predchádzať cenovej ponuke.");
+    const clientId = order?.clientId ?? invoice?.clientId ?? quote?.clientId ?? input.clientId;
+    const legalEntity = order ? order.legalEntity : invoice ? invoice.legalEntity : quote ? quote.legalEntity : input.legalEntity;
     if (!clientId || (legalEntity !== "KURGI" && legalEntity !== "SOLE_TRADER")) throw new Error("Vyberte dodávateľa a odberateľa.");
     const client = await tx.client.findUniqueOrThrow({ where: { id: clientId } });
-    if (!client.isActive) throw new Error("Odberateľ je archivovaný.");
-    const company = await tx.companyProfile.findFirst({
+    if (!client.isActive && !invoice) throw new Error("Odberateľ je archivovaný.");
+    const company = invoice || quote ? null : await tx.companyProfile.findFirst({
       where: { legalEntity, isActive: true, validFrom: { lte: deliveryDate }, OR: [{ validTo: null }, { validTo: { gte: deliveryDate } }] },
       orderBy: { validFrom: "desc" },
     });
-    if (!company) throw new Error("Pre dátum dodania chýba platný profil dodávateľa.");
+    if (!company && !invoice && !quote) throw new Error("Pre dátum dodania chýba platný profil dodávateľa.");
 
     const lines = order ? deliveryLinesSchema.parse([
       ...order.items.map(row => ({
@@ -76,10 +89,14 @@ export async function issueDeliveryNote(raw: DeliveryNoteInput, actorId: string)
       ...order.charges.filter(row => row.includedInSellerTotal).map(row => ({
         description: row.description, quantity: 1, unit: "ks", unitPriceExact: (row.unitPriceCents / 100).toFixed(2), vatRate: row.vatRate, kind: "CHARGE",
       })),
-    ]) : deliveryLinesSchema.parse(input.lines);
+    ]) : invoice ? deliveryLinesSchema.parse(invoice.items.map(row => ({
+      productId: row.productId ?? undefined, productSku: row.productSku ?? undefined, description: row.description,
+      quantity: row.quantity, unit: row.unit, unitPriceExact: row.unitPriceExact?.toString() ?? (row.unitPriceCents / 100).toFixed(2),
+      vatRate: row.vatRate,
+    }))) : deliveryLinesSchema.parse(quote?.lines ?? input.lines);
     if (!lines.some(line => line.kind === "GOODS")) throw new Error("Dodací list musí obsahovať dodanú položku.");
     const productIds = [...new Set(lines.map(line => line.productId).filter((id): id is string => !!id))];
-    if (!order && productIds.length) {
+    if (!order && !invoice && !quote && productIds.length) {
       const products = await tx.product.findMany({ where: { id: { in: productIds }, isActive: true }, select: { id: true, sku: true } });
       for (const line of lines) {
         if (!line.productId) continue;
@@ -89,13 +106,13 @@ export async function issueDeliveryNote(raw: DeliveryNoteInput, actorId: string)
       }
     }
     for (const line of lines) {
-      if (!order) line.kind = "GOODS";
+      if (!order && !invoice && !quote) line.kind = "GOODS";
       if (line.unitPriceExact) line.unitPriceExact = parseUnitPrice(line.unitPriceExact);
       else delete line.unitPriceExact;
     }
     const number = await nextEntityNumber(tx, "DL", issueDate.getUTCFullYear(), legalEntity);
     const note = await tx.deliveryNote.create({ data: {
-      number, submissionKey: input.submissionKey, legalEntity, clientId, orderId: order?.id,
+      number, submissionKey: input.submissionKey, legalEntity, clientId, orderId: order?.id, quoteId: quote?.id ?? invoice?.quoteId ?? order?.quoteId,
       sourceOrderHash: order ? deliveryOrderHash(order) : undefined,
       supplierOrderNumber: order?.orderNumber, supplierOrderDate: order ? new Date(localDate(order.orderDate)) : undefined,
       buyerOrderNumber: input.buyerOrderNumber, issueDate, deliveryDate, note: input.note,
@@ -104,13 +121,20 @@ export async function issueDeliveryNote(raw: DeliveryNoteInput, actorId: string)
         [order?.deliveryZip, order?.deliveryCity].filter(Boolean).join(" "),
         order?.deliveryCountry,
       ].filter(Boolean).join(", ") || undefined,
-      issuerSnapshot: packParty({ ...company, name: company.legalName }) as Prisma.InputJsonObject,
-      counterpartySnapshot: packParty(client) as Prisma.InputJsonObject,
+      issuerSnapshot: (invoice || quote
+        ? financePartySnapshotSchema.parse(invoice?.issuerSnapshot ?? quote?.issuerSnapshot)
+        : billingParty({ ...company!, name: company!.legalName })) as Prisma.InputJsonObject,
+      counterpartySnapshot: (invoice || quote
+        ? financePartySnapshotSchema.parse(invoice?.counterpartySnapshot ?? quote?.counterpartySnapshot)
+        : billingParty(client)) as Prisma.InputJsonObject,
       lines, createdById: actorId,
     } });
+    if (invoice) {
+      await tx.invoiceDeliveryNote.create({ data: { invoiceId: invoice.id, deliveryNoteId: note.id, firstLineNumber: 1, lineCount: lines.length } });
+    }
     await tx.auditLog.create({ data: {
       action: "DELIVERY_NOTE_ISSUED", entityType: "DeliveryNote", entityId: note.id, actorId,
-      afterData: { number, orderId: note.orderId, clientId, legalEntity },
+      afterData: { number, orderId: note.orderId, invoiceId: invoice?.id ?? null, quoteId: quote?.id ?? null, clientId, legalEntity },
     } });
     return note;
   });

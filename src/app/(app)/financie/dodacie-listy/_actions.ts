@@ -28,16 +28,18 @@ function message(error: unknown): string {
 export async function issueDeliveryNoteAction(_previous: DeliveryFormState, data: FormData): Promise<DeliveryFormState> {
   const actor = await requireFinancePermission("CREATE_DRAFT");
   const orderId = text(data, "orderId") || undefined;
+  const invoiceId = text(data, "invoiceId") || undefined;
+  const quoteId = text(data, "quoteId") || undefined;
   let result;
   try {
     const input = issueDeliveryNoteSchema.parse({
-      submissionKey: text(data, "submissionKey"), orderId,
+      submissionKey: text(data, "submissionKey"), orderId, invoiceId, quoteId,
       expectedOrderUpdatedAt: text(data, "expectedOrderUpdatedAt") || undefined,
       legalEntity: text(data, "legalEntity") || undefined, clientId: text(data, "clientId") || undefined,
       issueDate: text(data, "issueDate"), deliveryDate: text(data, "deliveryDate"),
       buyerOrderNumber: text(data, "buyerOrderNumber") || undefined,
       deliveryAddress: text(data, "deliveryAddress") || undefined, note: text(data, "note") || undefined,
-      lines: orderId ? undefined : JSON.parse(text(data, "lines") || "[]"),
+      lines: orderId || invoiceId || quoteId ? undefined : JSON.parse(text(data, "lines") || "[]"),
     });
     result = await issueDeliveryNote(input, actor.userId);
   } catch (error) {
@@ -45,6 +47,8 @@ export async function issueDeliveryNoteAction(_previous: DeliveryFormState, data
   }
   revalidatePath("/financie/dodacie-listy");
   if (result.orderId) revalidatePath(`/objednavky/${result.orderId}`);
+  if (invoiceId) revalidatePath(`/financie/faktury/${invoiceId}`);
+  if (quoteId) revalidatePath(`/financie/cenove-ponuky/${quoteId}`);
   redirect(`/financie/dodacie-listy/${result.id}`);
 }
 

@@ -26,6 +26,7 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
     where: { id },
     include: {
       client: true,
+      quote: { select: { id: true, number: true } },
       items: { include: { product: true } },
       charges: true,
       invoices: true,
@@ -140,6 +141,9 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
           </section>
 
           {canViewFinance && <section className="rounded-[14px] border border-stone-200 bg-white p-5">
+            {order.quote && <div className="mb-4 border-b border-stone-100 pb-4 text-sm">
+              Cenová ponuka <Link className="font-semibold underline" href={`/financie/cenove-ponuky/${order.quote.id}`}>{order.quote.number}</Link>
+            </div>}
             {(deliveryNote || canCreateDelivery) && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-4">
               <h2 className="font-semibold text-stone-900">Dodací list</h2>
               {deliveryNote ? <Link href={`/financie/dodacie-listy/${deliveryNote.id}`} className="text-sm font-semibold underline">{deliveryNote.number}</Link>
