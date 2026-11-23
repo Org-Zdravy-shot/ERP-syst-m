@@ -9,13 +9,13 @@ import { btnPrimary, btnSmall, errorBox, input, label } from "@/components/ui";
 import Link from "next/link";
 import { legalEntityLabels } from "@/lib/zod-schemas";
 import { InvoiceCustomerPicker, type ClientOption } from "./InvoiceCustomerPicker";
-import type { IssuerOption } from "../form-options";
+import type { InvoiceProductOption, IssuerOption } from "../form-options";
 import { FmcgFields, fmcgLabels } from "../fmcg-fields";
 import { fmcgLineSchema } from "@/lib/finance/einvoice/fmcg";
 import type { InvoiceFormInitial, InvoiceFormLine as Line } from "../invoice-form-data";
 import { slovakDateKey } from "../../../objednavky/pricing";
 
-const EMPTY_LINE: Line = { description: "", quantity: "1", unit: "ks", vatRate: "0", unitPrice: "" };
+const EMPTY_LINE: Line = { description: "", quantity: "1", unit: "ks", vatRate: "", unitPrice: "" };
 
 function parseQty(value: string): number {
   const normalized = value.trim().replace(/\s/g, "").replace(",", ".");
@@ -40,8 +40,8 @@ function lineGrossCents(line: Line): number | null {
   return parsed ? parsed.netCents + Math.round((parsed.netCents * parsed.vatRate) / 100) : null;
 }
 
-export function InvoiceForm({ clients, issuers = [], canConfigure = false, initial, defaultIssuer, backHref = "/financie/faktury", action = createManualInvoice, editing = false }: {
-  clients: ClientOption[]; issuers?: IssuerOption[]; canConfigure?: boolean; initial?: InvoiceFormInitial; defaultIssuer?: string; editing?: boolean;
+export function InvoiceForm({ clients, issuers = [], catalog = [], canConfigure = false, initial, defaultIssuer, backHref = "/financie/faktury", action = createManualInvoice, editing = false }: {
+  clients: ClientOption[]; issuers?: IssuerOption[]; catalog?: InvoiceProductOption[]; canConfigure?: boolean; initial?: InvoiceFormInitial; defaultIssuer?: string; editing?: boolean;
   action?: (state: InvoiceFormState, data: FormData) => Promise<InvoiceFormState>;
   backHref?: string;
 }) {
@@ -64,20 +64,37 @@ export function InvoiceForm({ clients, issuers = [], canConfigure = false, initi
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   };
 
+  const taxDate = header.deliveryDate || header.issueDate;
+  const validOn = (row: { validFrom: string; validTo: string | null }) => row.validFrom <= taxDate && (!row.validTo || row.validTo >= taxDate);
+  const issuer = issuers.find(profile => profile.legalEntity === header.legalEntity && validOn(profile));
+  const taxProfile = issuer?.taxProfiles.find(validOn);
+  const payer = taxProfile?.vatStatus === "PAYER" && !!taxProfile.vatRegisteredFrom && taxProfile.vatRegisteredFrom <= taxDate;
+  const nonPayer = taxProfile?.vatStatus === "NON_PAYER" || (
+    taxProfile?.vatStatus === "PAYER" && !!taxProfile.vatRegisteredFrom && taxProfile.vatRegisteredFrom > taxDate
+  );
+  const activeRates = lines.map(line => catalog.find(product => product.id === line.productId)?.vatRates.find(validOn));
+  const taxableLines = lines.map((line, index): Line => {
+    if (nonPayer) return { ...line, vatRate: "0", taxCategory: "STANDARD" };
+    if (payer && line.taxCategory !== "EXEMPT" && activeRates[index]?.confirmed) {
+      return { ...line, vatRate: String(activeRates[index].rate) };
+    }
+    return { ...line, vatRate: line.vatRate || (payer ? "23" : "0") };
+  });
+
   const totals = useMemo(() => {
     let net = 0;
     let vat = 0;
-    for (const line of lines) {
+    for (const line of taxableLines) {
       const parsed = lineCents(line);
       if (!parsed) continue;
       net += parsed.netCents;
       vat += Math.round((parsed.netCents * parsed.vatRate) / 100);
     }
     return { net, vat, gross: net + vat };
-  }, [lines]);
+  }, [taxableLines]);
 
   const itemsJson = useMemo(() => {
-    const items = lines
+    const items = taxableLines
       .map((line) => {
         try {
           const quantity = parseQty(line.quantity);
@@ -100,7 +117,7 @@ export function InvoiceForm({ clients, issuers = [], canConfigure = false, initi
         }
       });
     return JSON.stringify(items);
-  }, [lines]);
+  }, [taxableLines]);
   const invalidPriceRows = lines.map((line) => {
     try { parseUnitPrice(line.unitPrice); return false; } catch { return true; }
   });
@@ -114,7 +131,6 @@ export function InvoiceForm({ clients, issuers = [], canConfigure = false, initi
     return `${fmcgLabels[key] ?? "Údaje pre reťazec"}: ${issue.message}`;
   });
 
-  const issuer = issuers.find(p => p.legalEntity === header.legalEntity && p.validFrom <= header.deliveryDate && (!p.validTo || p.validTo >= header.deliveryDate));
   return (
     <form action={formAction} className="finance-invoice-editor">
       <input type="hidden" name="items" value={itemsJson} />
@@ -124,7 +140,7 @@ export function InvoiceForm({ clients, issuers = [], canConfigure = false, initi
         <div className="finance-document-title"><h2>Faktúra</h2><span>Koncept · číslo sa pridelí pri vystavení</span></div>
         <div className="finance-parties">
           <section><h3>Dodávateľ</h3><label className={label} htmlFor="invoice-issuer">Vaša firma *</label><select id="invoice-issuer" name="legalEntity" required value={header.legalEntity} onChange={e => setHeader({ ...header, legalEntity: e.target.value })} className={input}><option value="" disabled>Vyberte právny subjekt</option>{Object.entries(legalEntityLabels).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select>
-            <div className="finance-issuer-address">{issuer ? <><strong>{issuer.legalName}</strong><p>{issuer.street}</p><p>{issuer.zip} {issuer.city}</p><p>IČO: {issuer.ico}</p><p>DIČ: {issuer.dic}</p>{issuer.icDph && <p>IČ DPH: {issuer.icDph}</p>}</> : <p>{header.legalEntity ? "Pre dátum dodania chýba platný firemný profil." : "Po výbere firmy sa zobrazia vaše fakturačné údaje."}</p>}{canConfigure && <Link href="/financie/nastavenia">Firemné údaje a bankové účty</Link>}</div>
+            <div className="finance-issuer-address">{issuer ? <><strong>{issuer.legalName}</strong><p>{issuer.street}</p><p>{issuer.zip} {issuer.city}</p><p>IČO: {issuer.ico}</p><p>DIČ: {issuer.dic}</p>{payer && issuer.icDph && <p>IČ DPH: {issuer.icDph}</p>}<p>{payer ? "Platiteľ DPH" : nonPayer ? "Neplatiteľ DPH" : "Daňový profil chýba"}</p><p>{issuer.eurAccount ? "Platba na primárny EUR účet" : "Chýba primárny EUR účet"}</p></> : <p>{header.legalEntity ? "Pre dátum dodania chýba platný firemný profil." : "Po výbere firmy sa zobrazia vaše fakturačné údaje."}</p>}{canConfigure && <Link href="/financie/nastavenia">Firemné údaje a bankové účty</Link>}</div>
           </section>
           <section><h3>Odberateľ</h3><InvoiceCustomerPicker clients={clients} initialClientId={initial?.clientId} onSavingChange={setSavingClient} /></section>
         </div>
@@ -135,9 +151,23 @@ export function InvoiceForm({ clients, issuers = [], canConfigure = false, initi
         </div>
         <p className="mb-4 text-xs text-stone-500">Cena je bez DPH a môže mať najviac 4 desatinné miesta.</p>
         <div className="space-y-3">
-          {lines.map((line, index) => (
+          {taxableLines.map((line, index) => (
             <div key={index} className="finance-invoice-row grid grid-cols-2 gap-3 sm:grid-cols-6 xl:grid-cols-12">
               <div className="col-span-2 sm:col-span-6 xl:col-span-4">
+                {catalog.length > 0 && <label className="mb-2 block text-xs text-stone-500">
+                  Produkt
+                  <select className={input} value={line.productId ?? ""} onChange={(event) => {
+                    const product = catalog.find(item => item.id === event.target.value);
+                    updateLine(index, product ? {
+                      productId: product.id, productSku: product.sku, description: product.name, unit: product.unit,
+                      unitPrice: "", vatRate: "", taxCategory: "STANDARD", fmcg: undefined,
+                    } : { productId: undefined, productSku: undefined, vatRate: "" });
+                  }}>
+                    <option value="">Ručne zadaná položka</option>
+                    {line.productId && !catalog.some(item => item.id === line.productId) && <option value={line.productId}>Pôvodný produkt ({line.productSku ?? line.description})</option>}
+                    {catalog.map(product => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}
+                  </select>
+                </label>}
                 <label htmlFor={`item-description-${index}`} className="mb-1 block text-xs text-stone-500">Popis</label>
                 <input
                   id={`item-description-${index}`}
@@ -194,10 +224,14 @@ export function InvoiceForm({ clients, issuers = [], canConfigure = false, initi
                   value={line.taxCategory === "EXEMPT" ? "EXEMPT" : line.vatRate}
                   onChange={(e) => updateLine(index, { vatRate: e.target.value === "EXEMPT" ? "0" : e.target.value, taxCategory: e.target.value === "EXEMPT" ? "EXEMPT" : "STANDARD" })}
                   className={input}
+                  disabled={nonPayer || (payer && !!line.productId && line.taxCategory !== "EXEMPT")}
                 >
                   {[...new Set(["23", "19", "5", "0", line.vatRate])].map((rate) => <option key={rate} value={rate}>{rate} %</option>)}
                   {line.taxCategory === "EXEMPT" && <option value="EXEMPT">0 % — oslobodené</option>}
                 </select>
+                {payer && line.productId && line.taxCategory !== "EXEMPT" && !activeRates[index]?.confirmed && (
+                  <p className="mt-1 text-xs text-amber-800">Pre dátum dodania chýba potvrdená sadzba produktu.</p>
+                )}
               </div>
               <div className="sm:col-span-2 xl:col-span-2">
                 <p className="mb-1 text-xs text-stone-500">Celkom</p>

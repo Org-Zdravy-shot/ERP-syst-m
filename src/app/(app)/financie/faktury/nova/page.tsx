@@ -17,7 +17,7 @@ export default async function NovaFakturaPage({ searchParams }: { searchParams: 
   const initial = original ? invoiceFormInitial(original, "copy") : undefined;
   const defaultIssuer = !original && (subjekt === "KURGI" || subjekt === "SOLE_TRADER") ? subjekt : undefined;
   const backHref = original ? `/financie/faktury/${original.id}` : invoiceListHref({ smer: "VYDANA", subjekt: defaultIssuer });
-  const { clients, issuers } = await invoiceFormOptions();
+  const { clients, issuers, catalog } = await invoiceFormOptions();
 
   return (
     <>
@@ -29,7 +29,7 @@ export default async function NovaFakturaPage({ searchParams }: { searchParams: 
 
       {original && <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-stone-800">Kópia dokladu {original.invoiceNumber ?? "bez čísla"}. Skontrolujte dátumy, ceny a odberateľa. Referencie objednávok, dodacie listy, šarže a exspirácie vyplňte pre nové dodanie. Nový koncept vznikne až uložením.</p>}
       {initial?.clientId && !clients.some((client) => client.id === initial.clientId) && <p className="mb-4 text-sm text-amber-800">Pôvodný klient nie je aktívny. Vyberte odberateľa z dostupného adresára.</p>}
-      <InvoiceForm clients={clients} issuers={issuers} canConfigure={hasFinancePermission(user.role, "CONFIGURE")} initial={initial} defaultIssuer={defaultIssuer} backHref={backHref} />
+      <InvoiceForm clients={clients} issuers={issuers} catalog={catalog} canConfigure={hasFinancePermission(user.role, "CONFIGURE")} initial={initial} defaultIssuer={defaultIssuer} backHref={backHref} />
     </>
   );
 }

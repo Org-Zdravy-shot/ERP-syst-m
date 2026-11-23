@@ -13,6 +13,7 @@ import { requireFinancePermission } from "@/lib/finance/permissions";
 import { parseEurToCents } from "@/lib/format";
 import { parseUnitPrice, unitPriceCents } from "@/lib/precise-price";
 import { fmcgLineSchema } from "@/lib/finance/einvoice/fmcg";
+import { isPayBySquareBankAccount } from "@/lib/finance/documents/pay-by-square";
 
 export interface InvoiceFormState {
   error?: string;
@@ -660,6 +661,9 @@ export async function saveFinanceProfile(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Neplatné nastavenia." };
 
   const data = parsed.data;
+  if (!await isPayBySquareBankAccount(data.iban, data.bic)) {
+    return { error: "Skontrolujte IBAN alebo BIC primárneho EUR účtu." };
+  }
   try {
     await prisma.$transaction(async (tx) => {
       const sameStart = await tx.companyProfile.findFirst({ where: { legalEntity: data.legalEntity, validFrom: data.validFrom } });
