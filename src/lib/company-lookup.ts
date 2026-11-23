@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { lookupRpo } from "./rpo-company-lookup";
+import type { CustomerVatStatus } from "./tax-register/format";
 
 export interface CompanyMatch {
   id: string;
@@ -14,6 +15,8 @@ export interface CompanyMatch {
   country: string;
   source: "ERP" | "AUTOFORM" | "RPO";
   updatedAt?: string;
+  vatStatus?: CustomerVatStatus;
+  vatCheckedOn?: string;
 }
 
 const value = z.union([z.string(), z.number()]).nullish().transform((v) => v == null ? "" : String(v).trim());

@@ -6,11 +6,31 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireFinancePermission } from "@/lib/finance/permissions";
 import { lookupCompanyRegistry, type CompanyMatch } from "@/lib/company-lookup";
+import { loadCustomerTaxRegister, lookupCustomerTax } from "@/lib/tax-register/lookup";
 import { findClientByIcoForCreation } from "./client-identity";
 
 // Bounded process-local cache limits repeated paid requests while typing/backtracking.
 // Authentication and the local database query still run on every request.
 const registryCache = new Map<string, { expires: number; companies: CompanyMatch[] }>();
+
+async function enrichTaxDetails(companies: CompanyMatch[]): Promise<CompanyMatch[]> {
+  const eligible = (row: CompanyMatch) => row.country === "SK" && /^\d{8}$/.test(row.ico.replace(/\s/g, ""));
+  if (!companies.some(eligible)) return companies;
+  const register = await loadCustomerTaxRegister();
+  return companies.map((row) => {
+    if (!eligible(row)) return row;
+    const details = lookupCustomerTax(row.ico.replace(/\s/g, ""), register);
+    return {
+      ...row,
+      dic: row.source === "ERP" ? row.dic : details.dic || row.dic,
+      icDph: row.source === "ERP" ? row.icDph : details.vatCheckedOn
+        ? details.icDph || (details.vatStatus === "UNKNOWN" ? row.icDph : "")
+        : row.icDph,
+      vatStatus: details.vatStatus,
+      vatCheckedOn: details.vatCheckedOn,
+    };
+  });
+}
 
 export async function searchCompanies(query: string): Promise<{ companies: CompanyMatch[]; notice?: string }> {
   await requireUser();
@@ -28,7 +48,9 @@ export async function searchCompanies(query: string): Promise<{ companies: Compa
   }));
   // A complete IČO already present in ERP needs no external request.
   const compact = term.replace(/\s/g, "");
-  if (/^\d{8}$/.test(compact) && companies.some((row) => row.ico.replace(/\s/g, "") === compact)) return { companies };
+  if (/^\d{8}$/.test(compact) && companies.some((row) => row.ico.replace(/\s/g, "") === compact)) {
+    return { companies: await enrichTaxDetails(companies) };
+  }
   try {
     const cacheKey = term.toLocaleLowerCase("sk").replace(/\s+/g, " ");
     const cached = registryCache.get(cacheKey);
@@ -38,9 +60,9 @@ export async function searchCompanies(query: string): Promise<{ companies: Compa
       registryCache.set(cacheKey, { companies: remote, expires: Date.now() + 5 * 60_000 });
     }
     const known = new Set(companies.map((row) => row.ico.replace(/\s/g, "")).filter(Boolean));
-    return { companies: [...companies, ...remote.filter((row) => !known.has(row.ico))] };
+    return { companies: await enrichTaxDetails([...companies, ...remote.filter((row) => !known.has(row.ico))]) };
   } catch (error) {
-    return { companies, notice: error instanceof Error ? error.message : "Register firiem je nedostupný." };
+    return { companies: await enrichTaxDetails(companies), notice: error instanceof Error ? error.message : "Register firiem je nedostupný." };
   }
 }
 

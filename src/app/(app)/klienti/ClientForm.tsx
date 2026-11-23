@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import type { ClientFormState } from "./_actions";
 import { CompanySearch } from "@/components/CompanySearch";
+import { CustomerVatStatus } from "@/components/CustomerVatStatus";
+import type { CompanyMatch } from "@/lib/company-lookup";
 
 export interface ClientFormValues {
   type: string;
@@ -56,12 +58,14 @@ export function ClientForm({
   const [values, setValues] = useState(() => ({ ...EMPTY, ...initial }));
   const [type, setType] = useState(values.type);
   const [existingClient, setExistingClient] = useState("");
+  const [taxStatus, setTaxStatus] = useState<Pick<CompanyMatch, "vatStatus" | "vatCheckedOn">>({});
 
   return (
     <form action={formAction} className="max-w-2xl space-y-5 rounded-[14px] border border-stone-200 bg-white p-6">
       {!initial && type === "B2B" && <CompanySearch onSelect={(company) => {
-        if (company.clientId) { setExistingClient(company.clientId); return; }
+        if (company.clientId) { setExistingClient(company.clientId); setTaxStatus({}); return; }
         setExistingClient("");
+        setTaxStatus({ vatStatus: company.vatStatus, vatCheckedOn: company.vatCheckedOn });
         setValues((previous) => ({ ...previous, name: company.name, ico: company.ico, dic: company.dic, icDph: company.icDph, street: company.street, city: company.city, zip: company.zip }));
       }} />}
       {existingClient && <p className="rounded-xl bg-amber-50 p-3 text-sm">Táto firma už je v adresári. <Link href={`/klienti/${existingClient}`} className="font-semibold underline">Otvoriť uloženého klienta</Link><button type="button" className="ml-3 underline" onClick={() => setExistingClient("")}>Pokračovať s novým klientom</button></p>}
@@ -83,7 +87,7 @@ export function ClientForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label htmlFor="ico" className={labelClass}>IČO</label>
-            <input id="ico" name="ico" value={values.ico} onChange={(e) => setValues({ ...values, ico: e.target.value })} className={inputClass} />
+            <input id="ico" name="ico" value={values.ico} onChange={(e) => { setValues({ ...values, ico: e.target.value }); setTaxStatus({}); }} className={inputClass} />
           </div>
           <div>
             <label htmlFor="dic" className={labelClass}>DIČ</label>
@@ -92,6 +96,7 @@ export function ClientForm({
           <div>
             <label htmlFor="icDph" className={labelClass}>IČ DPH</label>
             <input id="icDph" name="icDph" value={values.icDph} onChange={(e) => setValues({ ...values, icDph: e.target.value })} className={inputClass} />
+            <CustomerVatStatus status={taxStatus.vatStatus} checkedOn={taxStatus.vatCheckedOn} />
           </div>
         </div>
       )}
