@@ -30,18 +30,24 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
       charges: true,
       invoices: true,
       invoiceOrders: { include: { invoice: true } },
+      deliveryNotes: { where: { cancelledAt: null }, select: { id: true, number: true, invoiceLinks: { include: { invoice: true } } } },
       subscription: true,
       inboxMessage: true,
       movements: { include: { product: true, batch: { select: { batchNumber: true, expiryDate: true } } }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!order) notFound();
-  const invoices = [...new Map([...order.invoices, ...order.invoiceOrders.map(link => link.invoice)].map(invoice => [invoice.id, invoice])).values()];
+  const deliveryNote = order.deliveryNotes[0];
+  const invoices = [...new Map([...order.invoices, ...order.invoiceOrders.map(link => link.invoice), ...order.deliveryNotes.flatMap(note => note.invoiceLinks.map(link => link.invoice))].map(invoice => [invoice.id, invoice])).values()];
+  const hasOutgoingInvoice = invoices.some(invoice => invoice.direction === "VYDANA" && invoice.documentType === "INVOICE" && (invoice.documentStatus !== "CANCELLED" || !!invoice.finalizedAt));
+  const canCreateDelivery = !hasOutgoingInvoice && order.status !== "ZRUSENA" && !!order.legalEntity && (
+    ["EXPEDOVANA", "DORUCENA"].includes(order.status) || ["SHIPPED_EXTERNALLY", "DELIVERED_EXTERNALLY"].includes(order.shipmentStatus ?? "")
+  ) && hasFinancePermission(session.role, "CREATE_DRAFT");
 
   const totals = computeTotals([...order.items, ...order.charges.filter((charge) => charge.includedInSellerTotal).map((charge) => ({ quantity: 1, ...charge }))]);
   const taxReviewNeeded = order.charges.some((charge) => charge.includedInSellerTotal && ["UNVERIFIED", "FOREIGN"].includes(charge.taxTreatment));
   const allowedStatuses = ORDER_STATUS_TRANSITIONS[order.status] ?? [];
-  const isEditable = EDITABLE_ORDER_STATUSES.includes(order.status) && !invoices.some((invoice) => invoice.direction === "VYDANA" && invoice.documentStatus !== "CANCELLED");
+  const isEditable = EDITABLE_ORDER_STATUSES.includes(order.status) && !deliveryNote && !invoices.some((invoice) => invoice.direction === "VYDANA" && invoice.documentStatus !== "CANCELLED");
 
   const infoRow = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-4 py-1.5">
@@ -134,9 +140,16 @@ export default async function ObjednavkaDetailPage({ params, searchParams }: { p
           </section>
 
           {canViewFinance && <section className="rounded-[14px] border border-stone-200 bg-white p-5">
+            {(deliveryNote || canCreateDelivery) && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-4">
+              <h2 className="font-semibold text-stone-900">Dodací list</h2>
+              {deliveryNote ? <Link href={`/financie/dodacie-listy/${deliveryNote.id}`} className="text-sm font-semibold underline">{deliveryNote.number}</Link>
+                : <Link href={`/financie/dodacie-listy/novy?order=${order.id}`} className="text-sm font-semibold underline">Vystaviť dodací list</Link>}
+            </div>}
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="font-semibold text-stone-900">Faktúry</h2>
-              {order.status !== "ZRUSENA" &&
+              {deliveryNote && !hasOutgoingInvoice && hasFinancePermission(session.role, "CREATE_DRAFT") &&
+                <Link className="text-sm font-semibold underline" href={`/financie/dodacie-listy/fakturovat?dl=${deliveryNote.id}`}>Faktúra z dodacieho listu</Link>}
+              {!deliveryNote && order.status !== "ZRUSENA" &&
                 !invoices.some(
                   (i) =>
                     i.direction === "VYDANA" &&

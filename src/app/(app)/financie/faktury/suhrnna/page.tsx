@@ -19,6 +19,7 @@ export default async function ConsolidatedInvoicePage({ searchParams }: { search
     OR: [{ status: "DORUCENA" }, { shipmentStatus: "DELIVERED_EXTERNALLY" }],
     invoices: { none: { direction: "VYDANA", documentType: "INVOICE", documentStatus: { not: "CANCELLED" } } },
     invoiceOrders: { none: { invoice: { direction: "VYDANA", documentType: "INVOICE", documentStatus: { not: "CANCELLED" } } } },
+    deliveryNotes: { none: { cancelledAt: null } },
   }, include: { items: true, charges: true }, orderBy: [{ orderDate: "desc" }, { id: "asc" }], take: 201 }) : [];
   return <>
     <PageHeader title="Súhrnná faktúra" subtitle="Viac doručených objednávok jedného odberateľa na jednom doklade">

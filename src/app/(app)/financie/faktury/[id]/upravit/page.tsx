@@ -12,7 +12,7 @@ import { invoiceFormOptions } from "../../form-options";
 export default async function UpravitFakturuPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireFinancePermission("CREATE_DRAFT");
   const { id } = await params;
-  const invoice = await prisma.invoice.findUnique({ where: { id }, include: { items: { orderBy: { lineNumber: "asc" } } } });
+  const invoice = await prisma.invoice.findUnique({ where: { id }, include: { items: { orderBy: { lineNumber: "asc" } }, deliveryNoteLinks: { select: { deliveryNoteId: true }, take: 1 } } });
   if (!invoice || !canEditManualDraft(invoice)) notFound();
   const { clients, issuers, catalog } = await invoiceFormOptions();
   const initial = invoiceFormInitial(invoice, "edit");

@@ -35,6 +35,7 @@ import { resolveMailProviderKind } from "./mail/config";
 import { parseFmcgLine } from "./einvoice/fmcg";
 import { isPayBySquareBankAccount } from "./documents/pay-by-square";
 import { buildConsolidation, consolidationSchema, lockUnbilledOrders, sourceOrderHash, sourceOrderInclude } from "./consolidation";
+import { buildDeliveryInvoice, dateKey, validateDeliveryOrders } from "./delivery/service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -248,10 +249,16 @@ export class PrismaInvoiceService implements InvoiceService {
     const counterparty = input.counterparty
       ? financePartySnapshotSchema.parse(input.counterparty)
       : undefined;
-    const manualCalculation = input.consolidation ? undefined : calculateInvoice({ currency: input.currency, lines: input.items });
+    const manualCalculation = input.consolidation || input.deliveryNotes ? undefined : calculateInvoice({ currency: input.currency, lines: input.items });
     return prisma.$transaction(async (tx) => {
       let summary: ReturnType<typeof buildConsolidation> | undefined;
-      if (input.consolidation) {
+      let delivery: Awaited<ReturnType<typeof buildDeliveryInvoice>> | undefined;
+      if (input.deliveryNotes) {
+        if (input.consolidation || input.orderId || input.direction !== "VYDANA" || (input.documentType ?? "INVOICE") !== "INVOICE" || (input.source ?? "INTERNA") !== "INTERNA" || counterparty) {
+          throw new Error("Z dodacích listov možno vytvoriť vydanú faktúru v ERP.");
+        }
+        delivery = await buildDeliveryInvoice(tx, input.deliveryNotes, input.issueDate);
+      } else if (input.consolidation) {
         if (input.orderId || input.direction !== "VYDANA" || (input.documentType ?? "INVOICE") !== "INVOICE" || (input.source ?? "INTERNA") !== "INTERNA" || counterparty) {
           throw new Error("Súhrnná faktúra musí byť interná vydaná faktúra zo zoznamu objednávok.");
         }
@@ -263,11 +270,11 @@ export class PrismaInvoiceService implements InvoiceService {
       } else if (input.orderId && (input.documentType ?? "INVOICE") === "INVOICE") {
         await lockUnbilledOrders(tx, [input.orderId], input.direction);
       }
-      const calculation = manualCalculation ?? calculateInvoice({ currency: input.currency, lines: summary!.items });
+      const calculation = manualCalculation ?? calculateInvoice({ currency: input.currency, lines: delivery?.items ?? summary!.items });
       const created = await tx.invoice.create({
         data: {
           direction: input.direction,
-          legalEntity: summary?.legalEntity ?? input.legalEntity ?? null,
+          legalEntity: delivery?.legalEntity ?? summary?.legalEntity ?? input.legalEntity ?? null,
           documentType: input.documentType ?? "INVOICE",
           documentStatus: "DRAFT",
           source: input.source ?? "INTERNA",
@@ -275,14 +282,18 @@ export class PrismaInvoiceService implements InvoiceService {
           externalNumber: input.externalNumber ?? null,
           invoiceNumber: null,
           currency: input.currency,
-          clientId: summary?.clientId ?? input.clientId ?? null,
+          clientId: delivery?.clientId ?? summary?.clientId ?? input.clientId ?? null,
           supplierName: input.direction === "PRIJATA" ? counterparty?.name ?? null : null,
           orderId: input.orderId ?? null,
           originalInvoiceId: input.originalInvoiceId ?? null,
           issueDate: input.issueDate,
           dueDate: input.dueDate,
-          deliveryDate: summary?.to ?? input.deliveryDate ?? null,
+          deliveryDate: delivery?.to ?? summary?.to ?? input.deliveryDate ?? null,
           ...(summary ? { consolidatedFrom: summary.from, consolidatedTo: summary.to, orderLinks: { create: summary.links } } : {}),
+          ...(delivery ? {
+            deliveryNoteLinks: { create: delivery.links },
+            ...(delivery.links.length > 1 ? { consolidatedFrom: delivery.from, consolidatedTo: delivery.to } : {}),
+          } : {}),
           createdById: input.actorId,
           status: "VYSTAVENA",
           totalNetCents: calculation.totalNetCents,
@@ -324,14 +335,14 @@ export class PrismaInvoiceService implements InvoiceService {
       await lockInvoice(tx, invoiceId);
       const current = await tx.invoice.findUnique({ where: { id: invoiceId }, include: {
         items: { orderBy: { lineNumber: "asc" } },
-        _count: { select: { paymentAllocations: true, documents: true, eInvoiceTransmissions: true } },
+        _count: { select: { paymentAllocations: true, documents: true, eInvoiceTransmissions: true, deliveryNoteLinks: true } },
       } });
       if (!current) throw new FinanceDomainError("INVOICE_NOT_FOUND", "Koncept faktúry neexistuje.");
       if (current.documentStatus !== "DRAFT" || current.invoiceNumber || current.finalizedAt) {
         throw new FinanceDomainError("INVOICE_IMMUTABLE", "Upravovať možno iba nevystavený koncept. Vystavená faktúra zostáva nezmenená.");
       }
-      if (current.source !== "INTERNA" || current.direction !== "VYDANA" || current.documentType !== "INVOICE" || current.orderId || current.consolidatedFrom) {
-        throw new FinanceDomainError("INVALID_TRANSITION", "Tento editor upravuje iba ručne vytvorené vydané faktúry bez väzby na objednávku.");
+      if (current.source !== "INTERNA" || current.direction !== "VYDANA" || current.documentType !== "INVOICE" || current.orderId || current.consolidatedFrom || current._count.deliveryNoteLinks) {
+        throw new FinanceDomainError("INVALID_TRANSITION", "Tento editor upravuje iba ručne vytvorené koncepty bez väzby na objednávky alebo dodacie listy.");
       }
       if (current.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
         throw new FinanceDomainError("INVALID_TRANSITION", "Koncept medzitým zmenil iný používateľ. Obnovte stránku a skontrolujte aktuálnu verziu.");
@@ -372,6 +383,7 @@ export class PrismaInvoiceService implements InvoiceService {
           items: { include: { product: true }, orderBy: { lineNumber: "asc" } },
           paymentAllocations: { where: { reversedAt: null } },
           orderLinks: { include: { order: { include: sourceOrderInclude } }, orderBy: { firstLineNumber: "asc" } },
+          deliveryNoteLinks: { include: { deliveryNote: true }, orderBy: { firstLineNumber: "asc" } },
         },
       });
       if (!invoice) throw new FinanceDomainError("INVOICE_NOT_FOUND", "Faktúra neexistuje.");
@@ -412,13 +424,15 @@ export class PrismaInvoiceService implements InvoiceService {
 
       const blockers: string[] = [];
       if (invoice.consolidatedFrom) {
+        if (company && company.validFrom > invoice.consolidatedFrom) blockers.push("Firemný profil nepokrýva celé obdobie súhrnnej faktúry.");
+        if (company?.taxProfiles[0] && (company.taxProfiles[0].validFrom > invoice.consolidatedFrom || (company.taxProfiles[0].vatRegisteredFrom && company.taxProfiles[0].vatRegisteredFrom > invoice.consolidatedFrom))) blockers.push("Daňový profil sa počas obdobia zmenil. Dodania treba rozdeliť do samostatných faktúr.");
+      }
+      if (invoice.consolidatedFrom && !invoice.deliveryNoteLinks.length) {
         for (const link of [...invoice.orderLinks].sort((a, b) => a.orderId.localeCompare(b.orderId))) {
           await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Order" WHERE "id" = ${link.orderId} FOR UPDATE`);
           link.order = await tx.order.findUniqueOrThrow({ where: { id: link.orderId }, include: sourceOrderInclude });
         }
         if (!invoice.consolidatedTo || invoice.orderLinks.length < 2) blockers.push("Súhrnná faktúra nemá úplné väzby na objednávky.");
-        if (company && company.validFrom > invoice.consolidatedFrom) blockers.push("Firemný profil nepokrýva celé obdobie súhrnnej faktúry.");
-        if (company?.taxProfiles[0] && (company.taxProfiles[0].validFrom > invoice.consolidatedFrom || (company.taxProfiles[0].vatRegisteredFrom && company.taxProfiles[0].vatRegisteredFrom > invoice.consolidatedFrom))) blockers.push("Daňový profil sa počas obdobia zmenil. Dodania treba rozdeliť do samostatných faktúr.");
         let nextLine = 1;
         for (const link of invoice.orderLinks) {
           if (sourceOrderHash(link.order) !== link.sourceHash) blockers.push(`Objednávka ${link.order.orderNumber} sa zmenila. Zrušte koncept a vytvorte nový.`);
@@ -436,6 +450,29 @@ export class PrismaInvoiceService implements InvoiceService {
       const taxProfile = company?.taxProfiles[0];
       let primaryAccount = company?.bankAccounts[0];
       const vatApplies = invoice.direction === "VYDANA" && isVatPayerAtDate(taxProfile?.vatStatus ?? "", taxProfile?.vatRegisteredFrom, taxDate);
+      if (invoice.deliveryNoteLinks.length) {
+        const notes = invoice.deliveryNoteLinks.map(link => link.deliveryNote);
+        const orders = await validateDeliveryOrders(tx, notes, true);
+        let nextLine = 1;
+        for (const link of invoice.deliveryNoteLinks) {
+          const note = link.deliveryNote;
+          if (note.cancelledAt || note.clientId !== invoice.clientId || note.legalEntity !== invoice.legalEntity) blockers.push(`Dodací list ${note.number} už nepatrí k tomuto dokladu.`);
+          if (link.firstLineNumber !== nextLine) blockers.push("Riadkové väzby dodacích listov nie sú úplné.");
+          const lines = invoice.items.slice(nextLine - 1, nextLine - 1 + link.lineCount);
+          nextLine += link.lineCount;
+          for (const line of lines) {
+            const properties = parseFmcgLine(line.fmcgSnapshot, line.lineNumber).properties;
+            if (properties.delivery_note_number !== note.number || properties.delivery_date !== dateKey(note.deliveryDate)) blockers.push(`Riadok ${line.lineNumber}: dodací list nesúhlasí s konceptom.`);
+          }
+        }
+        if (nextLine !== invoice.items.length + 1) blockers.push("Nie všetky položky majú väzbu na dodacie listy.");
+        for (const order of orders) {
+          const charges = order.charges.filter(charge => charge.includedInSellerTotal);
+          if (charges.some(charge => charge.taxTreatment === "UNVERIFIED" || charge.taxTreatment === "FOREIGN" || (vatApplies && charge.taxTreatment === "NON_PAYER"))) {
+            blockers.push(`Objednávka ${order.orderNumber}: daňový režim dopravy alebo služby nie je overený.`);
+          }
+        }
+      }
       for (const link of invoice.orderLinks) {
         const charges = link.order.charges.filter(c => c.includedInSellerTotal);
         if (charges.some(c => c.taxTreatment === "UNVERIFIED" || c.taxTreatment === "FOREIGN" || (vatApplies && c.taxTreatment === "NON_PAYER"))) blockers.push(`Objednávka ${link.order.orderNumber}: daňový režim dopravy alebo služby nie je overený pre subjekt.`);

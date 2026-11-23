@@ -45,6 +45,7 @@ export default async function FakturaDetailPage({ params, searchParams }: {
       paymentAllocations: { where: { reversedAt: null } },
       order: { select: { id: true, orderNumber: true } },
       orderLinks: { include: { order: { select: { id: true, orderNumber: true } } }, orderBy: { firstLineNumber: "asc" } },
+      deliveryNoteLinks: { include: { deliveryNote: { select: { id: true, number: true } } }, orderBy: { firstLineNumber: "asc" } },
       originalInvoice: { select: { id: true, invoiceNumber: true } },
       creditNotes: {
         orderBy: { issueDate: "desc" },
@@ -279,6 +280,16 @@ export default async function FakturaDetailPage({ params, searchParams }: {
               <p className="mt-3 rounded-[10px] bg-amber-50 px-3 py-2 text-sm text-amber-900 print:hidden">
                 {invoice.note}
               </p>
+            )}
+            {invoice.deliveryNoteLinks.length > 0 && (
+              <div className="mt-3 border-t border-stone-100 pt-3">
+                <h3 className="mb-2 text-xs font-semibold uppercase text-stone-500">Dodacie listy</h3>
+                <ul className="space-y-1 text-sm">
+                  {invoice.deliveryNoteLinks.map(({ deliveryNote }) => <li key={deliveryNote.id}>
+                    <Link href={`/financie/dodacie-listy/${deliveryNote.id}`} className="underline">{deliveryNote.number}</Link>
+                  </li>)}
+                </ul>
+              </div>
             )}
             {invoice.creditNotes.length > 0 && (
               <div className="mt-3 border-t border-stone-100 pt-3">
