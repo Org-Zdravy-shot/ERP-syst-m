@@ -33,6 +33,7 @@ import {
 } from "./domain";
 import { resolveMailProviderKind } from "./mail/config";
 import { parseFmcgLine } from "./einvoice/fmcg";
+import { isPayBySquareBankAccount } from "./documents/pay-by-square";
 import { buildConsolidation, consolidationSchema, lockUnbilledOrders, sourceOrderHash, sourceOrderInclude } from "./consolidation";
 
 type Tx = Prisma.TransactionClient;
@@ -449,6 +450,9 @@ export class PrismaInvoiceService implements InvoiceService {
           blockers.push("Platiteľ DPH nemá potvrdený dátum registrácie.");
         }
         if (!primaryAccount) blockers.push("Chýba primárny EUR bankový účet spoločnosti.");
+        else if (!await isPayBySquareBankAccount(primaryAccount.iban, primaryAccount.bic)) {
+          blockers.push("Primárny EUR účet vystavovateľa má neplatný IBAN alebo BIC.");
+        }
         if (invoice.orderId) {
           const linkedOrder = await tx.order.findUnique({ where: { id: invoice.orderId }, include: { items: true, charges: true } });
           if (!linkedOrder) blockers.push("Prepojená objednávka neexistuje.");

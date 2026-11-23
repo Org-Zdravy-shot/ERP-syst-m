@@ -2,6 +2,19 @@ import QRCode from "qrcode";
 import { DocumentGenerationError } from "./errors";
 import type { InvoicePdfData } from "./types";
 
+export async function isPayBySquareBankAccount(iban: string, bic?: string | null): Promise<boolean> {
+  const { validateBankAccount } = await import("bysquare/pay");
+  try {
+    validateBankAccount({
+      iban: iban.replace(/\s+/g, "").toUpperCase(),
+      bic: bic?.replace(/\s+/g, "").toUpperCase(),
+    }, "bankAccount");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function formatDate(date: Date): string {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
